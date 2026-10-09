@@ -122,3 +122,12 @@ footer { font-size: .76rem; color: var(--muted); text-align: center; }
 
 .leaflet-top, .leaflet-bottom { z-index: 900; }
 .result, #cropBox, #mapCard { scroll-margin-top: 64px; }
+.pilot { background: var(--soft); border-radius: 10px; padding: 10px; display: grid; gap: 6px; }
+.pilot-h { font: 600 .78rem var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.pilot-h small { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.pl { font: 600 .9rem var(--f-label); letter-spacing: .03em; }
+.pr { display: grid; grid-template-columns: 1fr 2.2fr; gap: 8px; }
+.pv { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 48px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; font: 700 1.25rem var(--f-body); font-variant-numeric: tabular-nums; }
+.pv i { font-style: normal; font-weight: 500; color: var(--muted); }
+.pv.done { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+.cp { grid-template-columns: 1.4fr 1fr 1fr; }

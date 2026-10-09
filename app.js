@@ -24,7 +24,7 @@
   var CARD = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSO', 'SO', 'OSO', 'O', 'ONO', 'NO', 'NNO'];
 
   // ---------- Copie ----------
-  function flash(btn, txt) { var t = btn.textContent; btn.classList.add('done'); btn.textContent = txt || 'Copié'; setTimeout(function () { btn.classList.remove('done'); btn.textContent = t; }, 1400); }
+  function flash(btn, txt) { var t = btn.innerHTML; btn.classList.add('done'); btn.textContent = txt || 'Copié'; setTimeout(function () { btn.classList.remove('done'); btn.innerHTML = t; }, 1200); }
   function copy(text, btn) {
     var ok = function () { flash(btn); };
     try { navigator.clipboard.writeText(text).then(ok, function () { fallback(text); ok(); }); } catch (e) { fallback(text); ok(); }
@@ -53,8 +53,18 @@
     var h = '<div class="status"><span class="pill ' + (warn ? 'check">À vérifier' : 'ok">Lecture fiable') + '</span><span class="pill fmt">' + esc(c.fmt.indexOf('UTM') === 0 ? c.fmt : c.fmt) + '</span></div>';
     h += '<div class="big1">' + la + ', ' + lo + '</div>';
     h += '<div class="seg1">Lu : ' + esc(c.seg) + '</div>';
-    // DJI Pilot 2 : degrés décimaux, latitude puis longitude, séparés par une virgule sans espace
-    h += '<div class="cp"><button class="btn" type="button" data-copy="' + la + ',' + lo + '">Copier pour Pilot 2</button>'
+    // DJI Pilot 2 (Modifier les repères) : longitude d'abord, puis latitude ; degrés entiers + minutes à 4 décimales (0,2 m)
+    var pd = function (v) {
+      var s = v < 0 ? '-' : '', a = Math.abs(v), d = Math.floor(a), m = (a - d) * 60;
+      if (+m.toFixed(4) >= 60) { d += 1; m = 0; }
+      return { d: s + d, m: m.toFixed(4) };
+    };
+    var PL = pd(c.lon), PA = pd(c.lat);
+    var cell = function (v, u) { return '<button class="pv" type="button" data-copy="' + v + '"><b>' + v + '</b><i>' + u + '</i></button>'; };
+    h += '<div class="pilot"><div class="pilot-h">Saisie DJI Pilot 2 <small>(toucher pour copier)</small></div>'
+      + '<div class="pl">Longitude</div><div class="pr">' + cell(PL.d, '°') + cell(PL.m, "'") + '</div>'
+      + '<div class="pl">Latitude</div><div class="pr">' + cell(PA.d, '°') + cell(PA.m, "'") + '</div></div>';
+    h += '<div class="cp"><button class="btn sec" type="button" data-copy="' + la + ', ' + lo + '">Copier DD</button>'
       + '<button class="btn sec" type="button" data-copy="' + la + '">Lat</button>'
       + '<button class="btn sec" type="button" data-copy="' + lo + '">Lon</button></div>';
     var notes = c.notes.slice();
