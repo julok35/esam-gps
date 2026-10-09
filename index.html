@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>GPS ESAM</title>
+<meta name="description" content="Convertisseur de coordonnées GPS de l'ESAM : photo, lecture du texte, carte, partage.">
+<meta name="theme-color" content="#AFC8E8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="GPS ESAM">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@400;500;700&family=Roboto+Condensed:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="band">
+  <div class="band-in">
+    <img alt="Logo ESAM" src="logo.png" width="52" height="52">
+    <div>
+      <h1>GPS ESAM</h1>
+      <p>Coordonnées reçues vers la RC Plus</p>
+    </div>
+    <span class="net" id="net" hidden>Hors ligne</span>
+  </div>
+</header>
+
+<main>
+  <section class="block">
+    <div class="row2">
+      <label class="btn big" for="cam">Photographier l'écran</label>
+      <label class="btn big sec" for="gal">Choisir une photo</label>
+    </div>
+    <input id="cam" type="file" accept="image/*" capture="environment" hidden>
+    <input id="gal" type="file" accept="image/*" hidden>
+
+    <div class="crop" id="cropBox" hidden>
+      <span class="lbl">Tracez au doigt un cadre autour des coordonnées, puis lancez la lecture</span>
+      <div class="crop-stage" id="stage">
+        <canvas id="cv"></canvas>
+        <div class="sel" id="sel"><span class="h tl"></span><span class="h tr"></span><span class="h bl"></span><span class="h br"></span></div>
+      </div>
+      <div class="row4">
+        <button class="btn" type="button" id="ocrGo">Lire</button>
+        <button class="btn sec" type="button" id="rot">Pivoter</button>
+        <button class="btn sec" type="button" id="cropAll">Tout</button>
+        <button class="btn sec" type="button" id="cropClose">Fermer</button>
+      </div>
+      <div class="prog" id="prog" hidden><div id="progBar"></div><span id="progTxt"></span></div>
+    </div>
+
+    <label class="lbl" for="src" style="margin-top:14px">Texte reçu (lu sur la photo, collé ou tapé)</label>
+    <textarea id="src" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Ex. N 45°16.277' E 005°56.052', un SMS, un lien Google Maps..."></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="chip" id="clear" type="button">Effacer</button>
+      <span class="ex-note">Exemples :</span>
+      <button class="chip" type="button" data-ex="garmin">Garmin</button>
+      <button class="chip" type="button" data-ex="dms">DMS</button>
+      <button class="chip" type="button" data-ex="utm">UTM</button>
+      <button class="chip" type="button" data-ex="ocr">OCR abîmé</button>
+    </div>
+  </section>
+
+  <section class="result" id="result" aria-live="polite"></section>
+
+  <section class="block" id="mapCard">
+    <div class="maphead">
+      <span class="lbl" style="margin:0">Carte</span>
+      <div class="row">
+        <button class="chip" type="button" id="fitBoth">Les deux</button>
+        <button class="chip" type="button" id="goTarget">Point</button>
+        <button class="chip" type="button" id="goMe">Moi</button>
+      </div>
+    </div>
+    <div id="map" role="region" aria-label="Carte"></div>
+    <div class="dist" id="dist">
+      <div><span>Distance</span><b id="dD">-</b></div>
+      <div><span>Cap vers le point</span><b id="dB">-</b></div>
+      <div><span>Ma précision</span><b id="dA">-</b></div>
+    </div>
+    <p class="hint" id="geoMsg">Autorisez la localisation pour voir votre position.</p>
+  </section>
+
+  <section class="block" id="shareCard" hidden>
+    <span class="lbl">Partager le point</span>
+    <div class="row2">
+      <button class="btn" type="button" id="shareBtn">Partager</button>
+      <button class="btn sec" type="button" id="qrBtn">QR code</button>
+    </div>
+    <button class="btn sec wide" type="button" id="copyMsg" style="margin-top:8px">Copier le message</button>
+    <div class="qr" id="qrBox" hidden>
+      <div class="seg3" role="tablist">
+        <button type="button" data-qr="app" class="on">Appli ESAM</button>
+        <button type="button" data-qr="maps">Google Maps</button>
+        <button type="button" data-qr="geo">Coordonnées</button>
+      </div>
+      <div id="qrImg" class="qrimg"></div>
+      <p class="hint" id="qrTxt"></p>
+    </div>
+  </section>
+
+  <section class="block" id="eqCard" hidden>
+    <span class="lbl">Équivalences (relais radio)</span>
+    <table class="eq"><tbody id="eq"></tbody></table>
+    <div class="links" id="links"></div>
+  </section>
+
+  <div class="memo">
+    <strong>Avant de voler</strong>
+    <p>Relire la lecture retenue face à la photo, chiffre par chiffre. Une minute d'arc fausse décale le point d'environ 1,8 km.</p>
+  </div>
+
+  <section class="block" id="histCard" hidden>
+    <span class="lbl">Dernières conversions (ce téléphone)</span>
+    <ul class="hist" id="hist"></ul>
+  </section>
+
+  <section class="block">
+    <span class="lbl">Hors ligne</span>
+    <p class="hint" style="margin-top:0">Ajoutez l'appli à l'écran d'accueil, puis préparez la lecture de photo une fois avec du réseau. La conversion marche ensuite sans réseau ; la carte n'affiche que les zones déjà vues.</p>
+    <button class="btn sec wide" type="button" id="prepOff">Préparer la lecture hors ligne</button>
+    <p class="hint" id="prepMsg"></p>
+  </section>
+
+  <footer>WGS84, 6 décimales (environ 10 cm). Formats : DD, DMM, DMS, NMEA, UTM, liens Google Maps. Fonds : IGN Géoplateforme, OpenTopoMap, OpenStreetMap.</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="parser.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
