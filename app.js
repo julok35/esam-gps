@@ -72,7 +72,7 @@
       '<tr><th>UTM</th><td>' + esc(Geo.toUTM(c.lat, c.lon)) + '</td></tr>';
     var la = f6(c.lat), lo = f6(c.lon);
     $('links').innerHTML =
-      '<a target="_blank" rel="noopener" href="https://airops-supuav.fr/map/#15/' + la + '/' + lo + '">AirOps</a>' +
+      '<a target="_blank" rel="noopener" data-airops="' + la + ', ' + lo + '" href="https://airops-supuav.fr/map/#15/' + la + '/' + lo + '">AirOps</a>' +
       '<a target="_blank" rel="noopener" href="https://cartes.gouv.fr/explorer-les-cartes/?c=' + lo + ',' + la + '&z=16&permalink=yes">cartes.gouv.fr</a>' +
       '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + la + ',' + lo + '">Google Maps</a>' +
       '<a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=' + la + ',' + lo + '">Itinéraire</a>';
@@ -328,6 +328,13 @@
   $('goTarget').addEventListener('click', function () { if (map && current) map.setView([current.lat, current.lon], 16); });
   $('goMe').addEventListener('click', function () { if (map && me) map.setView([me.lat, me.lon], 16); });
   document.addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-airops]');
+    if (a) {
+      // secours : coordonnées dans le presse-papier pour la recherche AirOps
+      try { navigator.clipboard.writeText(a.dataset.airops).catch(function () {}); } catch (err) {}
+      $('linkMsg').textContent = 'Coordonnées copiées : si AirOps ne se centre pas, collez-les dans sa recherche « Adresse, coordonnées ou zone ».';
+      return;
+    }
     var t = e.target.closest('button'); if (!t) return;
     if (t.dataset.ex) { src.value = EX[t.dataset.ex]; update(); }
     else if (t.dataset.copy) copy(t.dataset.copy, t);

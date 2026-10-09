@@ -1,5 +1,5 @@
 /* Service worker GPS ESAM : appli et bibliothèques en cache, tuiles de carte gardées une fois vues. */
-var V = 'esam-gps-v3';
+var V = 'esam-gps-v4';
 var SHELL = ['./', 'index.html', 'app.css', 'app.js', 'parser.js', 'manifest.webmanifest', 'logo.png', 'icon-192.png', 'icon-512.png',
   'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css', 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
   'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js'];
