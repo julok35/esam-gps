@@ -50,7 +50,7 @@
     current = c;
     var warn = c.notes.length || r.alts.length;
     var la = f6(c.lat), lo = f6(c.lon);
-    var h = '<div class="status"><span class="pill ' + (warn ? 'check">À vérifier' : 'ok">Lecture fiable') + '</span><span class="pill fmt">' + esc(c.fmt.indexOf('UTM') === 0 ? c.fmt : c.fmt) + '</span></div>';
+    var h = '<div class="status"><span class="pill ' + (warn ? 'check">À vérifier' : 'ok">Lecture fiable') + '</span><span class="pill fmt">' + esc(c.fmt) + '</span>' + (r.agree && chosen === 0 ? '<span class="pill fmt">' + r.agree + ' lectures</span>' : '') + '</div>';
     h += '<div class="big1">' + la + ', ' + lo + '</div>';
     h += '<div class="seg1">Lu : ' + esc(c.seg) + '</div>';
     // DJI Pilot 2 (Modifier les repères) : longitude d'abord, puis latitude ; degrés entiers + minutes à 4 décimales (0,2 m)
@@ -253,9 +253,11 @@
   $('cam').addEventListener('change', function (e) { loadFile(e.target.files[0]); e.target.value = ''; });
   $('gal').addEventListener('change', function (e) { loadFile(e.target.files[0]); e.target.value = ''; });
 
-  function prepared() {
-    var sx = Math.round(sel.x * work.width), sy = Math.round(sel.y * work.height), sw = Math.max(8, Math.round(sel.w * work.width)), sh = Math.max(8, Math.round(sel.h * work.height));
-    var k = Math.max(1, Math.min(3, 1600 / sw));
+  // targetW : largeur visée en pixels ; pad : marge blanche autour du texte
+  function prepared(targetW, pad, ex) {
+    var e = ex || 0, x0 = Math.max(0, sel.x - sel.w * e), y0 = Math.max(0, sel.y - sel.h * e), x1 = Math.min(1, sel.x + sel.w * (1 + e)), y1 = Math.min(1, sel.y + sel.h * (1 + e));
+    var sx = Math.round(x0 * work.width), sy = Math.round(y0 * work.height), sw = Math.max(8, Math.round((x1 - x0) * work.width)), sh = Math.max(8, Math.round((y1 - y0) * work.height));
+    var k = Math.max(1, Math.min(8, targetW / sw));
     var c = document.createElement('canvas'); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
     var g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(work, sx, sy, sw, sh, 0, 0, c.width, c.height);
     var d = g.getImageData(0, 0, c.width, c.height), p = d.data, hist = new Uint32Array(256), n = p.length / 4;
@@ -266,7 +268,10 @@
     var span = Math.max(1, hi - lo);
     for (i = 0; i < p.length; i += 4) { var v = Math.max(0, Math.min(255, (p[i] - lo) * 255 / span)); p[i] = p[i + 1] = p[i + 2] = v; }
     g.putImageData(d, 0, 0);
-    return c;
+    if (!pad) return c;
+    var m = Math.round(c.height / 4), o = document.createElement('canvas'); o.width = c.width + 2 * m; o.height = c.height + 2 * m;
+    var go = o.getContext('2d'); go.fillStyle = '#fff'; go.fillRect(0, 0, o.width, o.height); go.drawImage(c, m, m);
+    return o;
   }
   function loadScript(u) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = u; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
   var ocrWorker = null;
@@ -286,31 +291,81 @@
     var LBL = { 'loading tesseract core': 'Chargement du moteur', 'initializing tesseract': 'Initialisation', 'loading language traineddata': 'Chargement de la langue', 'initializing api': 'Initialisation', 'recognizing text': 'Lecture du texte' };
     progCb = function (m) { setProg((LBL[m.status] || 'Préparation') + '...', m.progress); };
     setProg('Préparation...', 0);
-    var img = prepared();
-    var texts = [];
+    // Plusieurs lectures (taille, marge, cadre élargi, découpage) puis vote séparé sur la latitude et la longitude
+    var PASSES = [[900, 0, '6', 0], [900, 0, '11', 0], [1800, 0, '11', 0], [900, 0, '4', 0], [1200, 0, '6', 0.25], [1200, 0, '11', 0.25], [1800, 1, '6', 0], [900, 1, '6', 0]];
+    var NEED = 3, imgs = {}, runs = [];
+    var FR = { la0: 41, la1: 51.6, lo0: -5.6, lo1: 10 };
+    var votes = function () {
+      var V = { lat: {}, lon: {} };
+      runs.forEach(function (r, idx) {
+        if (!r.p.ok) return;
+        var b = r.p.best;
+        if (b.lat < FR.la0 || b.lat > FR.la1 || b.lon < FR.lo0 || b.lon > FR.lo1) return;
+        var w = b.notes.length ? 0.6 : 1;
+        [['lat', b.lat], ['lon', b.lon]].forEach(function (a) {
+          var k = a[1].toFixed(5), o = V[a[0]][k] = V[a[0]][k] || { v: a[1], w: 0, n: 0, runs: [] };
+          o.w += w; o.n++; o.runs.push(idx);
+        });
+      });
+      var win = function (m) { var best = null, second = null; Object.keys(m).forEach(function (k) { var o = m[k]; if (!best || o.w > best.w) { second = best; best = o; } else if (!second || o.w > second.w) second = o; }); return { best: best, second: second }; };
+      return { lat: win(V.lat), lon: win(V.lon) };
+    };
+    var firm = function (x) { return x.best && x.best.n >= NEED && (!x.second || x.second.n <= x.best.n - 2); };
+    var done = function () { var v = votes(); return firm(v.lat) && firm(v.lon); };
     getWorker(function (m) { progCb(m); }).then(function (w) {
-      // deux lectures avec deux découpages différents : si elles concordent, la lecture est solide
-      return w.setParameters({ tessedit_pageseg_mode: '6' }).then(function () { return w.recognize(img); }).then(function (r1) {
-        texts.push((r1.data.text || '').trim());
-        LBL['recognizing text'] = 'Seconde lecture';
-        return w.setParameters({ tessedit_pageseg_mode: '11' }).then(function () { return w.recognize(img); });
-      }).then(function (r2) { texts.push((r2.data.text || '').trim()); });
+      var i = 0;
+      var step = function () {
+        if (i >= PASSES.length || done()) return;
+        var ps = PASSES[i++], ik = ps[0] + '_' + ps[1] + '_' + ps[3];
+        LBL['recognizing text'] = 'Lecture ' + i;
+        imgs[ik] = imgs[ik] || prepared(ps[0], ps[1], ps[3]);
+        return w.setParameters({ tessedit_pageseg_mode: ps[2] }).then(function () { return w.recognize(imgs[ik]); }).then(function (r) {
+          var txt = (r.data.text || '').trim();
+          runs.push({ txt: txt, p: Geo.parse(txt) });
+        }).then(step);
+      };
+      return step();
     }).then(function () {
-      var p1 = Geo.parse(texts[0]), p2 = Geo.parse(texts[1]);
-      var pick = p1, other = p2, txt = texts[0];
-      if (!p1.ok || (p2.ok && p2.best.score > p1.best.score)) { pick = p2; other = p1; txt = texts[1]; }
-      src.value = txt; chosen = 0; lastParse = pick;
-      if (pick.ok && other.ok) {
-        var gap = Geo.distM(pick.best, other.best);
-        if (gap > 20) {
-          other.best.seg = other.best.seg + ' (seconde lecture)';
-          pick.alts = [other.best].concat(pick.alts).slice(0, 3);
-          pick.best.notes = pick.best.notes.concat([{ lvl: 'warn', t: 'Les deux lectures de la photo diffèrent de ' + fmtDist(gap) + ' : comparez avec la photo.' }]);
+      window.__runs = runs;
+      var v = votes(), total = runs.length;
+      if (!v.lat.best || !v.lon.best) {
+        var r0 = runs[0] || { txt: '', p: Geo.parse('') };
+        src.value = r0.txt; chosen = 0; lastParse = r0.p; render();
+        setProg('Aucune coordonnée lue : recadrez sur les coordonnées, avec un peu de marge', 1);
+        return;
+      }
+      var LA = v.lat.best, LO = v.lon.best;
+      // une lecture qui contient les deux valeurs gagnantes sert de texte de référence
+      var both = LA.runs.filter(function (x) { return LO.runs.indexOf(x) >= 0; });
+      both.sort(function (a, b) { return runs[a].p.best.notes.length - runs[b].p.best.notes.length; });
+      var pick;
+      if (both.length) { pick = runs[both[0]]; src.value = pick.txt; lastParse = pick.p; }
+      else {
+        src.value = LA.v.toFixed(6) + ', ' + LO.v.toFixed(6);
+        lastParse = Geo.parse(src.value);
+        if (lastParse.ok) lastParse.best.notes.push({ lvl: 'warn', t: 'Latitude et longitude prises dans deux lectures différentes.' });
+      }
+      chosen = 0;
+      var sure = firm(v.lat) && firm(v.lon);
+      var rival = function (x) { return x.second && x.second.n >= x.best.n; };
+      if (lastParse.ok) {
+        if (sure) {
+          lastParse.best.notes = lastParse.best.notes.filter(function (x) { return !/symbole|deux lectures/.test(x.t); });
+          lastParse.alts = [];
+          lastParse.agree = Math.min(LA.n, LO.n) + '/' + total;
+        } else {
+          var alts = [];
+          if (v.lat.second || v.lon.second) {
+            var a2 = { lat: (v.lat.second || LA).v, lon: (v.lon.second || LO).v, seg: 'autre lecture', notes: [], fmt: lastParse.best.fmt };
+            if (Geo.distM(a2, lastParse.best) > 5) alts.push(a2);
+          }
+          lastParse.alts = alts.concat(lastParse.alts).slice(0, 3);
+          lastParse.best.notes.push({ lvl: 'warn', t: 'Lectures concordantes : latitude ' + LA.n + '/' + total + ', longitude ' + LO.n + '/' + total + (rival(v.lat) || rival(v.lon) ? ', avec des lectures concurrentes' : '') + '. Comparez avec la photo.' });
         }
       }
       render();
-      setProg(pick.ok ? 'Texte lu : vérifiez le résultat ci-dessous' : 'Texte lu mais aucune coordonnée : recadrez sur la ligne Position', 1);
-      if (pick.ok) out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setProg(sure ? 'Lu et confirmé' : 'Lecture incertaine : vérifiez avec la photo', 1);
+      out.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }).catch(function () {
       setProg('Lecture impossible : vérifiez le réseau au premier usage, ou tapez le texte', 0);
     }).then(function () { btn.disabled = false; });

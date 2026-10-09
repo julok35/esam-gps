@@ -61,6 +61,9 @@ var Geo = (function () {
         toks.push({ k: 'word', s: s, e: e });
       }
     }
+    // numéro de ligne de chaque élément (une valeur sur la ligne suivante ne prolonge pas un groupe)
+    var nl = [], q = -1; while ((q = t.indexOf('\n', q + 1)) >= 0) nl.push(q);
+    toks.forEach(function (x) { var L = 0; while (L < nl.length && nl[L] < x.s) L++; x.line = L; });
     // rattacher les symboles aux nombres
     for (var i = 0; i < toks.length; i++) {
       if (toks[i].k === 'sym' && i > 0 && toks[i - 1].k === 'num' && !toks[i - 1].sym) { toks[i - 1].sym = toks[i].v; toks[i - 1].e = toks[i].e; toks[i].k = 'drop'; }
@@ -132,10 +135,10 @@ var Geo = (function () {
       var prefix = win[0].k === 'hemi', suffix = win[win.length - 1].k === 'hemi';
       var groups = [], cur = null;
       if (prefix) {
-        if (next && next.k === 'num') return [];
+        if (next && next.k === 'num' && next.line === win[win.length - 1].line) return [];
         win.forEach(function (t) { if (t.k === 'hemi') { cur = { hemi: t.v, nums: [] }; groups.push(cur); } else cur.nums.push(t); });
       } else if (suffix) {
-        if (prev && prev.k === 'num') return [];
+        if (prev && prev.k === 'num' && prev.line === win[0].line) return [];
         cur = { nums: [] };
         win.forEach(function (t) { if (t.k === 'hemi') { cur.hemi = t.v; groups.push(cur); cur = { nums: [] }; } else cur.nums.push(t); });
         if (cur.nums.length) return [];
