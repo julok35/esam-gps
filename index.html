@@ -20,11 +20,8 @@
 <body>
 <header class="band">
   <div class="band-in">
-    <img alt="Logo ESAM" src="logo.png" width="52" height="52">
-    <div>
-      <h1>GPS ESAM</h1>
-      <p>Coordonnées reçues vers la RC Plus</p>
-    </div>
+    <img alt="Logo ESAM" src="logo.png" width="40" height="40">
+    <h1>GPS ESAM</h1>
     <span class="net" id="net" hidden>Hors ligne</span>
   </div>
 </header>
@@ -32,14 +29,14 @@
 <main>
   <section class="block">
     <div class="row2">
-      <label class="btn big" for="cam">Photographier l'écran</label>
+      <label class="btn big" for="cam">Photographier</label>
       <label class="btn big sec" for="gal">Choisir une photo</label>
     </div>
     <input id="cam" type="file" accept="image/*" capture="environment" hidden>
     <input id="gal" type="file" accept="image/*" hidden>
 
     <div class="crop" id="cropBox" hidden>
-      <span class="lbl">Tracez au doigt un cadre autour des coordonnées, puis lancez la lecture</span>
+      <span class="lbl">Encadrez les coordonnées au doigt</span>
       <div class="crop-stage" id="stage">
         <canvas id="cv"></canvas>
         <div class="sel" id="sel"><span class="h tl"></span><span class="h tr"></span><span class="h bl"></span><span class="h br"></span></div>
@@ -53,15 +50,9 @@
       <div class="prog" id="prog" hidden><div id="progBar"></div><span id="progTxt"></span></div>
     </div>
 
-    <label class="lbl" for="src" style="margin-top:14px">Texte reçu (lu sur la photo, collé ou tapé)</label>
-    <textarea id="src" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Ex. N 45°16.277' E 005°56.052', un SMS, un lien Google Maps..."></textarea>
-    <div class="row" style="margin-top:8px">
-      <button class="chip" id="clear" type="button">Effacer</button>
-      <span class="ex-note">Exemples :</span>
-      <button class="chip" type="button" data-ex="garmin">Garmin</button>
-      <button class="chip" type="button" data-ex="dms">DMS</button>
-      <button class="chip" type="button" data-ex="utm">UTM</button>
-      <button class="chip" type="button" data-ex="ocr">OCR abîmé</button>
+    <div class="srcwrap">
+      <textarea id="src" aria-label="Texte reçu" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Ou collez le texte reçu (SMS, lien Maps...)"></textarea>
+      <button class="clr" id="clear" type="button" aria-label="Effacer le texte">Effacer</button>
     </div>
   </section>
 
@@ -69,65 +60,52 @@
 
   <section class="block" id="mapCard">
     <div class="maphead">
-      <span class="lbl" style="margin:0">Carte</span>
-      <div class="row">
-        <button class="chip" type="button" id="fitBoth">Les deux</button>
-        <button class="chip" type="button" id="goTarget">Point</button>
-        <button class="chip" type="button" id="goMe">Moi</button>
-      </div>
+      <button class="chip" type="button" id="fitBoth">Les deux</button>
+      <button class="chip" type="button" id="goTarget">Point</button>
+      <button class="chip" type="button" id="goMe">Moi</button>
     </div>
     <div id="map" role="region" aria-label="Carte"></div>
     <div class="dist" id="dist">
       <div><span>Distance</span><b id="dD">-</b></div>
-      <div><span>Cap vers le point</span><b id="dB">-</b></div>
-      <div><span>Ma précision</span><b id="dA">-</b></div>
+      <div><span>Cap</span><b id="dB">-</b></div>
+      <div><span>Précision</span><b id="dA">-</b></div>
     </div>
-    <p class="hint" id="geoMsg">Autorisez la localisation pour voir votre position.</p>
+    <p class="hint" id="geoMsg" hidden></p>
   </section>
 
-  <section class="block" id="shareCard" hidden>
-    <span class="lbl">Partager le point</span>
-    <div class="row2">
+  <details class="block fold" id="shareCard" hidden>
+    <summary>Partager le point</summary>
+    <div class="row3">
       <button class="btn" type="button" id="shareBtn">Partager</button>
       <button class="btn sec" type="button" id="qrBtn">QR code</button>
+      <button class="btn sec" type="button" id="copyMsg">Copier message</button>
     </div>
-    <button class="btn sec wide" type="button" id="copyMsg" style="margin-top:8px">Copier le message</button>
     <div class="qr" id="qrBox" hidden>
       <div class="seg3" role="tablist">
         <button type="button" data-qr="app" class="on">Appli ESAM</button>
         <button type="button" data-qr="maps">Google Maps</button>
-        <button type="button" data-qr="geo">Coordonnées</button>
+        <button type="button" data-qr="geo">geo:</button>
       </div>
       <div id="qrImg" class="qrimg"></div>
       <p class="hint" id="qrTxt"></p>
     </div>
-  </section>
+  </details>
 
-  <section class="block" id="eqCard" hidden>
-    <span class="lbl">Équivalences et cartes</span>
+  <details class="block fold" id="eqCard" hidden>
+    <summary>DMM, DMS, UTM</summary>
     <table class="eq"><tbody id="eq"></tbody></table>
-    <div class="links" id="links"></div>
-    <p class="hint" id="linkMsg"></p>
-  </section>
+  </details>
 
-  <div class="memo">
-    <strong>Avant de voler</strong>
-    <p>Relire la lecture retenue face à la photo, chiffre par chiffre. Une minute d'arc fausse décale le point d'environ 1,8 km.</p>
-  </div>
-
-  <section class="block" id="histCard" hidden>
-    <span class="lbl">Dernières conversions (ce téléphone)</span>
+  <details class="block fold" id="histCard" hidden>
+    <summary>Historique</summary>
     <ul class="hist" id="hist"></ul>
-  </section>
+  </details>
 
-  <section class="block">
-    <span class="lbl">Hors ligne</span>
-    <p class="hint" style="margin-top:0">Ajoutez l'appli à l'écran d'accueil, puis préparez la lecture de photo une fois avec du réseau. La conversion marche ensuite sans réseau ; la carte n'affiche que les zones déjà vues.</p>
-    <button class="btn sec wide" type="button" id="prepOff">Préparer la lecture hors ligne</button>
-    <p class="hint" id="prepMsg"></p>
-  </section>
-
-  <footer>WGS84, 6 décimales (environ 10 cm). Formats : DD, DMM, DMS, NMEA, UTM, liens Google Maps. Fonds : IGN Géoplateforme, OpenTopoMap, OpenStreetMap.</footer>
+  <details class="block fold">
+    <summary>Hors ligne</summary>
+    <button class="btn sec wide" type="button" id="prepOff">Préparer la lecture de photo sans réseau</button>
+    <p class="hint" id="prepMsg">Une fois, avec du réseau (7 Mo). La carte hors ligne n'affiche que les zones déjà vues.</p>
+  </details>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>

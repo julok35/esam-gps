@@ -41,41 +41,41 @@
       current = null;
       out.className = 'result empty';
       out.innerHTML = r && r.empty
-        ? '<div class="status"><span class="pill none">En attente</span></div><p style="margin:0">Photographiez l\'écran ou collez le texte reçu. Le format est détecté automatiquement.</p>'
-        : '<div class="status"><span class="pill check">Aucune coordonnée trouvée</span></div><p style="margin:0">Vérifiez que le texte contient la position (latitude puis longitude). Si la lecture a mélangé les lignes, corrigez le texte ou recadrez la photo sur la ligne « Position ».</p>';
+        ? '<div class="status"><span class="pill none">En attente de coordonnées</span></div>'
+        : '<div class="status"><span class="pill check">Aucune coordonnée trouvée</span></div><p style="margin:0">Corrigez le texte ou recadrez sur les coordonnées.</p>';
       $('eqCard').hidden = true; $('shareCard').hidden = true;
       updateMap(); return;
     }
     var all = [r.best].concat(r.alts), c = all[Math.min(chosen, all.length - 1)];
     current = c;
     var warn = c.notes.length || r.alts.length;
-    var h = '<div class="status"><span class="pill ' + (warn ? 'check">À vérifier' : 'ok">Lecture fiable') + '</span><span class="pill fmt">' + esc(fmtName(c.fmt)) + '</span></div>';
-    h += '<div class="seg">Lu dans le texte : <b>' + esc(c.seg) + '</b></div>';
-    h += '<div class="coords">'
-      + '<div class="coord"><div><div class="k">Latitude</div><div class="v">' + f6(c.lat) + '</div></div><button class="btn sec" type="button" data-copy="' + f6(c.lat) + '">Copier</button></div>'
-      + '<div class="coord"><div><div class="k">Longitude</div><div class="v">' + f6(c.lon) + '</div></div><button class="btn sec" type="button" data-copy="' + f6(c.lon) + '">Copier</button></div>'
-      + '</div>';
-    h += '<button class="btn wide" type="button" data-copy="' + f6(c.lat) + ', ' + f6(c.lon) + '">Copier latitude, longitude</button>';
+    var la = f6(c.lat), lo = f6(c.lon);
+    var h = '<div class="status"><span class="pill ' + (warn ? 'check">À vérifier' : 'ok">Lecture fiable') + '</span><span class="pill fmt">' + esc(c.fmt.indexOf('UTM') === 0 ? c.fmt : c.fmt) + '</span></div>';
+    h += '<div class="big1">' + la + ', ' + lo + '</div>';
+    h += '<div class="seg1">Lu : ' + esc(c.seg) + '</div>';
+    // DJI Pilot 2 : degrés décimaux, latitude puis longitude, séparés par une virgule sans espace
+    h += '<div class="cp"><button class="btn" type="button" data-copy="' + la + ',' + lo + '">Copier pour Pilot 2</button>'
+      + '<button class="btn sec" type="button" data-copy="' + la + '">Lat</button>'
+      + '<button class="btn sec" type="button" data-copy="' + lo + '">Lon</button></div>';
     var notes = c.notes.slice();
-    if (r.alts.length) notes.push({ t: 'Le texte peut se lire de plusieurs façons : comparez avec la photo.' });
+    if (r.alts.length) notes.push({ t: 'Plusieurs lectures possibles : comparez avec la photo.' });
     if (notes.length) h += '<ul class="notes">' + notes.map(function (n) { return '<li>' + esc(n.t) + '</li>'; }).join('') + '</ul>';
     if (r.alts.length) {
-      h += '<div class="alts"><span class="lbl" style="margin:0">Autres lectures possibles</span>';
-      all.forEach(function (a, i) { if (a !== c) h += '<button type="button" data-alt="' + i + '">' + f6(a.lat) + ', ' + f6(a.lon) + ' <small>(' + esc(fmtName(a.fmt)) + ' : ' + esc(a.seg) + ')</small></button>'; });
+      h += '<div class="alts">';
+      all.forEach(function (a, i) { if (a !== c) h += '<button type="button" data-alt="' + i + '">' + f6(a.lat) + ', ' + f6(a.lon) + ' <small>(' + esc(a.seg) + ')</small></button>'; });
       h += '</div>';
     }
+    h += '<div class="links">'
+      + '<a target="_blank" rel="noopener" data-airops="' + la + ', ' + lo + '" href="https://airops-supuav.fr/map/#15/' + la + '/' + lo + '">AirOps</a>'
+      + '<a target="_blank" rel="noopener" href="https://cartes.gouv.fr/explorer-les-cartes/?c=' + lo + ',' + la + '&z=16&permalink=yes">cartes.gouv.fr</a>'
+      + '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + la + ',' + lo + '">Google Maps</a></div>';
+    h += '<p class="hint" id="linkMsg" style="margin:0" hidden></p>';
     out.className = 'result'; out.innerHTML = h;
 
     $('eq').innerHTML =
       '<tr><th>DMM</th><td>' + esc(Geo.toDMM(c.lat, true)) + '&nbsp;&nbsp;' + esc(Geo.toDMM(c.lon, false)) + '</td></tr>' +
       '<tr><th>DMS</th><td>' + esc(Geo.toDMS(c.lat, true)) + '&nbsp;&nbsp;' + esc(Geo.toDMS(c.lon, false)) + '</td></tr>' +
       '<tr><th>UTM</th><td>' + esc(Geo.toUTM(c.lat, c.lon)) + '</td></tr>';
-    var la = f6(c.lat), lo = f6(c.lon);
-    $('links').innerHTML =
-      '<a target="_blank" rel="noopener" data-airops="' + la + ', ' + lo + '" href="https://airops-supuav.fr/map/#15/' + la + '/' + lo + '">AirOps</a>' +
-      '<a target="_blank" rel="noopener" href="https://cartes.gouv.fr/explorer-les-cartes/?c=' + lo + ',' + la + '&z=16&permalink=yes">cartes.gouv.fr</a>' +
-      '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + la + ',' + lo + '">Google Maps</a>' +
-      '<a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=' + la + ',' + lo + '">Itinéraire</a>';
     $('eqCard').hidden = false; $('shareCard').hidden = false;
     if (!$('qrBox').hidden) drawQR();
     updateMap(true);
@@ -126,13 +126,13 @@
     else if (me) map.setView([me.lat, me.lon], 14);
   }
   function startGeo() {
-    if (!('geolocation' in navigator)) { $('geoMsg').textContent = 'Localisation non disponible sur cet appareil.'; return; }
+    if (!('geolocation' in navigator)) { $('geoMsg').hidden = false; $('geoMsg').textContent = 'Localisation non disponible sur cet appareil.'; return; }
     navigator.geolocation.watchPosition(function (p) {
       me = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy };
-      $('geoMsg').textContent = 'Position du téléphone : ' + f6(me.lat) + ', ' + f6(me.lon);
+      $('geoMsg').hidden = true;
       updateMap(firstFix); firstFix = false;
     }, function (e) {
-      $('geoMsg').textContent = e.code === 1 ? 'Localisation refusée : autorisez-la dans les réglages du navigateur pour voir votre position.' : 'Position du téléphone indisponible pour l\'instant.';
+      $('geoMsg').hidden = false; $('geoMsg').textContent = e.code === 1 ? 'Localisation refusée : autorisez-la dans les réglages du navigateur pour voir votre position.' : 'Position du téléphone indisponible pour l\'instant.';
     }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
   }
 
@@ -323,7 +323,7 @@
 
   // ---------- Événements ----------
   src.addEventListener('input', update);
-  $('clear').addEventListener('click', function () { src.value = ''; update(); try { history.replaceState(null, '', location.pathname); } catch (e) {} src.focus(); });
+  $('clear').addEventListener('click', function () { src.value = ''; $('cropBox').hidden = true; update(); try { history.replaceState(null, '', location.pathname); } catch (e) {} src.focus(); });
   $('fitBoth').addEventListener('click', fit);
   $('goTarget').addEventListener('click', function () { if (map && current) map.setView([current.lat, current.lon], 16); });
   $('goMe').addEventListener('click', function () { if (map && me) map.setView([me.lat, me.lon], 16); });
@@ -332,12 +332,11 @@
     if (a) {
       // secours : coordonnées dans le presse-papier pour la recherche AirOps
       try { navigator.clipboard.writeText(a.dataset.airops).catch(function () {}); } catch (err) {}
-      $('linkMsg').textContent = 'Coordonnées copiées : si AirOps ne se centre pas, collez-les dans sa recherche « Adresse, coordonnées ou zone ».';
+      $('linkMsg').hidden = false; $('linkMsg').textContent = 'Coordonnées copiées : si AirOps ne se centre pas, collez-les dans sa recherche.';
       return;
     }
     var t = e.target.closest('button'); if (!t) return;
-    if (t.dataset.ex) { src.value = EX[t.dataset.ex]; update(); }
-    else if (t.dataset.copy) copy(t.dataset.copy, t);
+    if (t.dataset.copy) copy(t.dataset.copy, t);
     else if (t.dataset.alt) { chosen = +t.dataset.alt; render(); }
     else if (t.dataset.hist) { var x = loadHist()[+t.dataset.hist]; if (x) { src.value = x.src; update(); window.scrollTo({ top: 0 }); } }
   });
