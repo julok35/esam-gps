@@ -102,7 +102,8 @@ var Geo = (function () {
       if (isInt(nums[0].raw) && v[0] <= max && v[1] < 60) {
         var fixes = [], pn = 0, md = nums[1].raw.indexOf('.') >= 0 ? nums[1].raw.split('.')[1].length : 0;
         if (syms[0] === "'") { fixes.push('symbole ° lu comme une apostrophe'); pn += 0.5; }
-        if (syms[1] === '"') { fixes.push('symbole des minutes lu comme des guillemets'); pn += 0.5; }
+        // ° suivi de minutes décimales puis " : apostrophe lue comme guillemets, sans ambiguïté
+        if (syms[1] === '"' && !(syms[0] === '\u00B0' && md >= 3)) { fixes.push('symbole des minutes lu comme des guillemets'); pn += 0.5; }
         if (md < 3) { fixes.push('minutes à ' + md + ' décimale(s) seulement, chiffre manquant ?'); pn += 0.5; }
         c.push({ val: v[0] + v[1] / 60, fmt: 'DMM', pen: pn, fix: fixes.join(', ') || undefined });
       }
