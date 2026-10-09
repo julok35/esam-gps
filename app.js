@@ -72,7 +72,8 @@
       '<tr><th>UTM</th><td>' + esc(Geo.toUTM(c.lat, c.lon)) + '</td></tr>';
     var la = f6(c.lat), lo = f6(c.lon);
     $('links').innerHTML =
-      '<a target="_blank" rel="noopener" href="https://www.geoportail.gouv.fr/carte?c=' + lo + ',' + la + '&z=16&l0=GEOGRAPHICALGRIDSYSTEMS.MAPS::GEOPORTAIL:OGC:WMTS(1)&permalink=yes">Géoportail</a>' +
+      '<a target="_blank" rel="noopener" href="https://airops-supuav.fr/map/#15/' + la + '/' + lo + '">AirOps</a>' +
+      '<a target="_blank" rel="noopener" href="https://cartes.gouv.fr/explorer-les-cartes/?c=' + lo + ',' + la + '&z=16&permalink=yes">cartes.gouv.fr</a>' +
       '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + la + ',' + lo + '">Google Maps</a>' +
       '<a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=' + la + ',' + lo + '">Itinéraire</a>';
     $('eqCard').hidden = false; $('shareCard').hidden = false;
