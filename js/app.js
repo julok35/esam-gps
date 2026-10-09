@@ -1,0 +1,119 @@
+/* GPS ESAM : point d'entrée. Lecture du texte, affichage du résultat, liens, événements. */
+import { $, esc, f6, copy, state } from './util.js';
+import { parse, toDMM, toDMS, toUTM } from './parser.js';
+import { initMap, updateMap, startGeo } from './map.js';
+import { initShare, drawQR } from './share.js';
+import { loadHist, drawHist, scheduleHist, flushHist, cancelHist } from './history.js';
+import { initOcr } from './ocr.js';
+
+var src = $('src'), out = $('result');
+var chosen = 0, lastParse = null, sayTimer = null;
+
+// Annonce courte pour les lecteurs d'écran, une fois la saisie posée
+function say(t) { clearTimeout(sayTimer); sayTimer = setTimeout(function () { $('announce').textContent = t; }, 800); }
+function setHash(h) { try { history.replaceState(null, '', h ? '#' + h : location.pathname + location.search); } catch (e) {} }
+
+// DJI Pilot 2 (Modifier les repères) : degrés entiers + minutes à 4 décimales (0,2 m)
+function pilotDM(v) {
+  var s = v < 0 ? '-' : '', a = Math.abs(v), d = Math.floor(a), m = (a - d) * 60;
+  if (+m.toFixed(4) >= 60) { d += 1; m = 0; }
+  return { d: s + d, m: m.toFixed(4) };
+}
+
+function render() {
+  var r = lastParse;
+  if (!r || !r.ok) {
+    state.current = null;
+    cancelHist();
+    out.className = 'result empty';
+    out.innerHTML = r && r.empty
+      ? '<div class="status"><span class="pill none">En attente de coordonnées</span></div>'
+      : '<div class="status"><span class="pill check">Aucune coordonnée trouvée</span></div><p class="flush">Corrigez le texte ou recadrez sur les coordonnées.</p>';
+    $('eqCard').hidden = true; $('shareCard').hidden = true;
+    if (!(r && r.empty)) say('Aucune coordonnée trouvée');
+    setHash('');
+    updateMap(); return;
+  }
+  var all = [r.best].concat(r.alts), c = all[Math.min(chosen, all.length - 1)];
+  state.current = c;
+  var warn = c.notes.length || r.alts.length;
+  var la = f6(c.lat), lo = f6(c.lon);
+  var h = '<div class="status"><span class="pill ' + (warn ? 'check">À vérifier' : 'ok">Lecture fiable') + '</span><span class="pill fmt">' + esc(c.fmt) + '</span>' + (r.agree && chosen === 0 ? '<span class="pill fmt">' + r.agree + ' lectures</span>' : '') + '</div>';
+  h += '<div class="big1">' + la + ', ' + lo + '</div>';
+  h += '<div class="seg1">Lu : ' + esc(c.seg) + '</div>';
+  // DJI Pilot 2 : longitude d'abord, puis latitude
+  var PL = pilotDM(c.lon), PA = pilotDM(c.lat);
+  var cell = function (v, u) { return '<button class="pv" type="button" data-copy="' + v + '"><b>' + v + '</b><i>' + u + '</i></button>'; };
+  h += '<div class="pilot"><div class="pilot-h">Saisie DJI Pilot 2 <small>(toucher pour copier)</small></div>'
+    + '<div class="pl">Longitude</div><div class="pr">' + cell(PL.d, '°') + cell(PL.m, "'") + '</div>'
+    + '<div class="pl">Latitude</div><div class="pr">' + cell(PA.d, '°') + cell(PA.m, "'") + '</div></div>';
+  h += '<div class="cp"><button class="btn sec" type="button" data-copy="' + la + ', ' + lo + '">Copier DD</button>'
+    + '<button class="btn sec" type="button" data-copy="' + la + '">Lat</button>'
+    + '<button class="btn sec" type="button" data-copy="' + lo + '">Lon</button></div>';
+  var notes = c.notes.slice();
+  if (r.alts.length) notes.push({ t: 'Plusieurs lectures possibles : comparez avec la photo.' });
+  if (notes.length) h += '<ul class="notes">' + notes.map(function (n) { return '<li>' + esc(n.t) + '</li>'; }).join('') + '</ul>';
+  if (r.alts.length) {
+    h += '<div class="alts">';
+    all.forEach(function (a, i) { if (a !== c) h += '<button type="button" data-alt="' + i + '">' + f6(a.lat) + ', ' + f6(a.lon) + ' <small>(' + esc(a.seg) + ')</small></button>'; });
+    h += '</div>';
+  }
+  h += '<div class="links">'
+    + '<a target="_blank" rel="noopener" data-airops="' + la + ', ' + lo + '" href="https://airops-supuav.fr/map/#15/' + la + '/' + lo + '">AirOps</a>'
+    + '<a target="_blank" rel="noopener" href="https://cartes.gouv.fr/explorer-les-cartes/?c=' + lo + ',' + la + '&z=16&permalink=yes">cartes.gouv.fr</a>'
+    + '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + la + ',' + lo + '">Google Maps</a></div>';
+  h += '<p class="hint flush" id="linkMsg" hidden></p>';
+  out.className = 'result'; out.innerHTML = h;
+
+  $('eq').innerHTML =
+    '<tr><th>DMM</th><td>' + esc(toDMM(c.lat, true)) + '&nbsp;&nbsp;' + esc(toDMM(c.lon, false)) + '</td></tr>' +
+    '<tr><th>DMS</th><td>' + esc(toDMS(c.lat, true)) + '&nbsp;&nbsp;' + esc(toDMS(c.lon, false)) + '</td></tr>' +
+    '<tr><th>UTM</th><td>' + esc(toUTM(c.lat, c.lon)) + '</td></tr>';
+  $('eqCard').hidden = false; $('shareCard').hidden = false;
+  drawQR();
+  updateMap(true);
+  // historique : pas pendant la frappe (valeurs partielles), seulement une fois le champ quitté
+  if (document.activeElement !== src) scheduleHist(c, src.value); else cancelHist();
+  say((warn ? 'À vérifier : ' : 'Lecture fiable : ') + la + ', ' + lo);
+  setHash(la + ',' + lo);
+}
+function update() { chosen = 0; lastParse = parse(src.value); render(); }
+function show(text, p) { src.value = text; chosen = 0; lastParse = p; render(); }
+function useCurrent() { if (state.current) { scheduleHist(state.current, src.value); flushHist(); } }
+
+// ---------- Hors ligne ----------
+function setNet() { $('net').hidden = navigator.onLine; }
+window.addEventListener('online', setNet); window.addEventListener('offline', setNet); setNet();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+
+// ---------- Événements ----------
+src.addEventListener('input', update);
+// champ quitté : le point affiché entre dans l'historique
+src.addEventListener('change', useCurrent);
+document.addEventListener('visibilitychange', function () { if (document.hidden) useCurrent(); });
+$('clear').addEventListener('click', function () { src.value = ''; $('cropBox').hidden = true; update(); src.focus(); });
+document.addEventListener('click', function (e) {
+  var a = e.target.closest('a[data-airops]');
+  if (a) {
+    // secours : coordonnées dans le presse-papier pour la recherche AirOps
+    try { navigator.clipboard.writeText(a.dataset.airops).catch(function () {}); } catch (err) {}
+    $('linkMsg').hidden = false; $('linkMsg').textContent = 'Coordonnées copiées : si AirOps ne se centre pas, collez-les dans sa recherche.';
+    useCurrent();
+    return;
+  }
+  var t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.copy) { copy(t.dataset.copy, t); useCurrent(); }
+  else if (t.dataset.alt) { chosen = +t.dataset.alt; render(); }
+  else if (t.dataset.hist) { var x = loadHist()[+t.dataset.hist]; if (x) { src.value = x.src; update(); window.scrollTo({ top: 0 }); } }
+});
+
+// ---------- Démarrage ----------
+initMap();
+initShare(useCurrent);
+initOcr(show);
+drawHist();
+var h0 = decodeURIComponent((location.hash || '').slice(1));
+if (/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(h0)) src.value = h0.replace(',', ', ');
+lastParse = parse(src.value); render();
+cancelHist(); // un lien ouvert n'entre pas dans l'historique tant qu'on ne s'en sert pas
+startGeo();

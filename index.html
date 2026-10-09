@@ -6,15 +6,14 @@
 <title>GPS ESAM</title>
 <meta name="description" content="Convertisseur de coordonnées GPS de l'ESAM : photo, lecture du texte, carte, partage.">
 <meta name="theme-color" content="#AFC8E8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://data.geopf.fr https://*.tile.opentopomap.org https://tile.openstreetmap.org; connect-src 'self' https://cdn.jsdelivr.net; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="GPS ESAM">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@400;500;700&family=Roboto+Condensed:wght@500;600&display=swap">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -56,7 +55,8 @@
     </div>
   </section>
 
-  <section class="result" id="result" aria-live="polite"></section>
+  <section class="result" id="result"></section>
+  <p class="sr-only" id="announce" aria-live="polite"></p>
 
   <section class="block" id="mapCard">
     <div class="maphead">
@@ -108,9 +108,8 @@
   </details>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
-<script src="parser.js"></script>
-<script src="app.js"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/qrcode/qrcode.js"></script>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>

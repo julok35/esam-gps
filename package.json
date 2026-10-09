@@ -1,0 +1,9 @@
+{
+  "name": "esam-gps",
+  "private": true,
+  "description": "Convertisseur de coordonnées GPS de l'ESAM (site statique, sans build).",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
