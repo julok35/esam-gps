@@ -1,5 +1,5 @@
 /* Service worker GPS ESAM : appli en cache, moteur de lecture gardé une fois téléchargé, tuiles de carte gardées une fois vues. */
-var V = 'esam-gps-v1.16', TILES = 'esam-tiles', LIBS = 'esam-libs';
+var V = 'esam-gps-v1.17', TILES = 'esam-tiles', LIBS = 'esam-libs';
 var SHELL = ['./', 'index.html', 'app.css', 'manifest.webmanifest', 'logo.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png',
   'js/app.js', 'js/parser.js', 'js/util.js', 'js/map.js', 'js/share.js', 'js/history.js', 'js/ocr.js', 'js/skew.js', 'js/fix.js', 'js/place.js', 'js/compass.js',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/leaflet/images/layers.png', 'vendor/leaflet/images/layers-2x.png',

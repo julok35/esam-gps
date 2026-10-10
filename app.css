@@ -199,3 +199,4 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .cmp { max-width: 680px; margin: 0 auto; padding: 0 16px 3px; -webkit-mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent); }
 .cmp canvas { display: block; width: 100%; height: 22px; }
 .cmp-ask { display: block; margin: 0 auto 4px; font: 600 .7rem var(--f-label); letter-spacing: .06em; text-transform: uppercase; color: var(--noir); background: transparent; border: 1px solid rgba(17,17,17,.35); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.band .cmp-msg { max-width: 680px; margin: 0 auto; text-transform: none; letter-spacing: 0; padding: 0 16px 5px; font: 600 .74rem/1.3 var(--f-label); color: var(--noir); text-align: center; }
