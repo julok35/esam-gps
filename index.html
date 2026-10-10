@@ -21,6 +21,7 @@
   <div class="band-in">
     <img alt="Logo ESAM" src="logo.png" width="40" height="40">
     <h1>GPS ESAM</h1>
+    <span class="ver" id="ver"></span>
     <span class="net" id="net" hidden>Hors ligne</span>
   </div>
 </header>
@@ -35,10 +36,11 @@
     <input id="gal" type="file" accept="image/*" hidden>
 
     <div class="crop" id="cropBox" hidden>
-      <span class="lbl">Encadrez les coordonnées au doigt</span>
+      <span class="lbl">Pincez pour zoomer, ajustez le cadre par ses coins</span>
       <div class="crop-stage" id="stage">
         <canvas id="cv"></canvas>
-        <div class="sel" id="sel"><span class="h tl"></span><span class="h tr"></span><span class="h bl"></span><span class="h br"></span></div>
+        <div class="sel" id="sel"><span class="h tl" data-h="tl"></span><span class="h tr" data-h="tr"></span><span class="h bl" data-h="bl"></span><span class="h br" data-h="br"></span></div>
+        <div class="zoombar"><button type="button" id="zIn" aria-label="Zoomer">+</button><button type="button" id="zOut" aria-label="Dézoomer">−</button></div>
       </div>
       <div class="row4">
         <button class="btn" type="button" id="ocrGo">Lire</button>
@@ -56,6 +58,17 @@
   </section>
 
   <section class="result" id="result"></section>
+  <section class="block fixer" id="fixCard" hidden>
+    <span class="lbl">Corriger la lecture</span>
+    <p class="hint flush">Faites tourner chaque chiffre vers le haut ou le bas pour retrouver ce qu'affiche la photo.</p>
+    <div id="fixRows"></div>
+    <p class="fix-out" id="fixOut"></p>
+    <div class="row3">
+      <button class="btn" type="button" id="fixOk">Valider</button>
+      <button class="btn sec" type="button" id="fixReset">Remettre</button>
+      <button class="btn sec" type="button" id="fixCancel">Annuler</button>
+    </div>
+  </section>
   <p class="sr-only" id="announce" aria-live="polite"></p>
 
   <section class="block" id="mapCard">
@@ -75,8 +88,9 @@
 
   <details class="block fold" id="shareCard" hidden>
     <summary>Partager le point</summary>
-    <div class="row3">
+    <div class="grid2">
       <button class="btn" type="button" id="shareBtn">Partager</button>
+      <button class="btn wa" type="button" id="waBtn">WhatsApp</button>
       <button class="btn sec" type="button" id="qrBtn">QR code</button>
       <button class="btn sec" type="button" id="copyMsg">Copier message</button>
     </div>
@@ -107,6 +121,7 @@
     <p class="hint" id="prepMsg">Une fois, avec du réseau (7 Mo). La carte hors ligne n'affiche que les zones déjà vues.</p>
   </details>
 </main>
+<footer class="foot">GPS ESAM · by Julok</footer>
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/qrcode/qrcode.js"></script>

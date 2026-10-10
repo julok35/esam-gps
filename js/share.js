@@ -1,4 +1,4 @@
-/* Partage du point : message, partage natif, QR code. */
+/* Partage du point : message, partage natif, WhatsApp, QR code. */
 import { $, f6, copy, state } from './util.js';
 import { toDMM } from './parser.js';
 
@@ -37,6 +37,12 @@ export function initShare(onUse) {
     if (navigator.share) {
       navigator.share({ title: 'Point ESAM', text: text }).catch(function (e) { if (e && e.name !== 'AbortError') copy(text, $('shareBtn')); });
     } else copy(text, $('shareBtn'));
+  });
+  // WhatsApp : message prêt à envoyer, l'utilisateur choisit le contact ou le groupe
+  $('waBtn').addEventListener('click', function () {
+    if (!state.current) return;
+    onUse();
+    window.open('https://wa.me/?text=' + encodeURIComponent(message(state.current)), '_blank', 'noopener');
   });
   $('copyMsg').addEventListener('click', function () { if (state.current) { onUse(); copy(message(state.current), $('copyMsg')); } });
 }

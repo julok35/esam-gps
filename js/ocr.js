@@ -16,6 +16,9 @@ var NEED = 3; // lectures concordantes nécessaires
 var TOL = 0.00002; // deux lectures à moins de ~2 m sur un axe votent ensemble
 
 var work = null, gen = 0, sel = { x: .1, y: .3, w: .8, h: .4 }, cv, stage, selEl, drag = null, ocrWorker = null, progCb = function () {};
+// Vue de la photo : zoom z (1 = photo entière) et décalage en pixels de l'écran ; doigts posés sur la photo
+var view = { z: 1, tx: 0, ty: 0 }, ptrs = new Map();
+var ZMAX = 8, MIN_SIDE = 0.02, DEAD = 8; // zoom maximal, plus petit côté du cadre, mouvement ignoré (px) avant de bouger quoi que ce soit
 
 function loadFile(file) {
   if (!file) return;
@@ -25,7 +28,7 @@ function loadFile(file) {
     work.getContext('2d').drawImage(img, 0, 0, work.width, work.height);
     gen++;
     sel = { x: .15, y: .35, w: .7, h: .35 };
-    showWork(); $('cropBox').hidden = false; $('prog').hidden = true;
+    $('cropBox').hidden = false; $('prog').hidden = true; showWork();
     $('cropBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   if (window.createImageBitmap) createImageBitmap(file, { imageOrientation: 'from-image' }).then(done, function () { viaImg(file, done); });
@@ -33,44 +36,109 @@ function loadFile(file) {
 }
 function viaImg(file, cb) { var u = URL.createObjectURL(file), im = new Image(); im.onload = function () { cb(im); URL.revokeObjectURL(u); }; im.src = u; }
 function showWork() {
-  var s = Math.min(1, 900 / work.width);
+  // affichage assez fin pour rester net une fois zoomé
+  var s = Math.min(1, 2000 / Math.max(work.width, work.height));
   cv.width = Math.round(work.width * s); cv.height = Math.round(work.height * s);
   cv.getContext('2d').drawImage(work, 0, 0, cv.width, cv.height);
+  view = { z: 1, tx: 0, ty: 0 }; applyView();
+}
+
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+// taille de la photo à l'écran sans zoom (le zoom est une transformation, il ne change pas la mise en page)
+function dims() { return { W: cv.offsetWidth || 1, H: cv.offsetHeight || 1 }; }
+function applyView() {
+  var d = dims();
+  view.z = clamp(view.z, 1, ZMAX);
+  view.tx = clamp(view.tx, d.W - d.W * view.z, 0); view.ty = clamp(view.ty, d.H - d.H * view.z, 0);
+  cv.style.transform = 'translate(' + view.tx + 'px,' + view.ty + 'px) scale(' + view.z + ')';
+  $('zOut').disabled = view.z <= 1; $('zIn').disabled = view.z >= ZMAX;
   drawSel();
 }
-function drawSel() { selEl.style.left = sel.x * 100 + '%'; selEl.style.top = sel.y * 100 + '%'; selEl.style.width = sel.w * 100 + '%'; selEl.style.height = sel.h * 100 + '%'; }
+// cadre en coordonnées de la photo (0 à 1), placé à l'écran selon le zoom
+function drawSel() {
+  var d = dims(), kx = d.W * view.z, ky = d.H * view.z;
+  selEl.style.left = view.tx + sel.x * kx + 'px'; selEl.style.top = view.ty + sel.y * ky + 'px';
+  selEl.style.width = sel.w * kx + 'px'; selEl.style.height = sel.h * ky + 'px';
+}
+function local(e) { var r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+// zoom vers z en gardant immobile le point p de l'écran
+function zoomAt(z, p) {
+  var nz = clamp(z, 1, ZMAX);
+  view.tx = p.x - (p.x - view.tx) * nz / view.z; view.ty = p.y - (p.y - view.ty) * nz / view.z; view.z = nz;
+  applyView();
+}
+// centre du cadre à l'écran (ramené dans la photo visible) : les boutons zooment vers lui
+function selCenter() {
+  var d = dims();
+  return { x: clamp(view.tx + (sel.x + sel.w / 2) * d.W * view.z, 0, d.W), y: clamp(view.ty + (sel.y + sel.h / 2) * d.H * view.z, 0, d.H) };
+}
+function two() { var p = Array.from(ptrs.values()); return { d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1, m: { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 } }; }
 
+// Un doigt : coin = redimensionner, intérieur du cadre = déplacer, ailleurs = faire glisser la photo zoomée.
+// Deux doigts : zoom, sans toucher au cadre. Rien ne bouge avant DEAD px (un simple toucher ne déplace rien).
 function initCrop() {
   stage.addEventListener('pointerdown', function (e) {
-    var r = stage.getBoundingClientRect(), px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
-    var h = e.target.classList.contains('h') ? e.target.className.replace('h ', '') : null;
-    drag = { mode: h || 'new', px: px, py: py, s: { x: sel.x, y: sel.y, w: sel.w, h: sel.h } };
-    if (drag.mode === 'new') sel = { x: px, y: py, w: 0.01, h: 0.01 };
-    stage.setPointerCapture(e.pointerId); e.preventDefault();
+    if (e.target.closest('.zoombar')) return;
+    ptrs.set(e.pointerId, local(e));
+    try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+    e.preventDefault();
+    if (ptrs.size === 2) {
+      // second doigt : le geste du premier sur le cadre est annulé, place au zoom
+      if (drag && drag.s) { sel = drag.s; drawSel(); }
+      var t = two();
+      drag = { mode: 'pinch', d0: t.d, m0: t.m, z0: view.z, tx0: view.tx, ty0: view.ty };
+      return;
+    }
+    if (ptrs.size > 2) return;
+    var mode = e.target.dataset.h || (e.target === selEl ? 'move' : 'pan');
+    drag = { mode: mode, p0: local(e), s: { x: sel.x, y: sel.y, w: sel.w, h: sel.h }, tx0: view.tx, ty0: view.ty, live: false };
   });
   stage.addEventListener('pointermove', function (e) {
-    if (!drag) return;
-    var r = stage.getBoundingClientRect(), px = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), py = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
-    var s = drag.s, dx = px - drag.px, dy = py - drag.py, x0 = s.x, y0 = s.y, x1 = s.x + s.w, y1 = s.y + s.h;
-    if (drag.mode === 'move') { sel.x = Math.max(0, Math.min(1 - s.w, s.x + dx)); sel.y = Math.max(0, Math.min(1 - s.h, s.y + dy)); }
+    if (!drag || !ptrs.has(e.pointerId)) return;
+    var p = local(e); ptrs.set(e.pointerId, p);
+    if (drag.mode === 'pinch') {
+      if (ptrs.size < 2) return;
+      var t = two(), nz = clamp(drag.z0 * t.d / drag.d0, 1, ZMAX);
+      // le point de la photo sous les doigts au départ suit le milieu des doigts
+      view.tx = t.m.x - (drag.m0.x - drag.tx0) * nz / drag.z0; view.ty = t.m.y - (drag.m0.y - drag.ty0) * nz / drag.z0; view.z = nz;
+      applyView(); return;
+    }
+    if (ptrs.size > 1 || !drag.s) return;
+    var dx = p.x - drag.p0.x, dy = p.y - drag.p0.y;
+    if (!drag.live) {
+      if (Math.hypot(dx, dy) < DEAD) return;
+      drag.live = true; drag.p0 = p; return; // départ du geste ici : pas de saut
+    }
+    if (drag.mode === 'pan') { view.tx = drag.tx0 + dx; view.ty = drag.ty0 + dy; applyView(); return; }
+    var d = dims(), s = drag.s, ux = dx / (d.W * view.z), uy = dy / (d.H * view.z);
+    if (drag.mode === 'move') { sel.x = clamp(s.x + ux, 0, 1 - s.w); sel.y = clamp(s.y + uy, 0, 1 - s.h); }
     else {
-      if (drag.mode === 'new') { x0 = drag.px; y0 = drag.py; x1 = px; y1 = py; }
-      else {
-        if (drag.mode.charAt(1) === 'l') x0 = px; else x1 = px;
-        if (drag.mode.charAt(0) === 't') y0 = py; else y1 = py;
-      }
-      sel = { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.max(.03, Math.abs(x1 - x0)), h: Math.max(.03, Math.abs(y1 - y0)) };
+      // coin : seul le coin tenu bouge, le cadre ne se retourne pas et garde une taille minimale
+      var x0 = s.x, y0 = s.y, x1 = s.x + s.w, y1 = s.y + s.h;
+      if (drag.mode.charAt(1) === 'l') x0 = clamp(s.x + ux, 0, x1 - MIN_SIDE); else x1 = clamp(x1 + ux, x0 + MIN_SIDE, 1);
+      if (drag.mode.charAt(0) === 't') y0 = clamp(s.y + uy, 0, y1 - MIN_SIDE); else y1 = clamp(y1 + uy, y0 + MIN_SIDE, 1);
+      sel = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     }
     drawSel();
   });
-  ['pointerup', 'pointercancel'].forEach(function (ev) { stage.addEventListener(ev, function () { drag = null; }); });
+  ['pointerup', 'pointercancel'].forEach(function (ev) {
+    stage.addEventListener(ev, function (e) {
+      ptrs.delete(e.pointerId);
+      // après un zoom à deux doigts, le doigt qui reste ne fait rien jusqu'à ce qu'il soit levé
+      if (!ptrs.size) drag = null; else if (drag && drag.mode === 'pinch') drag = { mode: 'none' };
+    });
+  });
+  stage.addEventListener('wheel', function (e) { if (!work) return; e.preventDefault(); zoomAt(view.z * (e.deltaY < 0 ? 1.25 : 0.8), local(e)); }, { passive: false });
+  $('zIn').addEventListener('click', function () { zoomAt(view.z * 1.6, selCenter()); });
+  $('zOut').addEventListener('click', function () { zoomAt(view.z / 1.6, selCenter()); });
+  window.addEventListener('resize', function () { if (work && !$('cropBox').hidden) applyView(); });
   $('rot').addEventListener('click', function () {
     if (!work) return;
     var c = document.createElement('canvas'); c.width = work.height; c.height = work.width;
     var g = c.getContext('2d'); g.translate(c.width, 0); g.rotate(Math.PI / 2); g.drawImage(work, 0, 0); work = c; gen++;
     sel = { x: .1, y: .1, w: .8, h: .8 }; showWork();
   });
-  $('cropAll').addEventListener('click', function () { sel = { x: 0, y: 0, w: 1, h: 1 }; drawSel(); });
+  $('cropAll').addEventListener('click', function () { sel = { x: 0, y: 0, w: 1, h: 1 }; view = { z: 1, tx: 0, ty: 0 }; applyView(); });
   $('cropClose').addEventListener('click', function () { $('cropBox').hidden = true; });
   $('cam').addEventListener('change', function (e) { loadFile(e.target.files[0]); e.target.value = ''; });
   $('gal').addEventListener('change', function (e) { loadFile(e.target.files[0]); e.target.value = ''; });
