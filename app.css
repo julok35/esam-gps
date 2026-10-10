@@ -125,10 +125,13 @@ button:focus-visible, a:focus-visible, label.btn:focus-within { outline: 3px sol
 .qrimg img { display: block; width: min(68vw, 280px); height: auto; image-rendering: pixelated; }
 .qr .hint { text-align: center; overflow-wrap: anywhere; }
 
-table.eq { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-.eq th { text-align: left; font: 600 .74rem var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px 10px 8px 0; white-space: nowrap; vertical-align: top; }
-.eq td { padding: 8px 0; font-weight: 500; overflow-wrap: anywhere; }
-.eq tr + tr th, .eq tr + tr td { border-top: 1px solid var(--line); }
+.eq { display: grid; font-variant-numeric: tabular-nums; }
+.eqr { display: grid; grid-template-columns: 3.4rem minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 0; }
+.eqr + .eqr { border-top: 1px solid var(--line); }
+.eqk { font: 600 .74rem var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.eqv { font-weight: 500; overflow-wrap: anywhere; }
+.eqr .btn { min-height: 42px; padding: 6px 12px; font-size: .74rem; overflow-wrap: normal; }
+.eq + .grid2 { margin-top: 4px; }
 .links { display: flex; flex-wrap: wrap; gap: 6px; }
 .links a { font: 600 .78rem var(--f-label); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); text-decoration: none; padding: 7px 10px; border-radius: 8px; background: var(--soft); border: 1.5px solid var(--line); }
 .hist { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
@@ -142,7 +145,7 @@ footer { font-size: .76rem; color: var(--muted); text-align: center; }
 @media (prefers-reduced-motion: no-preference) { .btn, .chip { transition: background .15s, border-color .15s; } .prog div { transition: width .2s; } }
 
 .leaflet-top, .leaflet-bottom { z-index: 900; }
-.result, #cropBox, #mapCard { scroll-margin-top: 64px; }
+.result, #cropBox, #zoneView, #fixCard, #mapCard { scroll-margin-top: 64px; }
 .pilot { background: var(--soft); border-radius: 10px; padding: 10px; display: grid; gap: 6px; }
 .pilot-h { font: 600 .78rem var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .pilot-h small { text-transform: none; letter-spacing: 0; font-weight: 500; }
@@ -155,6 +158,10 @@ footer { font-size: .76rem; color: var(--muted); text-align: center; }
 
 .status .fixbtn { margin-left: auto; }
 .fixer { display: grid; gap: 10px; border-color: var(--jaune); }
+/* zone lue : en grand, nette, sans lissage flou */
+canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; object-fit: contain; border: 2px solid var(--noir); border-radius: 8px; background: #fff; }
+.zoneview { display: grid; gap: 8px; }
+.crop.read > .lbl, .crop.read > .crop-stage, .crop.read > .tilt, .crop.read > .row4 { display: none; }
 .fix-row { display: grid; gap: 4px; }
 .fix-k { font: 600 .74rem var(--f-label); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .whs { display: flex; align-items: center; justify-content: center; gap: 1px; }

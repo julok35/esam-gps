@@ -1,6 +1,7 @@
 /* Correction de la lecture à la main : chaque chiffre devient une molette, comme un cadenas à code. */
 import { $, esc, f6 } from './util.js';
 import { parse, toDMM, toDMS, toUTM, distM } from './parser.js';
+import { readZone } from './ocr.js';
 
 var STEP = 30; // hauteur d'un chiffre sur la molette (px), voir .wh dans app.css
 var DIGITS = '0123456789';
@@ -69,8 +70,12 @@ export function openFix(c) {
   var utm = /UTM/.test(c.fmt || ''); // en UTM, les lettres sont des bandes de latitude, pas des hémisphères
   rows = linesFor(c).map(function (l) { return { k: l[0], cells: l[1].split('').map(function (ch) { return cell(ch, !utm); }) }; });
   build();
+  // zone lue sur la photo, juste au-dessus des molettes
+  var z = readZone(), zc = $('fixZone');
+  zc.hidden = !z;
+  if (z) { zc.width = z.width; zc.height = z.height; zc.getContext('2d').drawImage(z, 0, 0); }
   $('fixCard').hidden = false;
-  $('fixCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  $('fixCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 export function closeFix() { $('fixCard').hidden = true; }
 

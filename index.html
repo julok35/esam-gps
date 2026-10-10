@@ -56,6 +56,14 @@
         <button class="btn sec" type="button" id="cropAll">Tout</button>
         <button class="btn sec" type="button" id="cropClose">Fermer</button>
       </div>
+      <div class="zoneview" id="zoneView" hidden>
+        <span class="lbl">Zone lue, contraste renforcé : comparez avec le résultat</span>
+        <canvas class="zone" id="zoneCv"></canvas>
+        <div class="row2">
+          <button class="btn sec" type="button" id="reCrop">Recadrer</button>
+          <button class="btn sec" type="button" id="zoneClose">Fermer</button>
+        </div>
+      </div>
       <div class="prog" id="prog" hidden><div id="progBar"></div><span id="progTxt"></span></div>
     </div>
 
@@ -65,9 +73,9 @@
     </div>
   </section>
 
-  <section class="result" id="result"></section>
   <section class="block fixer" id="fixCard" hidden>
     <span class="lbl">Corriger la lecture</span>
+    <canvas class="zone" id="fixZone" hidden aria-label="Zone lue sur la photo"></canvas>
     <p class="hint flush">Faites tourner chaque chiffre vers le haut ou le bas pour retrouver ce qu'affiche la photo.</p>
     <div id="fixRows"></div>
     <p class="fix-out" id="fixOut"></p>
@@ -77,6 +85,7 @@
       <button class="btn sec" type="button" id="fixCancel">Annuler</button>
     </div>
   </section>
+  <section class="result" id="result"></section>
   <p class="sr-only" id="announce" aria-live="polite"></p>
 
   <section class="block" id="mapCard">
@@ -114,8 +123,12 @@
   </details>
 
   <details class="block fold" id="eqCard" hidden>
-    <summary>DMM, DMS, UTM</summary>
-    <table class="eq"><tbody id="eq"></tbody></table>
+    <summary>Autres formats : DMM, DMS, UTM</summary>
+    <div class="eq" id="eq"></div>
+    <div class="grid2">
+      <button class="btn" type="button" id="eqShare">Partager</button>
+      <button class="btn sec" type="button" id="eqCopy">Copier tout</button>
+    </div>
   </details>
 
   <details class="block fold" id="histCard" hidden>

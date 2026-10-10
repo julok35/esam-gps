@@ -18,7 +18,8 @@ var AUTO_MIN = 2, AUTO_GAIN = 1.2; // à la lecture, inclinaison résiduelle cor
 var TOL = 0.00002; // deux lectures à moins de ~2 m sur un axe votent ensemble
 
 // base : photo telle que prise (aux quarts de tour près) ; work : la même redressée de angle degrés, refaite à la demande
-var base = null, angle = 0, work = null, gen = 0, sel = { x: .1, y: .3, w: .8, h: .4 }, cv, stage, selEl, drag = null, ocrWorker = null, progCb = function () {};
+// zone : la zone lue, agrandie et contrastée, gardée pour vérifier le résultat d'un coup d'œil
+var base = null, angle = 0, work = null, zone = null, gen = 0, sel = { x: .1, y: .3, w: .8, h: .4 }, cv, stage, selEl, drag = null, ocrWorker = null, progCb = function () {};
 // Vue de la photo : zoom z (1 = photo entière) et décalage en pixels de l'écran ; doigts posés sur la photo
 var view = { z: 1, tx: 0, ty: 0 }, ptrs = new Map();
 var ZMAX = 8, MIN_SIDE = 0.02, DEAD = 8; // zoom maximal, plus petit côté du cadre, mouvement ignoré (px) avant de bouger quoi que ce soit
@@ -29,7 +30,7 @@ function loadFile(file) {
     var s = Math.min(1, 2400 / Math.max(img.width, img.height));
     base = document.createElement('canvas'); base.width = Math.round(img.width * s); base.height = Math.round(img.height * s);
     base.getContext('2d').drawImage(img, 0, 0, base.width, base.height);
-    angle = 0; work = null; gen++; showAngle();
+    angle = 0; work = null; gen++; showAngle(); clearZone();
     sel = { x: .15, y: .35, w: .7, h: .35 };
     $('cropBox').hidden = false; $('prog').hidden = true; showWork();
     $('cropBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -215,6 +216,8 @@ function initCrop() {
   $('tAuto').addEventListener('click', autoLevel);
   $('cropAll').addEventListener('click', function () { sel = { x: 0, y: 0, w: 1, h: 1 }; view = { z: 1, tx: 0, ty: 0 }; applyView(); });
   $('cropClose').addEventListener('click', function () { $('cropBox').hidden = true; });
+  $('reCrop').addEventListener('click', function () { $('cropBox').classList.remove('read'); $('zoneView').hidden = true; applyView(); $('cropBox').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  $('zoneClose').addEventListener('click', function () { $('cropBox').hidden = true; });
   $('cam').addEventListener('change', function (e) { loadFile(e.target.files[0]); e.target.value = ''; });
   $('gal').addEventListener('change', function (e) { loadFile(e.target.files[0]); e.target.value = ''; });
 }
@@ -244,6 +247,23 @@ function prepared(img, box, targetW, pad, ex, rot) {
   var m = Math.round(c.height / 4), o = document.createElement('canvas'); o.width = c.width + 2 * m; o.height = c.height + 2 * m;
   var go = o.getContext('2d'); go.fillStyle = '#fff'; go.fillRect(0, 0, o.width, o.height); go.drawImage(c, m, m);
   return o;
+}
+
+// Zone lue pour l'œil : même cadre et même redressement que la lecture, contraste poussé en S
+function zoneImage(img, box, rot) {
+  var c = prepared(img, box, 1400, 0, 0.06, rot), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data, lut = new Uint8Array(256);
+  for (var v = 0; v < 256; v++) lut[v] = Math.round(255 / (1 + Math.exp(-(v - 128) / 30)));
+  for (var i = 0; i < p.length; i += 4) p[i] = p[i + 1] = p[i + 2] = lut[p[i]];
+  g.putImageData(d, 0, 0);
+  return c;
+}
+export function readZone() { return zone; }
+// zone oubliée (nouvelle photo, texte effacé, autre point) ; le cadrage revient
+export function clearZone() { zone = null; $('cropBox').classList.remove('read'); $('zoneView').hidden = true; }
+function showZone(z) {
+  zone = z;
+  var c = $('zoneCv'); c.width = z.width; c.height = z.height; c.getContext('2d').drawImage(z, 0, 0);
+  $('cropBox').classList.add('read'); $('zoneView').hidden = false;
 }
 
 function loadScript(u) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = u; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
@@ -320,6 +340,7 @@ function read(show) {
     return step();
   }).then(function () {
     if (stale()) { setProg('Lecture interrompue : nouvelle photo, touchez Lire', 0); return; }
+    try { showZone(zoneImage(img, box, lean)); } catch (err) { console.error('Zone lue :', err); }
     var v = votes(runs), total = runs.length, lastParse;
     if (!v.lat.best || !v.lon.best) {
       var r0 = runs[0] || { txt: '', p: parse('') };
@@ -357,7 +378,7 @@ function read(show) {
     }
     show(text, lastParse);
     setProg(sure ? 'Lu et confirmé' : 'Lecture incertaine : vérifiez avec la photo', 1);
-    $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $(zone ? 'zoneView' : 'result').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }).catch(function (err) {
     console.error('Lecture photo :', err);
     setProg('Lecture impossible : vérifiez le réseau au premier usage, ou tapez le texte', 0);
