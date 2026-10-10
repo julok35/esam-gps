@@ -70,3 +70,33 @@ test('image unie : aucune inclinaison', () => {
   const r = skewAngle(new Uint8Array(100 * 60).fill(128), 100, 60);
   assert.deepEqual(r, { deg: 0, gain: 1 });
 });
+
+// Vraie photo de terrain : écran d'un Garmin Alpha 100, tenu à la main (niveaux de gris, 560 x 525).
+// La v1.13 se trompait ici d'environ 45° une fois sur deux. La photo est tournée de a degrés, comme un téléphone tenu de
+// travers, puis un cadre horizontal est pris au centre : la mesure doit suivre a.
+import { gunzipSync } from 'node:zlib';
+import { readFileSync } from 'node:fs';
+
+const PW = 560, PH = 525;
+const photo = gunzipSync(readFileSync(new URL('./garmin-ecran-560x525.gray.gz', import.meta.url)));
+function turned(a, w, h) {
+  // cadre w x h au centre de la photo tournée de a degrés (interpolation bilinéaire)
+  const r = a * Math.PI / 180, c = Math.cos(r), s = Math.sin(r), out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const dx = x - w / 2, dy = y - h / 2, X = dx * c + dy * s + PW / 2, Y = -dx * s + dy * c + PH / 2;
+    const x0 = Math.floor(X), y0 = Math.floor(Y), fx = X - x0, fy = Y - y0;
+    const at = (u, v) => photo[Math.min(PH - 1, Math.max(0, v)) * PW + Math.min(PW - 1, Math.max(0, u))];
+    out[y * w + x] = (at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) + (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy;
+  }
+  return out;
+}
+
+test('vraie photo de Garmin : inclinaison suivie de -25° à +30°', () => {
+  const W = 320, H = 260, ref = skewAngle(turned(0, W, H), W, H);
+  assert.ok(Math.abs(ref.deg) < 5 && ref.gain > 2, `photo telle quelle : ${ref.deg}°, gain ${ref.gain}`);
+  for (const a of [-25, -12, -5, 5, 12, 30]) {
+    const r = skewAngle(turned(a, W, H), W, H);
+    assert.ok(Math.abs(r.deg - ref.deg - a) <= 1, `tournée de ${a}° : mesuré ${r.deg}° (photo telle quelle ${ref.deg}°)`);
+    assert.ok(r.gain > 2, `tournée de ${a}° : gain ${r.gain}`);
+  }
+});
