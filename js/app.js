@@ -126,15 +126,17 @@ function render() {
   var cell = function (v, u) {
     return '<button class="pv" type="button" data-copy="' + v + '"><b>' + v + '</b><i>' + u + '</i></button>';
   };
-  $('pilot').innerHTML =
-    '<div class="pl">Longitude</div><div class="pr">' +
-    cell(PL.d, '°') +
-    cell(PL.m, "'") +
-    '</div>' +
-    '<div class="pl">Latitude</div><div class="pr">' +
-    cell(PA.d, '°') +
-    cell(PA.m, "'") +
-    '</div>';
+  var line = function (n, P) {
+    return (
+      '<div class="prow"><div class="pl">' +
+      n +
+      '</div><div class="pr">' +
+      cell(P.d, '°') +
+      cell(P.m, "'") +
+      '</div></div>'
+    );
+  };
+  $('pilot').innerHTML = line('1 · Longitude', PL) + line('2 · Latitude', PA);
   $('pilotCard').hidden = false;
 
   // ouvrir le point dans d'autres cartes
@@ -236,6 +238,55 @@ window.addEventListener('online', setNet);
 window.addEventListener('offline', setNet);
 setNet();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+
+// ---------- Écran allumé pendant la recopie Pilot 2 ----------
+// Tuile à l'écran : l'écran ne se met pas en veille, 2 minutes au plus ; toucher une valeur relance les 2 minutes.
+var WAKE_MS = 120000,
+  wake = { lock: null, asking: false, until: 0, timer: 0 };
+function wakeGet() {
+  if (wake.lock || wake.asking || document.hidden || Date.now() >= wake.until) return;
+  wake.asking = true;
+  navigator.wakeLock.request('screen').then(
+    function (l) {
+      wake.asking = false;
+      wake.lock = l;
+      l.addEventListener('release', function () {
+        if (wake.lock === l) wake.lock = null;
+      });
+      if (Date.now() >= wake.until) wakeOff();
+    },
+    function () {
+      wake.asking = false;
+    }
+  );
+}
+function wakeOn() {
+  if (!('wakeLock' in navigator)) return;
+  wake.until = Date.now() + WAKE_MS;
+  clearTimeout(wake.timer);
+  wake.timer = setTimeout(wakeOff, WAKE_MS);
+  wakeGet();
+}
+function wakeOff() {
+  clearTimeout(wake.timer);
+  wake.until = 0;
+  if (wake.lock) wake.lock.release().catch(function () {});
+  wake.lock = null;
+}
+if ('IntersectionObserver' in window)
+  new IntersectionObserver(
+    function (es) {
+      var e = es[es.length - 1];
+      if (e.isIntersecting && $('pilotCard').open) wakeOn();
+      else wakeOff();
+    },
+    { threshold: 0.4 }
+  ).observe($('pilot'));
+$('pilot').addEventListener('click', wakeOn);
+// le navigateur rend le verrou quand l'appli passe en arrière-plan : on le reprend au retour s'il reste du temps
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) wakeGet();
+});
 
 // ---------- Événements ----------
 src.addEventListener('input', update);
