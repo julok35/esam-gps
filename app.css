@@ -94,6 +94,9 @@ button:focus-visible, a:focus-visible, label.btn:focus-within { outline: 3px sol
 .dist b { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dist span { font: 600 .68rem var(--f-label); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .hint { font-size: .82rem; color: var(--muted); margin: 8px 0 0; }
+.flush { margin: 0; }
+.pad { padding: 12px; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .pin-t { width: 28px; height: 28px; background: var(--jaune); border: 3px solid #111; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 2px 6px rgba(0,0,0,.4); }
 .pin-me { width: 18px; height: 18px; background: #1E6FD9; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 0 0 2px #1E6FD9, 0 2px 6px rgba(0,0,0,.4); }
 
