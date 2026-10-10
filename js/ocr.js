@@ -11,10 +11,11 @@ var TESS = {
   core: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
   lang: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int'
 };
-// Lectures successives : [largeur visée, marge blanche, mode de segmentation, élargissement du cadre]
-var PASSES = [[900, 0, '6', 0], [900, 0, '11', 0], [1800, 0, '11', 0], [900, 0, '4', 0], [1200, 0, '6', 0.25], [1200, 0, '11', 0.25], [1800, 1, '6', 0], [900, 1, '6', 0]];
+// Lectures successives : [largeur visée, marge blanche, mode de segmentation]. Toutes lisent exactement le cadre
+// affiché, avec la photo telle que redressée à l'écran : rien n'est élargi ni tourné en coulisse.
+var PASSES = [[900, 0, '6'], [900, 0, '11'], [1800, 0, '11'], [900, 0, '4'], [1200, 0, '6'], [1200, 0, '11'], [1800, 1, '6'], [900, 1, '6']];
 var NEED = 3; // lectures concordantes nécessaires
-var AUTO_MIN = 2, AUTO_GAIN = 1.2; // à la lecture, inclinaison résiduelle corrigée d'office au-delà de 2°, si la mesure est nette
+var AUTO_GAIN = 1.5; // Auto : inclinaison appliquée seulement si la mesure est nette
 var TOL = 0.00002; // deux lectures à moins de ~2 m sur un axe votent ensemble
 
 // base : photo telle que prise (aux quarts de tour près) ; work : la même redressée de angle degrés, refaite à la demande
@@ -116,26 +117,28 @@ function showAngle() {
 // lignes horizontales sur la photo pendant le réglage, pour aligner le texte à l'œil
 var guideT;
 function guides() { stage.classList.add('leveling'); clearTimeout(guideT); guideT = setTimeout(function () { stage.classList.remove('leveling'); }, 1500); }
-function meanColor(img) {
-  var c = document.createElement('canvas'); c.width = c.height = 1;
-  var g = c.getContext('2d'); g.drawImage(img, 0, 0, 1, 1); var m = g.getImageData(0, 0, 1, 1).data;
-  return 'rgb(' + m[0] + ',' + m[1] + ',' + m[2] + ')';
-}
 function grayOf(c) {
   var d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, g = new Uint8Array(c.width * c.height);
   for (var i = 0; i < g.length; i++) g[i] = d[i * 4];
   return { data: g, w: c.width, h: c.height };
 }
-// inclinaison du texte dans le cadre de img (degrés, 0 si la mesure n'est pas nette)
-function leanIn(img, box, min) {
-  var g = grayOf(prepared(img, box, 600, 0, 0.1)), r = skewAngle(g.data, g.w, g.h, TILT);
-  return Math.abs(r.deg) >= min && r.gain >= AUTO_GAIN ? r.deg : 0;
+// Inclinaison du texte dans le cadre de img : { deg, gain }. Mesurée à la taille de la photo ou en dessous,
+// jamais agrandie (l'agrandissement floute les contours et fausse la mesure).
+function leanIn(img, box, max) {
+  var sx = box.x * img.width, sy = box.y * img.height, sw = Math.max(8, box.w * img.width), sh = Math.max(8, box.h * img.height);
+  var k = Math.min(1, 800 / Math.max(sw, sh)), c = document.createElement('canvas');
+  c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+  var g = c.getContext('2d', { willReadFrequently: true }); g.imageSmoothingQuality = 'high'; g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  var d = g.getImageData(0, 0, c.width, c.height).data, gr = new Uint8Array(c.width * c.height);
+  for (var i = 0; i < gr.length; i++) gr[i] = (d[i * 4] * 299 + d[i * 4 + 1] * 587 + d[i * 4 + 2] * 114) / 1000;
+  return skewAngle(gr, c.width, c.height, max);
 }
 function autoLevel() {
   if (!base) return;
-  var t = leanIn(cv, sel, 0.3);
-  if (!t) { flash($('tAuto'), 'Déjà droit'); return; }
-  setAngle(angle - t); guides();
+  var r = leanIn(getWork(), sel, TILT);
+  if (r.gain < AUTO_GAIN) { flash($('tAuto'), 'Pas net'); return; }
+  if (Math.abs(r.deg) < 0.3) { flash($('tAuto'), 'Déjà droit'); return; }
+  setAngle(angle - r.deg); guides();
 }
 function two() { var p = Array.from(ptrs.values()); return { d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1, m: { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 } }; }
 
@@ -223,18 +226,13 @@ function initCrop() {
 }
 
 // Image préparée pour la lecture : cadre (box) de l'image img, agrandi vers targetW pixels, niveaux de gris étirés,
-// pad : marge blanche autour du texte, ex : élargissement du cadre, rot : rotation (degrés) autour du centre du cadre
-function prepared(img, box, targetW, pad, ex, rot) {
+// pad : marge blanche autour du texte, ex : élargissement du cadre
+function prepared(img, box, targetW, pad, ex) {
   var e = ex || 0, x0 = Math.max(0, box.x - box.w * e), y0 = Math.max(0, box.y - box.h * e), x1 = Math.min(1, box.x + box.w * (1 + e)), y1 = Math.min(1, box.y + box.h * (1 + e));
   var sx = Math.round(x0 * img.width), sy = Math.round(y0 * img.height), sw = Math.max(8, Math.round((x1 - x0) * img.width)), sh = Math.max(8, Math.round((y1 - y0) * img.height));
   var k = Math.max(1, Math.min(8, targetW / sw));
   var c = document.createElement('canvas'); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
-  var g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
-  if (rot) {
-    // la photo tourne sous le cadre : le texte redressé est pris sur la photo, pas rogné aux coins du cadre
-    g.fillStyle = meanColor(img); g.fillRect(0, 0, c.width, c.height);
-    g.translate(c.width / 2, c.height / 2); g.rotate(rot * Math.PI / 180); g.scale(k, k); g.drawImage(img, -(sx + sw / 2), -(sy + sh / 2));
-  } else g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  var g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
   var d = g.getImageData(0, 0, c.width, c.height), p = d.data, hist = new Uint32Array(256), n = p.length / 4;
   for (var i = 0; i < p.length; i += 4) { var y = (p[i] * 299 + p[i + 1] * 587 + p[i + 2] * 114) / 1000 | 0; p[i] = y; hist[y]++; }
   var lo = 0, hi = 255, acc = 0;
@@ -249,11 +247,26 @@ function prepared(img, box, targetW, pad, ex, rot) {
   return o;
 }
 
-// Zone lue pour l'œil : même cadre et même redressement que la lecture, contraste poussé en S
-function zoneImage(img, box, rot) {
-  var c = prepared(img, box, 1400, 0, 0.06, rot), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data, lut = new Uint8Array(256);
+// Zone lue pour l'œil : exactement le cadre lu, plus net (masque flou), contraste en S
+function zoneImage(img, box) {
+  var c = prepared(img, box, 1400, 0, 0), W = c.width, H = c.height, g = c.getContext('2d'), d = g.getImageData(0, 0, W, H), p = d.data;
+  // netteté : la photo moins sa version floue (rayon proportionnel à l'agrandissement), ajoutée à elle-même
+  var R = Math.max(2, Math.round(W / 300)), src = new Float32Array(W * H), tmp = new Float32Array(W * H), bl = new Float32Array(W * H), x, y, i, s;
+  for (i = 0; i < src.length; i++) src[i] = p[i * 4];
+  var box1 = function (from, to, step, len, lines, lstep) {
+    for (var l = 0; l < lines; l++) {
+      var o = l * lstep; s = 0;
+      for (var k = -R; k <= R; k++) s += from[o + Math.min(len - 1, Math.max(0, k)) * step];
+      for (var q = 0; q < len; q++) {
+        to[o + q * step] = s / (2 * R + 1);
+        s += from[o + Math.min(len - 1, q + R + 1) * step] - from[o + Math.max(0, q - R) * step];
+      }
+    }
+  };
+  box1(src, tmp, 1, W, H, W); box1(tmp, bl, W, H, W, 1);
+  var lut = new Uint8Array(256);
   for (var v = 0; v < 256; v++) lut[v] = Math.round(255 / (1 + Math.exp(-(v - 128) / 30)));
-  for (var i = 0; i < p.length; i += 4) p[i] = p[i + 1] = p[i + 2] = lut[p[i]];
+  for (i = 0; i < src.length; i++) { var u = Math.max(0, Math.min(255, Math.round(src[i] + 1.2 * (src[i] - bl[i])))); p[i * 4] = p[i * 4 + 1] = p[i * 4 + 2] = lut[u]; }
   g.putImageData(d, 0, 0);
   return c;
 }
@@ -317,8 +330,6 @@ function read(show) {
   var btn = $('ocrGo'); btn.disabled = true;
   // photo et cadre figés pour toute la lecture ; une nouvelle photo pendant la lecture l'interrompt
   var img = getWork(), box = { x: sel.x, y: sel.y, w: sel.w, h: sel.h }, myGen = gen;
-  // reste d'inclinaison non redressé à la main : corrigé d'office pour toutes les lectures
-  var lean = 0; try { lean = -leanIn(img, box, AUTO_MIN); } catch (err) {}
   var stale = function () { return gen !== myGen; };
   var LBL = { 'loading tesseract core': 'Chargement du moteur', 'initializing tesseract': 'Initialisation', 'loading language traineddata': 'Chargement de la langue', 'initializing api': 'Initialisation', 'recognizing text': 'Lecture du texte' };
   progCb = function (m) { setProg((LBL[m.status] || 'Préparation') + '...', m.progress); };
@@ -329,9 +340,9 @@ function read(show) {
     var i = 0;
     var step = function () {
       if (i >= PASSES.length || done() || stale()) return;
-      var ps = PASSES[i++], ik = ps[0] + '_' + ps[1] + '_' + ps[3];
+      var ps = PASSES[i++], ik = ps[0] + '_' + ps[1];
       LBL['recognizing text'] = 'Lecture ' + i;
-      imgs[ik] = imgs[ik] || prepared(img, box, ps[0], ps[1], ps[3], lean);
+      imgs[ik] = imgs[ik] || prepared(img, box, ps[0], ps[1]);
       return w.setParameters({ tessedit_pageseg_mode: ps[2] }).then(function () { return w.recognize(imgs[ik]); }).then(function (r) {
         var txt = (r.data.text || '').trim();
         runs.push({ txt: txt, p: parse(txt) });
@@ -340,7 +351,7 @@ function read(show) {
     return step();
   }).then(function () {
     if (stale()) { setProg('Lecture interrompue : nouvelle photo, touchez Lire', 0); return; }
-    try { showZone(zoneImage(img, box, lean)); } catch (err) { console.error('Zone lue :', err); }
+    try { showZone(zoneImage(img, box)); } catch (err) { console.error('Zone lue :', err); }
     var v = votes(runs), total = runs.length, lastParse;
     if (!v.lat.best || !v.lon.best) {
       var r0 = runs[0] || { txt: '', p: parse('') };
