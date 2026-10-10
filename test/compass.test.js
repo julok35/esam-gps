@@ -5,21 +5,21 @@ import { headingOf, turn, declination, pitchOf, sightAngle } from '../js/compass
 
 const near = (a, b, tol = 0.5) => assert.ok(Math.abs(turn(a, b)) <= tol, a + ' ≈ ' + b);
 
-test('téléphone à plat : cap du haut de l\'écran', () => {
+test("téléphone à plat : cap du haut de l'écran", () => {
   near(headingOf(0, 0, 0, 0), 0);
   near(headingOf(90, 0, 0, 0), 270); // alpha croît dans le sens inverse des aiguilles d'une montre
   near(headingOf(270, 0, 0, 0), 90);
   near(headingOf(30, 0, 0, 0), 330);
 });
 
-test('téléphone tenu debout : cap de l\'arrière (appareil photo)', () => {
+test("téléphone tenu debout : cap de l'arrière (appareil photo)", () => {
   near(headingOf(0, 90, 0, 0), 0);
   near(headingOf(90, 90, 0, 0), 270);
   near(headingOf(0, 60, 0, 0), 0);
   near(headingOf(45, 89, 0, 0), 315);
 });
 
-test('écran en paysage : cap du haut de l\'écran', () => {
+test("écran en paysage : cap du haut de l'écran", () => {
   near(headingOf(90, 0, 0, 90), 0); // tourné d'un quart vers la gauche, le bord droit vise le nord
   near(headingOf(270, 0, 0, 270), 0);
 });
@@ -35,7 +35,7 @@ test('déclinaison plausible sur la zone', () => {
   assert.ok(Math.abs(declination(-4.5)) < 1); // Brest
 });
 
-test('inclinaison de l\'appareil photo', () => {
+test("inclinaison de l'appareil photo", () => {
   assert.ok(Math.abs(pitchOf(90, 0)) < 0.01); // tenu droit : horizontal
   assert.ok(Math.abs(pitchOf(0, 0) + 90) < 0.01); // à plat écran en l'air : vise le sol
   assert.ok(Math.abs(pitchOf(110, 0) - 20) < 0.01); // haut penché vers soi : vise 20° vers le haut

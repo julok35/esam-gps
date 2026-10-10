@@ -30,9 +30,55 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `js/compass.js` | Bandeau boussole (capteurs d'orientation, déclinaison magnétique approchée) |
 | `js/share.js`, `js/history.js`, `js/util.js` | Partage et QR, historique, outils communs |
 | `sw.js` | Service worker : appli hors ligne, moteur de lecture et tuiles en cache |
+| `test/` | Tests Node (`node --test`), dont une vraie photo d'écran Garmin en niveaux de gris |
+| `eslint.config.js`, `.prettierrc.json`, `.editorconfig` | Règles de qualité et de mise en forme |
 | `vendor/` | Leaflet 1.9.4, qrcode-generator 1.4.4, tesseract.js 5.1.1 (bibliothèque et worker), polices (licence OFL) |
 
 Le moteur WebAssembly de Tesseract et la langue (environ 7 Mo) restent sur jsDelivr, en versions figées, et sont gardés par le service worker après le premier usage ou le bouton « Préparer la lecture de photo sans réseau ».
+
+## Développer
+
+### Lancer l'appli en local
+
+Les modules ES et le service worker ne fonctionnent pas en ouvrant `index.html` directement (`file://`) : il faut un serveur HTTP, par exemple :
+
+```
+python3 -m http.server 8000
+```
+
+puis http://localhost:8000. Le service worker garde les fichiers en cache : en cas de doute après une modification, recharger deux fois ou cocher « Bypass for network » (outils de développement › Application › Service workers). La boussole, la géolocalisation et l'appareil photo demandent un téléphone ; ils marchent sur `localhost` ou en HTTPS uniquement.
+
+### Chemin des données
+
+```
+Saisie / collage ──────────────┐
+                               ▼
+Photo ─► ocr.js : cadre, redressement ─► Tesseract, jusqu'à 8 lectures ─► parser.parse() sur chacune
+                                                                       ─► vote lat / lon (votes, firm)
+                               │
+                               ▼
+              parser.parse(texte) : normalize ─► tokenize ─► fenêtres ─► lectures notées (SCORE, PEN)
+                               │                                        ─► meilleur candidat + autres lectures
+                               ▼
+              app.js render() ─► state.current ─► map.js (carte, distance), place.js (commune, altitude),
+                                                  compass.js (bandeau boussole), share.js, history.js
+                               ▲
+              fix.js (molettes) : texte corrigé ─► parse() à nouveau
+```
+
+- `js/parser.js` est le cœur : son en-tête décrit l'algorithme, le barème des candidats (`SCORE`, `PEN`) et les structures de données (`Candidate`, `ParseResult`).
+- `state` (`js/util.js`) est le seul état partagé : point affiché et position du téléphone. Après un changement, `updateMap()` met à jour la carte, le dénivelé et la boussole.
+- Les bibliothèques de `vendor/` (Leaflet, qrcode, Tesseract) sont chargées en scripts classiques et utilisées comme variables globales (`L`, `qrcode`, `Tesseract`).
+
+### Qualité du code
+
+```
+npm install          # une fois : ESLint et Prettier (outils de développement seulement, Node 20 ou plus)
+npm run lint         # règles ESLint
+npm run format       # mise en forme Prettier (format:check pour vérifier sans modifier)
+```
+
+La CI refuse un push qui ne passe pas le lint ou la mise en forme. Le site lui-même n'a aucune dépendance ni étape de build.
 
 ## Tests
 
@@ -40,7 +86,7 @@ Le moteur WebAssembly de Tesseract et la langue (environ 7 Mo) restent sur jsDel
 npm test
 ```
 
-Node 18 ou plus, aucune dépendance. Les tests tournent aussi à chaque push (GitHub Actions). Tout nouveau piège de lecture rencontré sur le terrain doit devenir un cas dans `test/parser.test.js`.
+Node 18 ou plus ; les tests n'ont besoin d'aucune dépendance. Ils tournent aussi à chaque push (GitHub Actions). Tout nouveau piège de lecture rencontré sur le terrain doit devenir un cas dans `test/parser.test.js`. Le barème du parser a été réglé sur ces cas : après toute modification d'un poids, relancer les tests.
 
 ## Mise en ligne
 

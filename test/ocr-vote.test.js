@@ -7,14 +7,22 @@ import { votes, firm } from '../js/ocr.js';
 const run = (txt) => ({ txt, p: parse(txt) });
 
 test('trois lectures identiques : résultat ferme', () => {
-  const runs = [run("N 45°16.277' E 005°56.052'"), run("N 45°16.277' E 005°56.052'"), run("N 45°16.277' E 005°56.052'")];
+  const runs = [
+    run("N 45°16.277' E 005°56.052'"),
+    run("N 45°16.277' E 005°56.052'"),
+    run("N 45°16.277' E 005°56.052'")
+  ];
   const v = votes(runs);
   assert.ok(firm(v.lat) && firm(v.lon));
   assert.equal(v.lat.best.n, 3);
 });
 
 test('dernier chiffre des minutes différent (moins de 2 m) : les lectures votent ensemble, la valeur majoritaire gagne', () => {
-  const runs = [run("N 45°16.277' E 005°56.052'"), run("N 45°16.277' E 005°56.052'"), run("N 45°16.278' E 005°56.052'")];
+  const runs = [
+    run("N 45°16.277' E 005°56.052'"),
+    run("N 45°16.277' E 005°56.052'"),
+    run("N 45°16.278' E 005°56.052'")
+  ];
   const v = votes(runs);
   assert.equal(v.lat.best.n, 3);
   assert.equal(v.lat.second, null);
@@ -23,7 +31,12 @@ test('dernier chiffre des minutes différent (moins de 2 m) : les lectures voten
 });
 
 test('lectures nettement différentes : pas de résultat ferme', () => {
-  const runs = [run("N 45°16.277' E 005°56.052'"), run("N 45°16.277' E 005°56.052'"), run("N 45°18.277' E 005°56.052'"), run("N 45°18.277' E 005°56.052'")];
+  const runs = [
+    run("N 45°16.277' E 005°56.052'"),
+    run("N 45°16.277' E 005°56.052'"),
+    run("N 45°18.277' E 005°56.052'"),
+    run("N 45°18.277' E 005°56.052'")
+  ];
   const v = votes(runs);
   assert.equal(v.lat.best.n, 2);
   assert.equal(v.lat.second.n, 2);
