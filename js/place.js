@@ -246,6 +246,7 @@ function paint(c) {
     near = known('osm', c);
   if (!navigator.onLine && com === undefined && alt === undefined && near === undefined) {
     box.innerHTML = '<span class="hint flush">Commune, lieux proches et altitude : réseau nécessaire.</span>';
+    paintPilot(undefined, false);
     return;
   }
   var h =
@@ -273,6 +274,22 @@ function paint(c) {
   else if (navigator.onLine)
     h += '<div class="wait">Lieux proches : service OpenStreetMap indisponible pour l\'instant</div>';
   box.innerHTML = h;
+  paintPilot(alt, pending('alt', c));
+}
+
+// Saisie DJI Pilot 2 : altitude ASL du terrain au point, en mètres entiers (champ ASL de « Modifier les repères »)
+function paintPilot(alt, wait) {
+  var el = $('pilotAlt');
+  if (!el) return;
+  if (alt === undefined) {
+    el.innerHTML =
+      '<span class="pv off">' + (wait ? '…' : navigator.onLine ? 'inconnue' : 'réseau nécessaire') + '</span>';
+    return;
+  }
+  var v = String(Math.round(alt));
+  if (el.dataset.v === v) return; // garde la coche « copié »
+  el.dataset.v = v;
+  el.innerHTML = '<button class="pv" type="button" data-copy="' + v + '"><b>' + v + '</b><i>m</i></button>';
 }
 
 export function showPlace() {
