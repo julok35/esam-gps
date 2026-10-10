@@ -1,6 +1,7 @@
 /* Photo, recadrage au doigt, lecture du texte (Tesseract.js) et vote entre plusieurs lectures. */
 import { $, flash } from './util.js';
 import { parse, inRegion, distM } from './parser.js';
+import { skewAngle } from './skew.js';
 
 // Bibliothèque et worker hébergés avec l'appli (worker de même origine : contrôlé par le service worker, donc utilisable hors ligne).
 // Moteur WebAssembly et langue sur le CDN (versions figées), gardés en cache par le service worker.
@@ -13,9 +14,12 @@ var TESS = {
 // Lectures successives : [largeur visée, marge blanche, mode de segmentation, élargissement du cadre]
 var PASSES = [[900, 0, '6', 0], [900, 0, '11', 0], [1800, 0, '11', 0], [900, 0, '4', 0], [1200, 0, '6', 0.25], [1200, 0, '11', 0.25], [1800, 1, '6', 0], [900, 1, '6', 0]];
 var NEED = 3; // lectures concordantes nécessaires
+var AUTO_MIN = 2, AUTO_GAIN = 1.2; // à la lecture, inclinaison résiduelle corrigée d'office au-delà de 2°, si la mesure est nette
 var TOL = 0.00002; // deux lectures à moins de ~2 m sur un axe votent ensemble
 
-var work = null, gen = 0, sel = { x: .1, y: .3, w: .8, h: .4 }, cv, stage, selEl, drag = null, ocrWorker = null, progCb = function () {};
+// base : photo telle que prise (aux quarts de tour près) ; work : la même redressée de angle degrés, refaite à la demande
+// zone : la zone lue, agrandie et contrastée, gardée pour vérifier le résultat d'un coup d'œil
+var base = null, angle = 0, work = null, zone = null, gen = 0, sel = { x: .1, y: .3, w: .8, h: .4 }, cv, stage, selEl, drag = null, ocrWorker = null, progCb = function () {};
 // Vue de la photo : zoom z (1 = photo entière) et décalage en pixels de l'écran ; doigts posés sur la photo
 var view = { z: 1, tx: 0, ty: 0 }, ptrs = new Map();
 var ZMAX = 8, MIN_SIDE = 0.02, DEAD = 8; // zoom maximal, plus petit côté du cadre, mouvement ignoré (px) avant de bouger quoi que ce soit
@@ -24,9 +28,9 @@ function loadFile(file) {
   if (!file) return;
   var done = function (img) {
     var s = Math.min(1, 2400 / Math.max(img.width, img.height));
-    work = document.createElement('canvas'); work.width = Math.round(img.width * s); work.height = Math.round(img.height * s);
-    work.getContext('2d').drawImage(img, 0, 0, work.width, work.height);
-    gen++;
+    base = document.createElement('canvas'); base.width = Math.round(img.width * s); base.height = Math.round(img.height * s);
+    base.getContext('2d').drawImage(img, 0, 0, base.width, base.height);
+    angle = 0; work = null; gen++; showAngle(); clearZone();
     sel = { x: .15, y: .35, w: .7, h: .35 };
     $('cropBox').hidden = false; $('prog').hidden = true; showWork();
     $('cropBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -35,12 +39,31 @@ function loadFile(file) {
   else viaImg(file, done);
 }
 function viaImg(file, cb) { var u = URL.createObjectURL(file), im = new Image(); im.onload = function () { cb(im); URL.revokeObjectURL(u); }; im.src = u; }
-function showWork() {
+// Photo tournée de deg degrés autour de son centre, dans un canevas agrandi pour n'en rien perdre ; échelle s.
+// Les coins laissés vides prennent la teinte moyenne de la photo, pour ne pas fausser le contraste de la lecture.
+function rotDims(deg) {
+  var a = deg * Math.PI / 180, c = Math.abs(Math.cos(a)), si = Math.abs(Math.sin(a));
+  return { w: base.width * c + base.height * si, h: base.width * si + base.height * c };
+}
+function drawRotated(deg, s) {
+  var r = rotDims(deg), c = document.createElement('canvas'); c.width = Math.max(1, Math.round(r.w * s)); c.height = Math.max(1, Math.round(r.h * s));
+  var g = c.getContext('2d');
+  if (deg) {
+    g.drawImage(base, 0, 0, 1, 1); var m = g.getImageData(0, 0, 1, 1).data;
+    g.fillStyle = 'rgb(' + m[0] + ',' + m[1] + ',' + m[2] + ')'; g.fillRect(0, 0, c.width, c.height);
+  }
+  g.imageSmoothingQuality = 'high';
+  g.translate(c.width / 2, c.height / 2); g.rotate(deg * Math.PI / 180); g.scale(s, s);
+  g.drawImage(base, -base.width / 2, -base.height / 2);
+  return c;
+}
+function getWork() { if (!work) work = angle ? drawRotated(angle, 1) : base; return work; }
+function showWork(keep) {
   // affichage assez fin pour rester net une fois zoomé
-  var s = Math.min(1, 2000 / Math.max(work.width, work.height));
-  cv.width = Math.round(work.width * s); cv.height = Math.round(work.height * s);
-  cv.getContext('2d').drawImage(work, 0, 0, cv.width, cv.height);
-  view = { z: 1, tx: 0, ty: 0 }; applyView();
+  var r = rotDims(angle), s = Math.min(1, 2000 / Math.max(r.w, r.h)), c = drawRotated(angle, s);
+  cv.width = c.width; cv.height = c.height; cv.getContext('2d').drawImage(c, 0, 0);
+  if (!keep) view = { z: 1, tx: 0, ty: 0 };
+  applyView();
 }
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -71,6 +94,48 @@ function zoomAt(z, p) {
 function selCenter() {
   var d = dims();
   return { x: clamp(view.tx + (sel.x + sel.w / 2) * d.W * view.z, 0, d.W), y: clamp(view.ty + (sel.y + sel.h / 2) * d.H * view.z, 0, d.H) };
+}
+// Redressement : la photo tourne de nd degrés ; le cadre reste sur le même endroit de la photo, au même endroit de l'écran
+var TILT = 45;
+function setAngle(nd) {
+  nd = clamp(Math.round(nd * 10) / 10, -TILT, TILT);
+  if (!base || nd === angle) { showAngle(); return; }
+  var o = rotDims(angle), n = rotDims(nd), d = dims(), a = (nd - angle) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  var mx = sel.x + sel.w / 2, my = sel.y + sel.h / 2, sp = { x: view.tx + mx * d.W * view.z, y: view.ty + my * d.H * view.z };
+  var cx = (mx - .5) * o.w, cy = (my - .5) * o.h, w = Math.min(1, sel.w * o.w / n.w), h = Math.min(1, sel.h * o.h / n.h);
+  mx = (cx * c - cy * s) / n.w + .5; my = (cx * s + cy * c) / n.h + .5;
+  sel = { x: clamp(mx - w / 2, 0, 1 - w), y: clamp(my - h / 2, 0, 1 - h), w: w, h: h };
+  angle = nd; work = null; showAngle(); showWork(true);
+  d = dims(); view.tx = sp.x - (sel.x + sel.w / 2) * d.W * view.z; view.ty = sp.y - (sel.y + sel.h / 2) * d.H * view.z;
+  applyView();
+}
+function showAngle() {
+  $('tilt').value = angle;
+  $('tVal').textContent = (angle > 0 ? '+' : angle < 0 ? '−' : '') + String(Math.abs(angle)).replace('.', ',') + '°';
+}
+// lignes horizontales sur la photo pendant le réglage, pour aligner le texte à l'œil
+var guideT;
+function guides() { stage.classList.add('leveling'); clearTimeout(guideT); guideT = setTimeout(function () { stage.classList.remove('leveling'); }, 1500); }
+function meanColor(img) {
+  var c = document.createElement('canvas'); c.width = c.height = 1;
+  var g = c.getContext('2d'); g.drawImage(img, 0, 0, 1, 1); var m = g.getImageData(0, 0, 1, 1).data;
+  return 'rgb(' + m[0] + ',' + m[1] + ',' + m[2] + ')';
+}
+function grayOf(c) {
+  var d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, g = new Uint8Array(c.width * c.height);
+  for (var i = 0; i < g.length; i++) g[i] = d[i * 4];
+  return { data: g, w: c.width, h: c.height };
+}
+// inclinaison du texte dans le cadre de img (degrés, 0 si la mesure n'est pas nette)
+function leanIn(img, box, min) {
+  var g = grayOf(prepared(img, box, 600, 0, 0.1)), r = skewAngle(g.data, g.w, g.h, TILT);
+  return Math.abs(r.deg) >= min && r.gain >= AUTO_GAIN ? r.deg : 0;
+}
+function autoLevel() {
+  if (!base) return;
+  var t = leanIn(cv, sel, 0.3);
+  if (!t) { flash($('tAuto'), 'Déjà droit'); return; }
+  setAngle(angle - t); guides();
 }
 function two() { var p = Array.from(ptrs.values()); return { d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1, m: { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 } }; }
 
@@ -128,30 +193,48 @@ function initCrop() {
       if (!ptrs.size) drag = null; else if (drag && drag.mode === 'pinch') drag = { mode: 'none' };
     });
   });
-  stage.addEventListener('wheel', function (e) { if (!work) return; e.preventDefault(); zoomAt(view.z * (e.deltaY < 0 ? 1.25 : 0.8), local(e)); }, { passive: false });
+  stage.addEventListener('wheel', function (e) { if (!base) return; e.preventDefault(); zoomAt(view.z * (e.deltaY < 0 ? 1.25 : 0.8), local(e)); }, { passive: false });
   $('zIn').addEventListener('click', function () { zoomAt(view.z * 1.6, selCenter()); });
   $('zOut').addEventListener('click', function () { zoomAt(view.z / 1.6, selCenter()); });
-  window.addEventListener('resize', function () { if (work && !$('cropBox').hidden) applyView(); });
+  window.addEventListener('resize', function () { if (base && !$('cropBox').hidden) applyView(); });
   $('rot').addEventListener('click', function () {
-    if (!work) return;
-    var c = document.createElement('canvas'); c.width = work.height; c.height = work.width;
-    var g = c.getContext('2d'); g.translate(c.width, 0); g.rotate(Math.PI / 2); g.drawImage(work, 0, 0); work = c; gen++;
+    if (!base) return;
+    var c = document.createElement('canvas'); c.width = base.height; c.height = base.width;
+    var g = c.getContext('2d'); g.translate(c.width, 0); g.rotate(Math.PI / 2); g.drawImage(base, 0, 0); base = c; gen++;
+    angle = 0; work = null; showAngle();
     sel = { x: .1, y: .1, w: .8, h: .8 }; showWork();
   });
+  // réglette : rendu au plus une fois par image affichée ; boutons : pas d'un demi-degré
+  var pend = null;
+  $('tilt').addEventListener('input', function (e) {
+    guides();
+    if (pend === null) requestAnimationFrame(function () { var v = pend; pend = null; setAngle(v); });
+    pend = +e.target.value;
+  });
+  $('tL').addEventListener('click', function () { setAngle(angle - 0.5); guides(); });
+  $('tR').addEventListener('click', function () { setAngle(angle + 0.5); guides(); });
+  $('tAuto').addEventListener('click', autoLevel);
   $('cropAll').addEventListener('click', function () { sel = { x: 0, y: 0, w: 1, h: 1 }; view = { z: 1, tx: 0, ty: 0 }; applyView(); });
   $('cropClose').addEventListener('click', function () { $('cropBox').hidden = true; });
+  $('reCrop').addEventListener('click', function () { $('cropBox').classList.remove('read'); $('zoneView').hidden = true; applyView(); $('cropBox').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  $('zoneClose').addEventListener('click', function () { $('cropBox').hidden = true; });
   $('cam').addEventListener('change', function (e) { loadFile(e.target.files[0]); e.target.value = ''; });
   $('gal').addEventListener('change', function (e) { loadFile(e.target.files[0]); e.target.value = ''; });
 }
 
 // Image préparée pour la lecture : cadre (box) de l'image img, agrandi vers targetW pixels, niveaux de gris étirés,
-// pad : marge blanche autour du texte, ex : élargissement du cadre
-function prepared(img, box, targetW, pad, ex) {
+// pad : marge blanche autour du texte, ex : élargissement du cadre, rot : rotation (degrés) autour du centre du cadre
+function prepared(img, box, targetW, pad, ex, rot) {
   var e = ex || 0, x0 = Math.max(0, box.x - box.w * e), y0 = Math.max(0, box.y - box.h * e), x1 = Math.min(1, box.x + box.w * (1 + e)), y1 = Math.min(1, box.y + box.h * (1 + e));
   var sx = Math.round(x0 * img.width), sy = Math.round(y0 * img.height), sw = Math.max(8, Math.round((x1 - x0) * img.width)), sh = Math.max(8, Math.round((y1 - y0) * img.height));
   var k = Math.max(1, Math.min(8, targetW / sw));
   var c = document.createElement('canvas'); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
-  var g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  var g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+  if (rot) {
+    // la photo tourne sous le cadre : le texte redressé est pris sur la photo, pas rogné aux coins du cadre
+    g.fillStyle = meanColor(img); g.fillRect(0, 0, c.width, c.height);
+    g.translate(c.width / 2, c.height / 2); g.rotate(rot * Math.PI / 180); g.scale(k, k); g.drawImage(img, -(sx + sw / 2), -(sy + sh / 2));
+  } else g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
   var d = g.getImageData(0, 0, c.width, c.height), p = d.data, hist = new Uint32Array(256), n = p.length / 4;
   for (var i = 0; i < p.length; i += 4) { var y = (p[i] * 299 + p[i + 1] * 587 + p[i + 2] * 114) / 1000 | 0; p[i] = y; hist[y]++; }
   var lo = 0, hi = 255, acc = 0;
@@ -164,6 +247,23 @@ function prepared(img, box, targetW, pad, ex) {
   var m = Math.round(c.height / 4), o = document.createElement('canvas'); o.width = c.width + 2 * m; o.height = c.height + 2 * m;
   var go = o.getContext('2d'); go.fillStyle = '#fff'; go.fillRect(0, 0, o.width, o.height); go.drawImage(c, m, m);
   return o;
+}
+
+// Zone lue pour l'œil : même cadre et même redressement que la lecture, contraste poussé en S
+function zoneImage(img, box, rot) {
+  var c = prepared(img, box, 1400, 0, 0.06, rot), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data, lut = new Uint8Array(256);
+  for (var v = 0; v < 256; v++) lut[v] = Math.round(255 / (1 + Math.exp(-(v - 128) / 30)));
+  for (var i = 0; i < p.length; i += 4) p[i] = p[i + 1] = p[i + 2] = lut[p[i]];
+  g.putImageData(d, 0, 0);
+  return c;
+}
+export function readZone() { return zone; }
+// zone oubliée (nouvelle photo, texte effacé, autre point) ; le cadrage revient
+export function clearZone() { zone = null; $('cropBox').classList.remove('read'); $('zoneView').hidden = true; }
+function showZone(z) {
+  zone = z;
+  var c = $('zoneCv'); c.width = z.width; c.height = z.height; c.getContext('2d').drawImage(z, 0, 0);
+  $('cropBox').classList.add('read'); $('zoneView').hidden = false;
 }
 
 function loadScript(u) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = u; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
@@ -213,10 +313,12 @@ export function firm(x) { return x.best && x.best.n >= NEED && (!x.second || x.s
 
 // show(texte, résultat d'analyse) : affiche le résultat dans l'appli
 function read(show) {
-  if (!work) return;
+  if (!base) return;
   var btn = $('ocrGo'); btn.disabled = true;
   // photo et cadre figés pour toute la lecture ; une nouvelle photo pendant la lecture l'interrompt
-  var img = work, box = { x: sel.x, y: sel.y, w: sel.w, h: sel.h }, myGen = gen;
+  var img = getWork(), box = { x: sel.x, y: sel.y, w: sel.w, h: sel.h }, myGen = gen;
+  // reste d'inclinaison non redressé à la main : corrigé d'office pour toutes les lectures
+  var lean = 0; try { lean = -leanIn(img, box, AUTO_MIN); } catch (err) {}
   var stale = function () { return gen !== myGen; };
   var LBL = { 'loading tesseract core': 'Chargement du moteur', 'initializing tesseract': 'Initialisation', 'loading language traineddata': 'Chargement de la langue', 'initializing api': 'Initialisation', 'recognizing text': 'Lecture du texte' };
   progCb = function (m) { setProg((LBL[m.status] || 'Préparation') + '...', m.progress); };
@@ -229,7 +331,7 @@ function read(show) {
       if (i >= PASSES.length || done() || stale()) return;
       var ps = PASSES[i++], ik = ps[0] + '_' + ps[1] + '_' + ps[3];
       LBL['recognizing text'] = 'Lecture ' + i;
-      imgs[ik] = imgs[ik] || prepared(img, box, ps[0], ps[1], ps[3]);
+      imgs[ik] = imgs[ik] || prepared(img, box, ps[0], ps[1], ps[3], lean);
       return w.setParameters({ tessedit_pageseg_mode: ps[2] }).then(function () { return w.recognize(imgs[ik]); }).then(function (r) {
         var txt = (r.data.text || '').trim();
         runs.push({ txt: txt, p: parse(txt) });
@@ -238,6 +340,7 @@ function read(show) {
     return step();
   }).then(function () {
     if (stale()) { setProg('Lecture interrompue : nouvelle photo, touchez Lire', 0); return; }
+    try { showZone(zoneImage(img, box, lean)); } catch (err) { console.error('Zone lue :', err); }
     var v = votes(runs), total = runs.length, lastParse;
     if (!v.lat.best || !v.lon.best) {
       var r0 = runs[0] || { txt: '', p: parse('') };
@@ -275,7 +378,7 @@ function read(show) {
     }
     show(text, lastParse);
     setProg(sure ? 'Lu et confirmé' : 'Lecture incertaine : vérifiez avec la photo', 1);
-    $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $(zone ? 'zoneView' : 'result').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }).catch(function (err) {
     console.error('Lecture photo :', err);
     setProg('Lecture impossible : vérifiez le réseau au premier usage, ou tapez le texte', 0);

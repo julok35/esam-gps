@@ -2,7 +2,7 @@
 
 Convertisseur de coordonnées GPS de l'Équipe de Secours Animalier en Montagne (ESAM).
 
-- Photo de l'écran (Garmin, téléphone), zoom au pincement pour cadrer, lecture du texte sur le téléphone (Tesseract.js, plusieurs lectures et vote)
+- Photo de l'écran (Garmin, téléphone), zoom au pincement pour cadrer, redressement d'une photo de travers (réglette ou automatique), lecture du texte sur le téléphone (Tesseract.js, plusieurs lectures et vote)
 - Correction de la lecture chiffre par chiffre, avec des molettes comme un cadenas à code
 - Détection automatique du format : DD, DMM, DMS, NMEA, UTM, liens Google Maps
 - Sortie en degrés décimaux pour la RC Plus du M30T, saisie DJI Pilot 2
@@ -19,7 +19,8 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `index.html`, `app.css` | Page et styles |
 | `js/app.js` | Point d'entrée : résultat, liens, événements |
 | `js/parser.js` | Détection et conversion des coordonnées (sans DOM, testé sous Node) |
-| `js/ocr.js` | Photo, zoom et recadrage, lecture Tesseract et vote entre lectures |
+| `js/ocr.js` | Photo, zoom, redressement et recadrage, lecture Tesseract et vote entre lectures |
+| `js/skew.js` | Mesure de l'inclinaison du texte (sans DOM, testé sous Node) |
 | `js/fix.js` | Correction de la lecture par molettes |
 | `js/map.js` | Carte, position du téléphone, distance et cap |
 | `js/share.js`, `js/history.js`, `js/util.js` | Partage et QR, historique, outils communs |

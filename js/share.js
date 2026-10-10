@@ -21,6 +21,12 @@ export function drawQR() {
   $('qrTxt').textContent = (qrMode === 'app' ? 'Ouvre cette appli sur le point. ' : qrMode === 'maps' ? 'Ouvre Google Maps sur le point. ' : 'Lien geo: ouvre l\'appli de carte sur Android. ') + data;
 }
 
+// Partage natif, sinon copie (btn affiche « Copié »)
+export function shareText(text, btn) {
+  if (navigator.share) navigator.share({ title: 'Point ESAM', text: text }).catch(function (e) { if (e && e.name !== 'AbortError') copy(text, btn); });
+  else copy(text, btn);
+}
+
 // onUse : appelé quand le point est partagé (pour l'historique)
 export function initShare(onUse) {
   $('qrBtn').addEventListener('click', function () { $('qrBox').hidden = !$('qrBox').hidden; drawQR(); });
@@ -32,11 +38,8 @@ export function initShare(onUse) {
   $('shareBtn').addEventListener('click', function () {
     var current = state.current;
     if (!current) return;
-    var text = message(current);
     onUse();
-    if (navigator.share) {
-      navigator.share({ title: 'Point ESAM', text: text }).catch(function (e) { if (e && e.name !== 'AbortError') copy(text, $('shareBtn')); });
-    } else copy(text, $('shareBtn'));
+    shareText(message(current), $('shareBtn'));
   });
   // WhatsApp : message prêt à envoyer, l'utilisateur choisit le contact ou le groupe
   $('waBtn').addEventListener('click', function () {

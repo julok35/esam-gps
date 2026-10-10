@@ -36,17 +36,33 @@
     <input id="gal" type="file" accept="image/*" hidden>
 
     <div class="crop" id="cropBox" hidden>
-      <span class="lbl">Pincez pour zoomer, ajustez le cadre par ses coins</span>
+      <span class="lbl">Pincez pour zoomer, ajustez le cadre par ses coins. Photo de travers : redressez-la jusqu'à ce que le texte suive le cadre</span>
       <div class="crop-stage" id="stage">
         <canvas id="cv"></canvas>
         <div class="sel" id="sel"><span class="h tl" data-h="tl"></span><span class="h tr" data-h="tr"></span><span class="h bl" data-h="bl"></span><span class="h br" data-h="br"></span></div>
+        <div class="guides" aria-hidden="true"></div>
         <div class="zoombar"><button type="button" id="zIn" aria-label="Zoomer">+</button><button type="button" id="zOut" aria-label="Dézoomer">−</button></div>
+      </div>
+      <div class="tilt">
+        <button type="button" id="tL" aria-label="Tourner d'un demi-degré à gauche">↺</button>
+        <input type="range" id="tilt" min="-45" max="45" step="0.5" value="0" aria-label="Redresser la photo">
+        <button type="button" id="tR" aria-label="Tourner d'un demi-degré à droite">↻</button>
+        <output id="tVal" for="tilt">0°</output>
+        <button class="btn sec" type="button" id="tAuto">Auto</button>
       </div>
       <div class="row4">
         <button class="btn" type="button" id="ocrGo">Lire</button>
         <button class="btn sec" type="button" id="rot">Pivoter</button>
         <button class="btn sec" type="button" id="cropAll">Tout</button>
         <button class="btn sec" type="button" id="cropClose">Fermer</button>
+      </div>
+      <div class="zoneview" id="zoneView" hidden>
+        <span class="lbl">Zone lue, contraste renforcé : comparez avec le résultat</span>
+        <canvas class="zone" id="zoneCv"></canvas>
+        <div class="row2">
+          <button class="btn sec" type="button" id="reCrop">Recadrer</button>
+          <button class="btn sec" type="button" id="zoneClose">Fermer</button>
+        </div>
       </div>
       <div class="prog" id="prog" hidden><div id="progBar"></div><span id="progTxt"></span></div>
     </div>
@@ -57,9 +73,9 @@
     </div>
   </section>
 
-  <section class="result" id="result"></section>
   <section class="block fixer" id="fixCard" hidden>
     <span class="lbl">Corriger la lecture</span>
+    <canvas class="zone" id="fixZone" hidden aria-label="Zone lue sur la photo"></canvas>
     <p class="hint flush">Faites tourner chaque chiffre vers le haut ou le bas pour retrouver ce qu'affiche la photo.</p>
     <div id="fixRows"></div>
     <p class="fix-out" id="fixOut"></p>
@@ -69,6 +85,7 @@
       <button class="btn sec" type="button" id="fixCancel">Annuler</button>
     </div>
   </section>
+  <section class="result" id="result"></section>
   <p class="sr-only" id="announce" aria-live="polite"></p>
 
   <section class="block" id="mapCard">
@@ -106,8 +123,12 @@
   </details>
 
   <details class="block fold" id="eqCard" hidden>
-    <summary>DMM, DMS, UTM</summary>
-    <table class="eq"><tbody id="eq"></tbody></table>
+    <summary>Autres formats : DMM, DMS, UTM</summary>
+    <div class="eq" id="eq"></div>
+    <div class="grid2">
+      <button class="btn" type="button" id="eqShare">Partager</button>
+      <button class="btn sec" type="button" id="eqCopy">Copier tout</button>
+    </div>
   </details>
 
   <details class="block fold" id="histCard" hidden>

@@ -2,9 +2,9 @@
 import { $, esc, f6, copy, state, VERSION } from './util.js';
 import { parse, toDMM, toDMS, toUTM } from './parser.js';
 import { initMap, updateMap, startGeo } from './map.js';
-import { initShare, drawQR } from './share.js';
+import { initShare, drawQR, shareText } from './share.js';
 import { loadHist, drawHist, scheduleHist, flushHist, cancelHist } from './history.js';
-import { initOcr } from './ocr.js';
+import { initOcr, clearZone } from './ocr.js';
 import { initFix, openFix, closeFix } from './fix.js';
 
 var src = $('src'), out = $('result');
@@ -67,10 +67,10 @@ function render() {
   h += '<p class="hint flush" id="linkMsg" hidden></p>';
   out.className = 'result'; out.innerHTML = h;
 
-  $('eq').innerHTML =
-    '<tr><th>DMM</th><td>' + esc(toDMM(c.lat, true)) + '<br>' + esc(toDMM(c.lon, false)) + '</td></tr>' +
-    '<tr><th>DMS</th><td>' + esc(toDMS(c.lat, true)) + '<br>' + esc(toDMS(c.lon, false)) + '</td></tr>' +
-    '<tr><th>UTM</th><td>' + esc(toUTM(c.lat, c.lon)) + '</td></tr>';
+  // autres formats : chaque ligne se copie d'un toucher, le tout se partage
+  $('eq').innerHTML = eqRows(c).map(function (x) {
+    return '<div class="eqr"><span class="eqk">' + x[0] + '</span><span class="eqv">' + x[1].map(esc).join('<br>') + '</span><button class="btn sec" type="button" data-copy="' + esc(x[1].join(' ')) + '">Copier</button></div>';
+  }).join('');
   $('eqCard').hidden = false; $('shareCard').hidden = false;
   drawQR();
   updateMap(true);
@@ -79,6 +79,10 @@ function render() {
   say((warn ? 'À vérifier : ' : 'Lecture fiable : ') + la + ', ' + lo);
   setHash(la + ',' + lo);
 }
+function eqRows(c) {
+  return [['DD', [f6(c.lat) + ', ' + f6(c.lon)]], ['DMM', [toDMM(c.lat, true), toDMM(c.lon, false)]], ['DMS', [toDMS(c.lat, true), toDMS(c.lon, false)]], ['UTM', [toUTM(c.lat, c.lon)]]];
+}
+function eqText(c) { return 'Point ESAM\n' + eqRows(c).map(function (x) { return x[0] + ' : ' + x[1].join(' '); }).join('\n'); }
 function update() { chosen = 0; lastParse = parse(src.value); render(); }
 function show(text, p) { src.value = text; chosen = 0; lastParse = p; render(); }
 function useCurrent() { if (state.current) { scheduleHist(state.current, src.value); flushHist(); } }
@@ -93,7 +97,9 @@ src.addEventListener('input', update);
 // champ quitté : le point affiché entre dans l'historique
 src.addEventListener('change', useCurrent);
 document.addEventListener('visibilitychange', function () { if (document.hidden) useCurrent(); });
-$('clear').addEventListener('click', function () { src.value = ''; $('cropBox').hidden = true; update(); src.focus(); });
+$('clear').addEventListener('click', function () { src.value = ''; $('cropBox').hidden = true; clearZone(); update(); src.focus(); });
+$('eqCopy').addEventListener('click', function () { if (state.current) { copy(eqText(state.current), $('eqCopy')); useCurrent(); } });
+$('eqShare').addEventListener('click', function () { if (state.current) { useCurrent(); shareText(eqText(state.current), $('eqShare')); } });
 document.addEventListener('click', function (e) {
   var a = e.target.closest('a[data-airops]');
   if (a) {
@@ -107,7 +113,7 @@ document.addEventListener('click', function (e) {
   if (t.dataset.copy) { copy(t.dataset.copy, t); useCurrent(); }
   else if (t.dataset.fix) openFix(state.current);
   else if (t.dataset.alt) { chosen = +t.dataset.alt; render(); }
-  else if (t.dataset.hist) { var x = loadHist()[+t.dataset.hist]; if (x) { src.value = x.src; update(); window.scrollTo({ top: 0 }); } }
+  else if (t.dataset.hist) { var x = loadHist()[+t.dataset.hist]; if (x) { src.value = x.src; clearZone(); update(); window.scrollTo({ top: 0 }); } }
 });
 
 // ---------- Démarrage ----------
