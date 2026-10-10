@@ -74,7 +74,7 @@ function render() {
 
   // autres formats : chaque ligne se copie d'un toucher, le tout se partage
   $('eq').innerHTML = eqRows(c).map(function (x) {
-    return '<div class="eqr"><span class="eqk">' + x[0] + '</span><span class="eqv">' + x[1].map(esc).join('<br>') + '</span><button class="btn sec" type="button" data-copy="' + esc(x[1].join(' ')) + '">Copier</button></div>';
+    return '<button class="eqr" type="button" data-copy="' + esc(x[1].join(' ')) + '"><span class="eqk">' + x[0] + '</span><span class="eqv">' + x[1].map(esc).join('<br>') + '</span></button>';
   }).join('');
   $('eqCard').hidden = false; $('shareCard').hidden = false;
   drawQR();
@@ -116,7 +116,8 @@ document.addEventListener('click', function (e) {
     return;
   }
   var t = e.target.closest('button'); if (!t) return;
-  if (t.dataset.copy) { copy(t.dataset.copy, t); useCurrent(); }
+  // ligne d'autres formats : seule la valeur affiche « Copié », la ligne garde sa hauteur
+  if (t.dataset.copy) { var v = t.querySelector('.eqv'); if (v) v.style.minHeight = v.offsetHeight + 'px'; copy(t.dataset.copy, v || t); useCurrent(); }
   else if (t.dataset.fix) openFix(state.current);
   else if (t.dataset.alt) { chosen = +t.dataset.alt; render(); }
   else if (t.dataset.hist) { var x = loadHist()[+t.dataset.hist]; if (x) { src.value = x.src; clearZone(); update(); openTile('resCard'); $('resCard').scrollIntoView({ behavior: 'smooth', block: 'start' }); } }
