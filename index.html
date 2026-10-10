@@ -6,7 +6,7 @@
 <title>GPS ESAM</title>
 <meta name="description" content="Convertisseur de coordonnées GPS de l'ESAM : photo, lecture du texte, carte, partage.">
 <meta name="theme-color" content="#AFC8E8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://data.geopf.fr https://*.tile.opentopomap.org https://tile.openstreetmap.org; connect-src 'self' https://cdn.jsdelivr.net; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://data.geopf.fr https://*.tile.opentopomap.org https://tile.openstreetmap.org; connect-src 'self' https://cdn.jsdelivr.net https://geo.api.gouv.fr https://data.geopf.fr https://api.open-meteo.com https://overpass-api.de https://nominatim.openstreetmap.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -24,6 +24,8 @@
     <span class="ver" id="ver"></span>
     <span class="net" id="net" hidden>Hors ligne</span>
   </div>
+  <div class="cmp" id="cmp" role="img" aria-label="Boussole" hidden><canvas id="cmpCv"></canvas></div>
+  <button class="cmp-ask" id="cmpAsk" type="button" hidden>Activer la boussole vers le point</button>
 </header>
 
 <main>
@@ -98,6 +100,7 @@
     <div class="dist" id="dist">
       <div><span>Distance</span><b id="dD">-</b></div>
       <div><span>Cap</span><b id="dB">-</b></div>
+      <div><span>Dénivelé</span><b id="dZ">-</b><small id="dZme"></small></div>
       <div><span>Précision</span><b id="dA">-</b></div>
     </div>
     <p class="hint" id="geoMsg" hidden></p>

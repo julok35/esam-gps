@@ -1,6 +1,8 @@
 /* Carte Leaflet (IGN, topo, photo aérienne, OSM), position du téléphone, distance et cap. */
 import { $, f6, fmtDist, CARD, state } from './util.js';
 import { distM, bearing } from './parser.js';
+import { updateRelief } from './place.js';
+import { updateCompass } from './compass.js';
 
 var map = null, tMark = null, meMark = null, meCirc = null, line = null, firstFix = true, watchId = null;
 
@@ -44,6 +46,8 @@ export function updateMap(recentre) {
     $('dD').textContent = fmtDist(d); $('dB').textContent = Math.round(b) + '° ' + CARD[Math.round(b / 22.5) % 16];
   } else { $('dD').textContent = '-'; $('dB').textContent = '-'; }
   $('dA').textContent = me ? '± ' + Math.round(me.acc) + ' m' : '-';
+  updateRelief();
+  updateCompass();
 }
 
 function fit() {

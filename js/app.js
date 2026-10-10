@@ -6,6 +6,8 @@ import { initShare, drawQR, shareText } from './share.js';
 import { loadHist, drawHist, scheduleHist, flushHist, cancelHist } from './history.js';
 import { initOcr, clearZone } from './ocr.js';
 import { initFix, openFix, closeFix } from './fix.js';
+import { initPlace, showPlace, placeText } from './place.js';
+import { initCompass } from './compass.js';
 
 var src = $('src'), out = $('result');
 var chosen = 0, lastParse = null, sayTimer = null;
@@ -43,6 +45,7 @@ function render() {
   var h = '<div class="status"><span class="pill ' + (warn ? 'check">À vérifier' : 'ok">Lecture fiable') + '</span><span class="pill fmt">' + esc(c.fmt) + '</span>' + (r.agree && chosen === 0 ? '<span class="pill fmt">' + r.agree + ' lectures</span>' : '') + '<button class="chip fixbtn" type="button" data-fix="1">Corriger</button></div>';
   h += '<div class="big1">' + la + ', ' + lo + '</div>';
   h += '<div class="seg1">Lu : ' + esc(c.seg) + '</div>';
+  h += '<div class="place" id="place"></div>';
   // DJI Pilot 2 : longitude d'abord, puis latitude
   var PL = pilotDM(c.lon), PA = pilotDM(c.lat);
   var cell = function (v, u) { return '<button class="pv" type="button" data-copy="' + v + '"><b>' + v + '</b><i>' + u + '</i></button>'; };
@@ -73,6 +76,7 @@ function render() {
   }).join('');
   $('eqCard').hidden = false; $('shareCard').hidden = false;
   drawQR();
+  showPlace();
   updateMap(true);
   // historique : pas pendant la frappe (valeurs partielles), seulement une fois le champ quitté
   if (document.activeElement !== src) scheduleHist(c, src.value); else cancelHist();
@@ -82,7 +86,7 @@ function render() {
 function eqRows(c) {
   return [['DD', [f6(c.lat) + ', ' + f6(c.lon)]], ['DMM', [toDMM(c.lat, true), toDMM(c.lon, false)]], ['DMS', [toDMS(c.lat, true), toDMS(c.lon, false)]], ['UTM', [toUTM(c.lat, c.lon)]]];
 }
-function eqText(c) { return 'Point ESAM\n' + eqRows(c).map(function (x) { return x[0] + ' : ' + x[1].join(' '); }).join('\n'); }
+function eqText(c) { var p = placeText(c); return 'Point ESAM\n' + eqRows(c).map(function (x) { return x[0] + ' : ' + x[1].join(' '); }).join('\n') + (p ? '\n' + p : ''); }
 function update() { chosen = 0; lastParse = parse(src.value); render(); }
 function show(text, p) { src.value = text; chosen = 0; lastParse = p; render(); }
 function useCurrent() { if (state.current) { scheduleHist(state.current, src.value); flushHist(); } }
@@ -121,6 +125,8 @@ initMap();
 initShare(useCurrent);
 initOcr(show);
 initFix(function (t) { src.value = t; update(); });
+initPlace();
+initCompass();
 $('ver').textContent = 'v' + VERSION;
 drawHist();
 var h0 = decodeURIComponent((location.hash || '').slice(1));

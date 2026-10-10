@@ -106,7 +106,7 @@ button:focus-visible, a:focus-visible, label.btn:focus-within { outline: 3px sol
 .maphead { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 #map { height: 52vh; min-height: 280px; max-height: 520px; border-radius: 10px; border: 1.5px solid var(--line); z-index: 0; }
 .leaflet-container { font-family: var(--f-body); }
-.dist { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.dist { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 .dist div { background: var(--soft); border-radius: 8px; padding: 8px 10px; min-width: 0; }
 .dist b { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dist span { font: 600 .68rem var(--f-label); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
@@ -145,7 +145,7 @@ footer { font-size: .76rem; color: var(--muted); text-align: center; }
 @media (prefers-reduced-motion: no-preference) { .btn, .chip { transition: background .15s, border-color .15s; } .prog div { transition: width .2s; } }
 
 .leaflet-top, .leaflet-bottom { z-index: 900; }
-.result, #cropBox, #zoneView, #fixCard, #mapCard { scroll-margin-top: 64px; }
+.result, #cropBox, #zoneView, #fixCard, #mapCard { scroll-margin-top: 92px; }
 .pilot { background: var(--soft); border-radius: 10px; padding: 10px; display: grid; gap: 6px; }
 .pilot-h { font: 600 .78rem var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .pilot-h small { text-transform: none; letter-spacing: 0; font-weight: 500; }
@@ -183,3 +183,19 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .fix-out b { font-size: 1.1rem; } .fix-out small { color: var(--muted); }
 .fix-out.bad { color: var(--rouge); font-weight: 700; }
 @media (prefers-reduced-motion: no-preference) { .wh:not(.drag) .wh-strip { transition: transform .12s; } }
+
+/* Dénivelé : altitude du téléphone sous la valeur ; 2 colonnes sur petit écran */
+.dist small { display: block; font-size: .7rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 430px) { .dist { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Lieu du point : commune, altitude, repères proches */
+.place { display: grid; gap: 4px; font-size: .88rem; }
+.place:empty { display: none; }
+.pl1 { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.pl1 b { font-weight: 700; }
+.pl1 small, .near small, .place .wait { color: var(--muted); }
+.near { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.near li { overflow-wrap: anywhere; }
+/* Bandeau boussole : fin, bords fondus, sous le titre */
+.cmp { max-width: 680px; margin: 0 auto; padding: 0 16px 3px; -webkit-mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent); }
+.cmp canvas { display: block; width: 100%; height: 22px; }
+.cmp-ask { display: block; margin: 0 auto 4px; font: 600 .7rem var(--f-label); letter-spacing: .06em; text-transform: uppercase; color: var(--noir); background: transparent; border: 1px solid rgba(17,17,17,.35); border-radius: 999px; padding: 3px 10px; cursor: pointer; }

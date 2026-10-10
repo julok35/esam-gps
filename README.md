@@ -6,7 +6,9 @@ Convertisseur de coordonnées GPS de l'Équipe de Secours Animalier en Montagne 
 - Correction de la lecture chiffre par chiffre, avec des molettes comme un cadenas à code
 - Détection automatique du format : DD, DMM, DMS, NMEA, UTM, liens Google Maps
 - Sortie en degrés décimaux pour la RC Plus du M30T, saisie DJI Pilot 2
-- Carte (Plan IGN, topo, photo aérienne) avec la position du téléphone, distance et cap
+- Carte (Plan IGN, topo, photo aérienne) avec la position du téléphone, distance, cap et dénivelé
+- Lieu du point : commune, altitude du terrain, lieux nommés à moins de 2 km (sommet, col, lac, cascade, refuge...), avec du réseau
+- Bandeau boussole discret sous le titre : le repère jaune montre où pointer le téléphone
 - Partage natif, WhatsApp, QR code (appli, Google Maps, geo:)
 - Installable sur l'écran d'accueil, fonctionne hors ligne une fois préparée
 
@@ -23,6 +25,8 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `js/skew.js` | Mesure de l'inclinaison du texte (sans DOM, testé sous Node) |
 | `js/fix.js` | Correction de la lecture par molettes |
 | `js/map.js` | Carte, position du téléphone, distance et cap |
+| `js/place.js` | Commune (geo.api.gouv.fr, Nominatim hors de France), lieux proches (Overpass, OpenStreetMap), altitude du terrain (IGN RGE ALTI, Copernicus via Open-Meteo hors de France) et dénivelé |
+| `js/compass.js` | Bandeau boussole (capteurs d'orientation, déclinaison magnétique approchée) |
 | `js/share.js`, `js/history.js`, `js/util.js` | Partage et QR, historique, outils communs |
 | `sw.js` | Service worker : appli hors ligne, moteur de lecture et tuiles en cache |
 | `vendor/` | Leaflet 1.9.4, qrcode-generator 1.4.4, tesseract.js 5.1.1 (bibliothèque et worker), polices (licence OFL) |
