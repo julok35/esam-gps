@@ -136,7 +136,12 @@ function render() {
       '</div></div>'
     );
   };
-  $('pilot').innerHTML = line('1 · Longitude', PL) + line('2 · Latitude', PA);
+  // 3e ligne : altitude du terrain au point, remplie par place.js dès qu'elle est connue
+  $('pilot').innerHTML =
+    line('1 · Longitude', PL) +
+    line('2 · Latitude', PA) +
+    '<div class="prow"><div class="pl">3 · Altitude <span class="asl">ASL</span></div><div class="pr" id="pilotAlt"></div>' +
+    '<p class="hint flush">Choisir <b>ASL</b>, pas ALT : repère posé au sol (ALT part du point de décollage).</p></div>';
   $('pilotCard').hidden = false;
 
   // ouvrir le point dans d'autres cartes

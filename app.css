@@ -172,6 +172,10 @@ body { overflow-x: clip; } /* la tuile pleine largeur (100vw) ne doit pas faire 
   .pv { font-size: clamp(2rem, min(10.5cqi, 11vh), 7rem); }
 }
 .pv.done { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+/* altitude pas encore connue : pas de bouton à copier, texte courant */
+.pv.off { cursor: default; border-style: dashed; color: var(--muted); font-size: clamp(1.1rem, 6vw, 2rem); padding-block: .4em; }
+/* rappel du bouton à choisir dans Pilot 2 */
+.pl .asl { padding: 0 .3em; border-radius: 4px; background: #000000; color: #FFFFFF; letter-spacing: .08em; }
 .cp { grid-template-columns: 1.4fr 1fr 1fr; }
 
 .status .fixbtn { margin-left: auto; }
