@@ -5,7 +5,8 @@ import { bearing } from './parser.js';
 
 var R = Math.PI / 180, SPAN = 120; // degrés visibles sur la largeur du bandeau
 var LBL = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SO', 270: 'O', 315: 'NO' };
-var on = false, granted = false, refused = false, sx = null, sy = 0, head = null, raf = 0, said = 0;
+var on = false, granted = false, sx = null, sy = 0, head = null, raf = 0, said = 0;
+var asked = false, seen = 0, waitT = 0; // après un toucher sur « Activer » : dire ce qui se passe
 
 // Cap (degrés, depuis le nord du capteur) du haut de l'écran quand le téléphone est à plat,
 // de l'arrière du téléphone quand il est tenu debout : les deux se projettent dans la même direction au sol.
@@ -32,8 +33,11 @@ function screenAngle() {
   return o && typeof o.angle === 'number' ? o.angle : typeof window.orientation === 'number' ? (window.orientation + 360) % 360 : 0;
 }
 
+function msg(t) { $('cmpMsg').textContent = t || ''; $('cmpMsg').hidden = !t; }
+
 function onOri(e) {
   var h = null, me = state.me;
+  if (e.alpha !== null || typeof e.webkitCompassHeading === 'number') seen++; // Chrome envoie une mesure vide quand il n'y a pas de capteur
   if (typeof e.webkitCompassHeading === 'number' && e.webkitCompassHeading >= 0) h = e.webkitCompassHeading + screenAngle(); // iOS
   else if ((e.absolute || e.type === 'deviceorientationabsolute') && e.alpha !== null) h = headingOf(e.alpha, e.beta || 0, e.gamma || 0, screenAngle());
   if (h === null || isNaN(h)) return;
@@ -42,22 +46,35 @@ function onOri(e) {
   var x = Math.cos(h * R), y = Math.sin(h * R);
   if (sx === null) { sx = x; sy = y; } else { sx += (x - sx) * 0.25; sy += (y - sy) * 0.25; }
   head = (Math.atan2(sy, sx) / R + 360) % 360;
+  if (waitT) { clearTimeout(waitT); waitT = 0; msg(''); }
   $('cmp').hidden = false;
   if (!raf) raf = requestAnimationFrame(draw);
 }
 
-var EVT = typeof window !== 'undefined' && 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
 function needsAsk() { return typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function' && !granted; }
 
 function start() {
   if (on) return;
-  if (needsAsk()) { $('cmpAsk').hidden = refused; return; }
-  on = true; window.addEventListener(EVT, onOri);
+  if (needsAsk()) { $('cmpAsk').hidden = false; return; }
+  on = true; seen = 0;
+  // les deux : Android donne le cap dans « absolute », iOS dans l'autre ; onOri ignore les mesures sans nord
+  window.addEventListener('deviceorientationabsolute', onOri); window.addEventListener('deviceorientation', onOri);
+  // autorisation donnée mais aucun cap reçu : le dire au lieu de ne rien afficher
+  if (asked && head === null) {
+    msg('Boussole activée : bougez le téléphone…');
+    clearTimeout(waitT);
+    waitT = setTimeout(function () {
+      waitT = 0;
+      if (head === null && on) msg(seen ? 'Le téléphone ne donne pas de cap boussole. Faites un 8 avec le téléphone pour la calibrer, et vérifiez Réglages › Confidentialité › Service de localisation › Services système › Étalonnage du compas.'
+        : 'Aucune mesure du capteur d\'orientation. Vérifiez Réglages › Safari › Mouvement et orientation, puis rechargez la page.');
+    }, 4000);
+  }
 }
 function stop() {
   $('cmpAsk').hidden = true;
   if (!on) return;
-  on = false; window.removeEventListener(EVT, onOri);
+  on = false; window.removeEventListener('deviceorientationabsolute', onOri); window.removeEventListener('deviceorientation', onOri);
+  clearTimeout(waitT); waitT = 0; msg('');
   sx = null; head = null; $('cmp').hidden = true;
 }
 
@@ -102,11 +119,19 @@ export function updateCompass() {
 export function initCompass() {
   if (typeof DeviceOrientationEvent === 'undefined') return;
   // iOS : le capteur ne s'ouvre qu'après un toucher
+  // (appel direct dans le toucher, sans rien avant : sinon iOS refuse sans rien afficher)
   $('cmpAsk').addEventListener('click', function () {
-    DeviceOrientationEvent.requestPermission().then(function (r) {
-      $('cmpAsk').hidden = true;
-      if (r === 'granted') { granted = true; updateCompass(); } else refused = true;
-    }, function () { refused = true; $('cmpAsk').hidden = true; });
+    var p;
+    asked = true;
+    try { p = DeviceOrientationEvent.requestPermission(); } catch (err) { p = Promise.reject(err); }
+    msg('Demande d\'autorisation…');
+    Promise.resolve(p).then(function (r) {
+      if (r === 'granted') { granted = true; $('cmpAsk').hidden = true; updateCompass(); return; }
+      // iOS garde le refus jusqu'à la fermeture de l'appli : pas de nouvelle fenêtre en touchant encore
+      msg('Accès aux capteurs refusé. Fermez complètement Safari (ou l\'appli GPS ESAM) puis rouvrez-la, touchez « Activer » et choisissez « Autoriser ».');
+    }, function (err) {
+      msg('Boussole indisponible : ' + ((err && err.message) || 'erreur du navigateur') + '.');
+    });
   });
   document.addEventListener('visibilitychange', updateCompass);
 }
