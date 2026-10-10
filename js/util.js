@@ -1,6 +1,6 @@
 /* Petits outils partagés : DOM, échappement, formats, copie. */
 // Version affichée dans le bandeau ; doit suivre le cache V de sw.js (vérifié par les tests)
-export var VERSION = '1.20';
+export var VERSION = '1.21';
 
 export var $ = function (id) { return document.getElementById(id); };
 
@@ -26,3 +26,19 @@ function fallback(text) {
   var ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
   document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} document.body.removeChild(ta);
 }
+
+// Tuiles repliables : chacune garde son état (ouverte / repliée) sur ce téléphone
+var TILES = 'esam-gps-tiles';
+function tileState() { try { return JSON.parse(localStorage.getItem(TILES) || '{}'); } catch (e) { return {}; } }
+export function initTiles() {
+  var st = tileState();
+  document.querySelectorAll('details.tile').forEach(function (d) {
+    if (d.id in st) d.open = st[d.id];
+    d.addEventListener('toggle', function () {
+      var s = tileState(); s[d.id] = d.open;
+      try { localStorage.setItem(TILES, JSON.stringify(s)); } catch (e) {}
+    });
+  });
+}
+// Ouvre la tuile qui contient un élément (avant d'y faire défiler l'écran)
+export function openTile(id) { var d = $(id); d = d && d.closest('details'); if (d && !d.open) d.open = true; }

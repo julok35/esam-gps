@@ -74,7 +74,7 @@ export function openFix(c) {
   var z = readZone(), zc = $('fixZone');
   zc.hidden = !z;
   if (z) { zc.width = z.width; zc.height = z.height; zc.getContext('2d').drawImage(z, 0, 0); }
-  $('fixCard').hidden = false;
+  $('fixCard').hidden = false; $('fixCard').open = true;
   $('fixCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 export function closeFix() { $('fixCard').hidden = true; }

@@ -1,5 +1,5 @@
 /* Photo, recadrage au doigt, lecture du texte (Tesseract.js) et vote entre plusieurs lectures. */
-import { $, flash } from './util.js';
+import { $, flash, openTile } from './util.js';
 import { parse, inRegion, distM } from './parser.js';
 import { skewAngle } from './skew.js';
 
@@ -389,6 +389,7 @@ function read(show) {
     }
     show(text, lastParse);
     setProg(sure ? 'Lu et confirmé' : 'Lecture incertaine : vérifiez avec la photo', 1);
+    if (!zone) openTile('result');
     $(zone ? 'zoneView' : 'result').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }).catch(function (err) {
     console.error('Lecture photo :', err);
