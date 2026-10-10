@@ -1,13 +1,15 @@
 /* Partage du point : message, partage natif, WhatsApp, QR code. */
 import { $, f6, copy, state } from './util.js';
 import { toDMM } from './parser.js';
+import { placeText } from './place.js';
 
 var qrMode = 'app';
 
 function appUrl(c) { return location.origin + location.pathname + '#' + f6(c.lat) + ',' + f6(c.lon); }
 function mapsUrl(c) { return 'https://www.google.com/maps/search/?api=1&query=' + f6(c.lat) + ',' + f6(c.lon); }
 function message(c) {
-  return 'Point ESAM\n' + f6(c.lat) + ', ' + f6(c.lon) + '\nDMM : ' + toDMM(c.lat, true) + ' ' + toDMM(c.lon, false)
+  var p = placeText(c);
+  return 'Point ESAM\n' + f6(c.lat) + ', ' + f6(c.lon) + '\nDMM : ' + toDMM(c.lat, true) + ' ' + toDMM(c.lon, false) + (p ? '\n' + p : '')
     + '\nCarte : ' + mapsUrl(c) + '\nAppli GPS ESAM : ' + appUrl(c);
 }
 
