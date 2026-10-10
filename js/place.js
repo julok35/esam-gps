@@ -159,6 +159,12 @@ export function updateRelief() {
   el.title = 'Point ' + fmtAlt(zc) + ', vous ' + fmtAlt(meAlt) + ' (altitude du terrain)';
 }
 
+// Altitudes du terrain connues au point et sous le téléphone (null si pas encore)
+export function reliefNow() {
+  var zc = state.current ? known('alt', state.current) : undefined;
+  return zc === undefined || meAlt === null ? null : { point: zc, me: meAlt };
+}
+
 // Lignes ajoutées au message partagé, avec ce qui est déjà connu
 export function placeText(c) {
   var com = known('com', c), alt = known('alt', c), near = known('osm', c), l = [];
