@@ -129,11 +129,12 @@ button:focus-visible, a:focus-visible, label.btn:focus-within { outline: 3px sol
 .qr .hint { text-align: center; overflow-wrap: anywhere; }
 
 .eq { display: grid; font-variant-numeric: tabular-nums; }
-.eqr { display: grid; grid-template-columns: 3.4rem minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 0; }
+.eqr { display: grid; grid-template-columns: 3.4rem minmax(0, 1fr); gap: 8px; align-items: center; min-height: 52px; padding: 8px 6px; margin: 0 -6px; border: 0; border-radius: 8px; background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.eqr:active { background: var(--soft); }
 .eqr + .eqr { border-top: 1px solid var(--line); }
 .eqk { font: 600 .74rem var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .eqv { font-weight: 500; overflow-wrap: anywhere; }
-.eqr .btn { min-height: 42px; padding: 6px 12px; font-size: .74rem; overflow-wrap: normal; }
+.eqv.done { display: flex; align-items: center; color: var(--ok); font-weight: 700; }
 .eq + .grid2 { margin-top: 4px; }
 .links { display: flex; flex-wrap: wrap; gap: 6px; }
 .links a { font: 600 .78rem var(--f-label); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); text-decoration: none; padding: 7px 10px; border-radius: 8px; background: var(--soft); border: 1.5px solid var(--line); }
