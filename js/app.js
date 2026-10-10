@@ -1,5 +1,5 @@
 /* GPS ESAM : point d'entrée. Lecture du texte, affichage du résultat, liens, événements. */
-import { $, esc, f6, copy, state, VERSION } from './util.js';
+import { $, esc, f6, copy, state, VERSION, initTiles, openTile } from './util.js';
 import { parse, toDMM, toDMS, toUTM } from './parser.js';
 import { initMap, updateMap, startGeo } from './map.js';
 import { initShare, drawQR, shareText } from './share.js';
@@ -29,11 +29,12 @@ function render() {
   if (!r || !r.ok) {
     state.current = null;
     cancelHist();
-    out.className = 'result empty';
+    $('resCard').classList.add('empty');
     out.innerHTML = r && r.empty
       ? '<div class="status"><span class="pill none">En attente de coordonnées</span></div>'
       : '<div class="status"><span class="pill check">Aucune coordonnée trouvée</span></div><p class="flush">Corrigez le texte ou recadrez sur les coordonnées.</p>';
-    $('eqCard').hidden = true; $('shareCard').hidden = true;
+    $('resSum').textContent = r && r.empty ? '' : 'aucune coordonnée';
+    $('eqCard').hidden = true; $('shareCard').hidden = true; $('pilotCard').hidden = true;
     if (!(r && r.empty)) say('Aucune coordonnée trouvée');
     setHash('');
     updateMap(); return;
@@ -43,18 +44,10 @@ function render() {
   var warn = c.notes.length || r.alts.length;
   var la = f6(c.lat), lo = f6(c.lon);
   var h = '<div class="status"><span class="pill ' + (warn ? 'check">À vérifier' : 'ok">Lecture fiable') + '</span><span class="pill fmt">' + esc(c.fmt) + '</span>' + (r.agree && chosen === 0 ? '<span class="pill fmt">' + r.agree + ' lectures</span>' : '') + '<button class="chip fixbtn" type="button" data-fix="1">Corriger</button></div>';
-  h += '<div class="big1">' + la + ', ' + lo + '</div>';
+  // coordonnées : un toucher les copie
+  h += '<button class="big1" type="button" data-copy="' + la + ', ' + lo + '">' + la + ', ' + lo + '<small>Toucher pour copier</small></button>';
   h += '<div class="seg1">Lu : ' + esc(c.seg) + '</div>';
   h += '<div class="place" id="place"></div>';
-  // DJI Pilot 2 : longitude d'abord, puis latitude
-  var PL = pilotDM(c.lon), PA = pilotDM(c.lat);
-  var cell = function (v, u) { return '<button class="pv" type="button" data-copy="' + v + '"><b>' + v + '</b><i>' + u + '</i></button>'; };
-  h += '<div class="pilot"><div class="pilot-h">Saisie DJI Pilot 2 <small>(toucher pour copier)</small></div>'
-    + '<div class="pl">Longitude</div><div class="pr">' + cell(PL.d, '°') + cell(PL.m, "'") + '</div>'
-    + '<div class="pl">Latitude</div><div class="pr">' + cell(PA.d, '°') + cell(PA.m, "'") + '</div></div>';
-  h += '<div class="cp"><button class="btn sec" type="button" data-copy="' + la + ', ' + lo + '">Copier DD</button>'
-    + '<button class="btn sec" type="button" data-copy="' + la + '">Lat</button>'
-    + '<button class="btn sec" type="button" data-copy="' + lo + '">Lon</button></div>';
   var notes = c.notes.slice();
   if (r.alts.length) notes.push({ t: 'Plusieurs lectures possibles : comparez avec la photo.' });
   if (notes.length) h += '<ul class="notes">' + notes.map(function (n) { return '<li>' + esc(n.t) + '</li>'; }).join('') + '</ul>';
@@ -63,12 +56,21 @@ function render() {
     all.forEach(function (a, i) { if (a !== c) h += '<button type="button" data-alt="' + i + '">' + f6(a.lat) + ', ' + f6(a.lon) + ' <small>(' + esc(a.seg) + ')</small></button>'; });
     h += '</div>';
   }
-  h += '<div class="links">'
-    + '<a target="_blank" rel="noopener" data-airops="' + la + ', ' + lo + '" href="https://airops-supuav.fr/map/#15/' + la + '/' + lo + '">AirOps</a>'
+  $('resCard').classList.remove('empty'); out.innerHTML = h;
+  $('resSum').textContent = (warn ? 'à vérifier · ' : '') + f6(c.lat).slice(0, -1) + ', ' + f6(c.lon).slice(0, -1);
+
+  // DJI Pilot 2 : longitude d'abord, puis latitude
+  var PL = pilotDM(c.lon), PA = pilotDM(c.lat);
+  var cell = function (v, u) { return '<button class="pv" type="button" data-copy="' + v + '"><b>' + v + '</b><i>' + u + '</i></button>'; };
+  $('pilot').innerHTML = '<div class="pl">Longitude</div><div class="pr">' + cell(PL.d, '°') + cell(PL.m, "'") + '</div>'
+    + '<div class="pl">Latitude</div><div class="pr">' + cell(PA.d, '°') + cell(PA.m, "'") + '</div>';
+  $('pilotCard').hidden = false;
+
+  // ouvrir le point dans d'autres cartes
+  $('links').innerHTML = '<a target="_blank" rel="noopener" data-airops="' + la + ', ' + lo + '" href="https://airops-supuav.fr/map/#15/' + la + '/' + lo + '">AirOps</a>'
     + '<a target="_blank" rel="noopener" href="https://cartes.gouv.fr/explorer-les-cartes/?c=' + lo + ',' + la + '&z=16&permalink=yes">cartes.gouv.fr</a>'
-    + '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + la + ',' + lo + '">Google Maps</a></div>';
-  h += '<p class="hint flush" id="linkMsg" hidden></p>';
-  out.className = 'result'; out.innerHTML = h;
+    + '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + la + ',' + lo + '">Google Maps</a>';
+  $('linkMsg').hidden = true;
 
   // autres formats : chaque ligne se copie d'un toucher, le tout se partage
   $('eq').innerHTML = eqRows(c).map(function (x) {
@@ -84,9 +86,9 @@ function render() {
   setHash(la + ',' + lo);
 }
 function eqRows(c) {
-  return [['DD', [f6(c.lat) + ', ' + f6(c.lon)]], ['DMM', [toDMM(c.lat, true), toDMM(c.lon, false)]], ['DMS', [toDMS(c.lat, true), toDMS(c.lon, false)]], ['UTM', [toUTM(c.lat, c.lon)]]];
+  return [['DD', [f6(c.lat) + ', ' + f6(c.lon)]], ['Lat', [f6(c.lat)]], ['Lon', [f6(c.lon)]], ['DMM', [toDMM(c.lat, true), toDMM(c.lon, false)]], ['DMS', [toDMS(c.lat, true), toDMS(c.lon, false)]], ['UTM', [toUTM(c.lat, c.lon)]]];
 }
-function eqText(c) { var p = placeText(c); return 'Point ESAM\n' + eqRows(c).map(function (x) { return x[0] + ' : ' + x[1].join(' '); }).join('\n') + (p ? '\n' + p : ''); }
+function eqText(c) { var p = placeText(c); return 'Point ESAM\n' + eqRows(c).filter(function (x) { return x[0] !== 'Lat' && x[0] !== 'Lon'; }).map(function (x) { return x[0] + ' : ' + x[1].join(' '); }).join('\n') + (p ? '\n' + p : ''); }
 function update() { chosen = 0; lastParse = parse(src.value); render(); }
 function show(text, p) { src.value = text; chosen = 0; lastParse = p; render(); }
 function useCurrent() { if (state.current) { scheduleHist(state.current, src.value); flushHist(); } }
@@ -117,10 +119,11 @@ document.addEventListener('click', function (e) {
   if (t.dataset.copy) { copy(t.dataset.copy, t); useCurrent(); }
   else if (t.dataset.fix) openFix(state.current);
   else if (t.dataset.alt) { chosen = +t.dataset.alt; render(); }
-  else if (t.dataset.hist) { var x = loadHist()[+t.dataset.hist]; if (x) { src.value = x.src; clearZone(); update(); window.scrollTo({ top: 0 }); } }
+  else if (t.dataset.hist) { var x = loadHist()[+t.dataset.hist]; if (x) { src.value = x.src; clearZone(); update(); openTile('resCard'); $('resCard').scrollIntoView({ behavior: 'smooth', block: 'start' }); } }
 });
 
 // ---------- Démarrage ----------
+initTiles();
 initMap();
 initShare(useCurrent);
 initOcr(show);

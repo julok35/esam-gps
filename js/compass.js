@@ -1,12 +1,13 @@
-/* Boussole vers le point : bandeau discret sous l'en-tête (cap, « tournez à gauche / droite ») et jauge verticale
-   au bord droit (inclinaison du téléphone face à l'angle du point, d'après les altitudes du terrain).
+/* Boussole vers le point, dans le bandeau sous l'en-tête : on pointe le téléphone vers la victime comme pour la photographier.
+   Le repère jaune se place à gauche / droite selon le cap, en haut / bas selon la hauteur du point (altitudes du terrain) ;
+   il entre dans le viseur central quand le téléphone vise le point.
    Capteurs d'orientation du téléphone ; écoutés seulement quand le point et la position sont connus. */
 import { $, state } from './util.js';
 import { bearing, distM } from './parser.js';
 import { reliefNow } from './place.js';
 
 var R = Math.PI / 180, SPAN = 120, VIEW = 50; // degrés sur la largeur du bandeau ; au-delà de VIEW, le repère sort du champ net
-var VSPAN = 40; // degrés sur la hauteur de la jauge d'inclinaison
+var VR = 12; // écart en hauteur (degrés) qui amène le repère au bord du bandeau
 var LBL = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SO', 270: 'O', 315: 'NO' };
 var on = false, granted = false, sx = null, sy = 0, head = null, pitch = null, raf = 0, said = 0;
 var asked = false, seen = 0, waitT = 0, tapAsk = false;
@@ -126,7 +127,7 @@ function stop() {
   if (!on) return;
   on = false; window.removeEventListener('deviceorientationabsolute', onOri); window.removeEventListener('deviceorientation', onOri);
   clearTimeout(waitT); waitT = 0; msg('');
-  sx = null; head = null; pitch = null; $('cmp').hidden = true; $('tg').hidden = true;
+  sx = null; head = null; pitch = null; $('cmp').hidden = true;
 }
 
 function canvas(cv) {
@@ -149,59 +150,41 @@ function draw() {
   raf = 0;
   var c = state.current, me = state.me;
   if (!on || head === null || !c || !me) return;
-  // ---- bandeau du cap ----
-  var b = canvas($('cmpCv')), g = b.g, w = b.w, hh = b.h, k = w / SPAN, mid = w / 2;
-  g.fillStyle = g.strokeStyle = '#111111'; g.lineWidth = 1;
+  var b = canvas($('cmpCv')), g = b.g, w = b.w, hh = b.h, k = w / SPAN, mid = w / 2, vc = hh / 2 - 3;
+  // échelle des caps, discrète, en bas du bandeau
+  g.globalAlpha = 0.55; g.fillStyle = g.strokeStyle = '#111111'; g.lineWidth = 1; g.font = '600 10px "Roboto Condensed", "Arial Narrow", sans-serif';
   for (var d = Math.ceil((head - SPAN / 2) / 15) * 15; d <= head + SPAN / 2; d += 15) {
     var x = mid + (d - head) * k, n = (d % 360 + 360) % 360;
-    if (LBL[n]) g.fillText(LBL[n], x, hh / 2 + 1);
-    else { g.beginPath(); g.moveTo(x, hh / 2 - 3); g.lineTo(x, hh / 2 + 3); g.stroke(); }
+    if (LBL[n]) g.fillText(LBL[n], x, hh - 6);
+    else { g.beginPath(); g.moveTo(x, hh - 9); g.lineTo(x, hh - 3); g.stroke(); }
   }
-  var t = turn(bearing(me, c), head), face = Math.abs(t) <= 5;
+  g.globalAlpha = 1; g.font = '600 11px "Roboto Condensed", "Arial Narrow", sans-serif';
+  // écart en hauteur : seulement téléphone tenu debout (viser comme avec l'appareil photo) et altitudes connues
+  var t = turn(bearing(me, c), head), z = reliefNow(), e = null;
+  if (z && pitch !== null && Math.abs(pitch) <= 60) e = sightAngle(distM(me, c), z.point, z.me) - pitch;
+  var okH = Math.abs(t) <= 5, okV = e === null || Math.abs(e) <= 3, ok = okH && okV;
+  // viseur : l'axe du téléphone
+  g.strokeStyle = ok ? '#1F7A3D' : '#E6332A'; g.lineWidth = ok ? 3 : 2;
+  g.beginPath(); g.moveTo(mid - 9, vc); g.lineTo(mid - 4, vc); g.moveTo(mid + 4, vc); g.lineTo(mid + 9, vc);
+  g.moveTo(mid, vc - 9); g.lineTo(mid, vc - 4); g.moveTo(mid, vc + 4); g.lineTo(mid, vc + 9); g.stroke();
   if (Math.abs(t) <= VIEW) {
-    // repère du point : triangle jaune
-    var px = mid + t * k;
-    g.fillStyle = '#FFD400'; g.lineWidth = 1.5; g.beginPath();
-    g.moveTo(px - 6, 1); g.lineTo(px + 6, 1); g.lineTo(px, 10); g.closePath(); g.fill(); g.stroke();
+    // repère du point : à gauche / droite selon le cap, en haut / bas selon la hauteur ; flèche au bord s'il faut lever ou baisser beaucoup
+    var px = mid + t * k, lim = vc - 6, py = e === null ? vc : vc - Math.max(-1, Math.min(1, e / VR)) * lim;
+    g.fillStyle = '#FFD400'; g.strokeStyle = '#111111'; g.lineWidth = 1.5; g.beginPath();
+    if (e !== null && Math.abs(e) > VR) {
+      var up = e > 0, ty = up ? 2 : 2 * vc - 2;
+      g.moveTo(px - 7, ty + (up ? 9 : -9)); g.lineTo(px + 7, ty + (up ? 9 : -9)); g.lineTo(px, ty);
+    } else g.arc(px, py, 6, 0, 2 * Math.PI);
+    g.closePath(); g.fill(); g.stroke();
   } else {
     // hors champ : consigne lisible du côté où tourner
-    pill(g, t > 0 ? w * 0.68 : w * 0.32, hh / 2, t > 0 ? 'Tournez à droite ▶ ' + Math.round(t) + '°' : '◀ Tournez à gauche ' + Math.round(-t) + '°');
+    pill(g, t > 0 ? w * 0.7 : w * 0.3, vc, t > 0 ? 'Tournez à droite ▶' : '◀ Tournez à gauche');
   }
-  g.strokeStyle = face ? '#1F7A3D' : '#E6332A'; g.lineWidth = face ? 3 : 2;
-  g.beginPath(); g.moveTo(mid, hh - 8); g.lineTo(mid, hh); g.stroke();
-
-  // ---- jauge d'inclinaison : téléphone tenu debout et altitudes connues ----
-  var z = reliefNow(), tg = $('tg'), aim = null;
-  if (z && pitch !== null && Math.abs(pitch) <= 60) {
-    aim = sightAngle(distM(me, c), z.point, z.me);
-    tg.hidden = false;
-    var v = canvas($('tgCv')), gv = v.g, vw = v.w, vh = v.h, kv = vh / VSPAN, vm = vh / 2;
-    gv.fillStyle = gv.strokeStyle = '#111111'; gv.lineWidth = 1;
-    for (var a = Math.ceil((pitch - VSPAN / 2) / 5) * 5; a <= pitch + VSPAN / 2; a += 5) {
-      var y = vm - (a - pitch) * kv;
-      if (a % 10 === 0) gv.fillText((a > 0 ? '+' : '') + a, vw / 2, y);
-      else { gv.beginPath(); gv.moveTo(vw / 2 - 4, y); gv.lineTo(vw / 2 + 4, y); gv.stroke(); }
-    }
-    var e = aim - pitch, level = Math.abs(e) <= 2;
-    gv.fillStyle = '#FFD400'; gv.lineWidth = 1.5;
-    if (Math.abs(e) <= VSPAN / 2 - 2) {
-      var py = vm - e * kv;
-      gv.beginPath(); gv.moveTo(vw - 1, py - 6); gv.lineTo(vw - 1, py + 6); gv.lineTo(vw - 11, py); gv.closePath(); gv.fill(); gv.stroke();
-    } else {
-      // hors jauge : flèche vers le haut ou le bas
-      var up = e > 0, yy = up ? 14 : vh - 14;
-      gv.clearRect(0, up ? 0 : vh - 28, vw, 28);
-      gv.beginPath(); gv.moveTo(vw / 2 - 9, yy + (up ? 6 : -6)); gv.lineTo(vw / 2 + 9, yy + (up ? 6 : -6)); gv.lineTo(vw / 2, yy + (up ? -7 : 7)); gv.closePath(); gv.fill(); gv.stroke();
-    }
-    gv.strokeStyle = level ? '#1F7A3D' : '#E6332A'; gv.lineWidth = level ? 3 : 2;
-    gv.beginPath(); gv.moveTo(0, vm); gv.lineTo(8, vm); gv.stroke();
-  } else tg.hidden = true;
-
   // texte pour les lecteurs d'écran, au plus toutes les 3 s
   if (Date.now() - said > 3000) {
     said = Date.now();
-    var s = face ? 'Boussole : face au point' : 'Boussole : point à ' + Math.round(Math.abs(t)) + '° sur votre ' + (t > 0 ? 'droite' : 'gauche');
-    if (aim !== null) s += Math.abs(aim - pitch) <= 2 ? ', à hauteur' : aim > pitch ? ', levez le téléphone de ' + Math.round(aim - pitch) + '°' : ', baissez le téléphone de ' + Math.round(pitch - aim) + '°';
+    var s = ok ? 'Boussole : téléphone pointé vers le point' : 'Boussole : ' + (okH ? 'dans la bonne direction' : 'tournez ' + (t > 0 ? 'à droite' : 'à gauche'));
+    if (!ok && e !== null && !okV) s += e > 0 ? ', levez le téléphone' : ', baissez le téléphone';
     $('cmp').setAttribute('aria-label', s);
   }
 }

@@ -30,11 +30,13 @@
 </header>
 
 <main>
-  <section class="block">
-    <div class="row2">
-      <label class="btn big" for="cam">Photographier</label>
-      <label class="btn big sec" for="gal">Choisir une photo</label>
-    </div>
+  <details class="block tile" id="inCard" open>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="tt">Lire les coordonnées</span></summary>
+    <div class="tile-b">
+      <div class="row2">
+        <label class="btn big" for="cam">Photographier</label>
+        <label class="btn big sec" for="gal">Choisir une photo</label>
+      </div>
     <input id="cam" type="file" accept="image/*" capture="environment" hidden>
     <input id="gal" type="file" accept="image/*" hidden>
 
@@ -74,12 +76,13 @@
       <textarea id="src" aria-label="Texte reçu" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Ou collez le texte reçu (SMS, lien Maps...)"></textarea>
       <button class="clr" id="clear" type="button" aria-label="Effacer le texte">Effacer</button>
     </div>
-  </section>
-
-  <section class="block fixer" id="fixCard" hidden>
-    <span class="lbl">Corriger la lecture</span>
+    </div>
+  </details>
+  <details class="block tile fixer" id="fixCard" open hidden>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg><span class="tt">Corriger la lecture</span></summary>
+    <div class="tile-b">
+      <p class="hint flush">Faites tourner chaque chiffre vers le haut ou le bas pour retrouver ce qu'affiche la photo.</p>
     <canvas class="zone" id="fixZone" hidden aria-label="Zone lue sur la photo"></canvas>
-    <p class="hint flush">Faites tourner chaque chiffre vers le haut ou le bas pour retrouver ce qu'affiche la photo.</p>
     <div id="fixRows"></div>
     <p class="fix-out" id="fixOut"></p>
     <div class="row3">
@@ -87,34 +90,49 @@
       <button class="btn sec" type="button" id="fixReset">Remettre</button>
       <button class="btn sec" type="button" id="fixCancel">Annuler</button>
     </div>
-  </section>
-  <section class="result" id="result"></section>
+    </div>
+  </details>
+  <details class="block tile" id="resCard" open>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-6.2-6-11a6 6 0 0 1 12 0c0 4.8-6 11-6 11z"/><circle cx="12" cy="10" r="2.3"/></svg><span class="tt">Point de la victime</span><small class="ts" id="resSum"></small></summary>
+    <div class="tile-b">
+      <div class="result" id="result"></div>
+    </div>
+  </details>
   <p class="sr-only" id="announce" aria-live="polite"></p>
-
-  <section class="block" id="mapCard">
-    <div class="maphead">
-      <button class="chip" type="button" id="fitBoth">Les deux</button>
-      <button class="chip" type="button" id="goTarget">Point</button>
-      <button class="chip" type="button" id="goMe">Moi</button>
+  <details class="block tile" id="pilotCard" open hidden>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="5.5" r="2.5"/><circle cx="18.5" cy="5.5" r="2.5"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/><path d="M7.5 7.5l2.5 2.5M16.5 7.5L14 10M7.5 16.5l2.5-2.5M16.5 16.5L14 14"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg><span class="tt">Saisie drone DJI Pilot 2</span></summary>
+    <div class="tile-b">
+      <p class="hint flush">Toucher une valeur pour la copier.</p>
+      <div class="pilot" id="pilot"></div>
     </div>
-    <div id="map" role="region" aria-label="Carte"></div>
-    <div class="dist" id="dist">
-      <div><span>Distance</span><b id="dD">-</b></div>
-      <div><span>Cap</span><b id="dB">-</b></div>
-      <div><span>Dénivelé</span><b id="dZ">-</b><small id="dZme"></small></div>
-      <div><span>Précision</span><b id="dA">-</b></div>
+  </details>
+  <details class="block tile" id="mapCard" open>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg><span class="tt">Carte et guidage</span><small class="ts" id="mapSum"></small></summary>
+    <div class="tile-b">
+      <div class="maphead">
+        <button class="chip" type="button" id="fitBoth">Les deux</button>
+        <button class="chip" type="button" id="goTarget">Point</button>
+        <button class="chip" type="button" id="goMe">Moi</button>
+      </div>
+      <div id="map" role="region" aria-label="Carte"></div>
+      <div class="dist" id="dist">
+        <div><span>Distance</span><b id="dD">-</b></div>
+        <div><span>Cap</span><b id="dB">-</b></div>
+        <div><span>Dénivelé</span><b id="dZ">-</b><small id="dZme"></small></div>
+        <div><span>Précision</span><b id="dA">-</b></div>
+      </div>
+      <p class="hint" id="geoMsg" hidden></p>
     </div>
-    <p class="hint" id="geoMsg" hidden></p>
-  </section>
-
-  <details class="block fold" id="shareCard" hidden>
-    <summary>Partager le point</summary>
-    <div class="grid2">
-      <button class="btn" type="button" id="shareBtn">Partager</button>
-      <button class="btn wa" type="button" id="waBtn">WhatsApp</button>
-      <button class="btn sec" type="button" id="qrBtn">QR code</button>
-      <button class="btn sec" type="button" id="copyMsg">Copier message</button>
-    </div>
+  </details>
+  <details class="block tile" id="shareCard" hidden>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></svg><span class="tt">Partager et ouvrir</span></summary>
+    <div class="tile-b">
+      <div class="grid2">
+        <button class="btn" type="button" id="shareBtn">Partager</button>
+        <button class="btn wa" type="button" id="waBtn">WhatsApp</button>
+        <button class="btn sec" type="button" id="qrBtn">QR code</button>
+        <button class="btn sec" type="button" id="copyMsg">Copier message</button>
+      </div>
     <div class="qr" id="qrBox" hidden>
       <div class="seg3" role="tablist">
         <button type="button" data-qr="app" class="on">Appli ESAM</button>
@@ -124,29 +142,35 @@
       <div id="qrImg" class="qrimg"></div>
       <p class="hint" id="qrTxt"></p>
     </div>
-  </details>
-
-  <details class="block fold" id="eqCard" hidden>
-    <summary>Autres formats : DMM, DMS, UTM</summary>
-    <div class="eq" id="eq"></div>
-    <div class="grid2">
-      <button class="btn" type="button" id="eqShare">Partager</button>
-      <button class="btn sec" type="button" id="eqCopy">Copier tout</button>
+      <span class="lbl">Ouvrir dans</span>
+      <div class="links" id="links"></div>
+      <p class="hint flush" id="linkMsg" hidden></p>
     </div>
   </details>
-
-  <details class="block fold" id="histCard" hidden>
-    <summary>Historique</summary>
-    <ul class="hist" id="hist"></ul>
+  <details class="block tile" id="eqCard" hidden>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 4L7.5 20M16.5 4l-2 16M4.5 9h16M3.5 15h16"/></svg><span class="tt">Autres formats</span><small class="ts" id="eqSum"></small></summary>
+    <div class="tile-b">
+      <div class="eq" id="eq"></div>
+      <div class="grid2">
+        <button class="btn" type="button" id="eqShare">Partager</button>
+        <button class="btn sec" type="button" id="eqCopy">Copier tout</button>
+      </div>
+    </div>
   </details>
-
-  <details class="block fold">
-    <summary>Hors ligne</summary>
-    <button class="btn sec wide" type="button" id="prepOff">Préparer la lecture de photo sans réseau</button>
-    <p class="hint" id="prepMsg">Une fois, avec du réseau (7 Mo). La carte hors ligne n'affiche que les zones déjà vues.</p>
+  <details class="block tile" id="histCard" hidden>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg><span class="tt">Historique des points</span></summary>
+    <div class="tile-b">
+      <ul class="hist" id="hist"></ul>
+    </div>
+  </details>
+  <details class="block tile" id="offCard">
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span class="tt">Hors ligne</span></summary>
+    <div class="tile-b">
+      <button class="btn sec wide" type="button" id="prepOff">Préparer la lecture de photo sans réseau</button>
+      <p class="hint" id="prepMsg">Une fois, avec du réseau (7 Mo). La carte hors ligne n'affiche que les zones déjà vues.</p>
+    </div>
   </details>
 </main>
-<div class="tg" id="tg" role="img" aria-hidden="true" hidden><canvas id="tgCv"></canvas></div>
 <footer class="foot">GPS ESAM · by Julok</footer>
 
 <script src="vendor/leaflet/leaflet.js"></script>

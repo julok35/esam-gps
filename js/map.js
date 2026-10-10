@@ -25,6 +25,8 @@ export function initMap() {
   meCirc = L.circle([0, 0], { radius: 1, color: '#1E6FD9', weight: 1, fillOpacity: .12, interactive: false });
   line = L.polyline([], { color: '#E6332A', weight: 3, dashArray: '8 8', interactive: false });
 
+  // carte dépliée : Leaflet recalcule sa taille (elle était nulle tant que la tuile était repliée)
+  $('mapCard').addEventListener('toggle', function () { if ($('mapCard').open) { map.invalidateSize(); fit(); } });
   $('fitBoth').addEventListener('click', fit);
   $('goTarget').addEventListener('click', function () { if (state.current) map.setView([state.current.lat, state.current.lon], 16); });
   $('goMe').addEventListener('click', function () { if (state.me) map.setView([state.me.lat, state.me.lon], 16); });
@@ -44,7 +46,8 @@ export function updateMap(recentre) {
   if (me && current) {
     var d = distM(me, current), b = bearing(me, current);
     $('dD').textContent = fmtDist(d); $('dB').textContent = Math.round(b) + '° ' + CARD[Math.round(b / 22.5) % 16];
-  } else { $('dD').textContent = '-'; $('dB').textContent = '-'; }
+    $('mapSum').textContent = fmtDist(d) + ' · ' + CARD[Math.round(b / 22.5) % 16];
+  } else { $('dD').textContent = '-'; $('dB').textContent = '-'; $('mapSum').textContent = ''; }
   $('dA').textContent = me ? '± ' + Math.round(me.acc) + ' m' : '-';
   updateRelief();
   updateCompass();
