@@ -59,8 +59,8 @@ var BRAVE = typeof navigator !== 'undefined' && !!navigator.brave;
 // Où redonner l'accès aux capteurs, selon le téléphone et le navigateur
 function blockedMsg() {
   if (IOS) return 'Accès aux capteurs refusé. Fermez complètement Safari (ou l\'appli GPS ESAM) puis rouvrez-la, touchez « Activer » et choisissez « Autoriser ». Sinon : Réglages › Safari › Mouvement et orientation.';
-  if (BRAVE) return 'Brave bloque les capteurs de mouvement. Touchez l\'icône à gauche de l\'adresse › Paramètres du site › Capteurs de mouvement › Autoriser, puis rechargez. Si ça ne suffit pas : lion Brave › Boucliers désactivés pour ce site.';
-  return 'Capteurs de mouvement bloqués. Touchez l\'icône à gauche de l\'adresse › Paramètres du site › Capteurs de mouvement › Autoriser, puis rechargez la page.';
+  if (BRAVE) return 'Brave bloque les capteurs de mouvement. Menu ⋮ › Paramètres › Paramètres des sites › Capteurs de mouvement › Autoriser, puis rechargez. Si ça ne suffit pas : lion Brave à droite de l\'adresse › Boucliers désactivés pour ce site.';
+  return 'Capteurs de mouvement bloqués. Menu ⋮ › Paramètres › Paramètres des sites › Capteurs de mouvement › Autoriser, puis rechargez la page.';
 }
 function noHeadingMsg() {
   return IOS ? 'Le téléphone ne donne pas de cap boussole. Faites un 8 avec le téléphone pour la calibrer, et vérifiez Réglages › Confidentialité › Service de localisation › Services système › Étalonnage du compas.'
