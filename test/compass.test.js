@@ -1,7 +1,7 @@
 // Boussole : cap du téléphone à partir des angles du capteur, écart avec le cap du point.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { headingOf, turn, declination } from '../js/compass.js';
+import { headingOf, turn, declination, pitchOf, sightAngle } from '../js/compass.js';
 
 const near = (a, b, tol = 0.5) => assert.ok(Math.abs(turn(a, b)) <= tol, a + ' ≈ ' + b);
 
@@ -33,4 +33,17 @@ test('écart signé vers le point', () => {
 test('déclinaison plausible sur la zone', () => {
   assert.ok(declination(5.7) > 2 && declination(5.7) < 4); // Grenoble
   assert.ok(Math.abs(declination(-4.5)) < 1); // Brest
+});
+
+test('inclinaison de l\'appareil photo', () => {
+  assert.ok(Math.abs(pitchOf(90, 0)) < 0.01); // tenu droit : horizontal
+  assert.ok(Math.abs(pitchOf(0, 0) + 90) < 0.01); // à plat écran en l'air : vise le sol
+  assert.ok(Math.abs(pitchOf(110, 0) - 20) < 0.01); // haut penché vers soi : vise 20° vers le haut
+  assert.ok(Math.abs(pitchOf(70, 0) + 20) < 0.01);
+});
+
+test('angle sous lequel on voit le point', () => {
+  assert.ok(Math.abs(sightAngle(1000, 1501.5, 1000) - 26.57) < 0.05); // 500 m plus haut à 1 km
+  assert.ok(sightAngle(10800, 366, 420) < -0.3); // vallée : un peu sous l'horizon, rotondité comprise
+  assert.ok(Math.abs(sightAngle(100, 1.5, 0)) < 0.01);
 });

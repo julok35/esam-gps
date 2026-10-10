@@ -8,7 +8,7 @@ Convertisseur de coordonnées GPS de l'Équipe de Secours Animalier en Montagne 
 - Sortie en degrés décimaux pour la RC Plus du M30T, saisie DJI Pilot 2
 - Carte (Plan IGN, topo, photo aérienne) avec la position du téléphone, distance, cap et dénivelé
 - Lieu du point : commune, altitude du terrain, lieux nommés à moins de 2 km (sommet, col, lac, cascade, refuge...), avec du réseau
-- Bandeau boussole discret sous le titre : le repère jaune montre où pointer le téléphone
+- Boussole active d'elle-même : bandeau discret sous le titre (repère jaune, « Tournez à gauche / droite » quand le point est hors champ) et jauge d'inclinaison au bord droit quand le téléphone est tenu debout
 - Partage natif, WhatsApp, QR code (appli, Google Maps, geo:)
 - Installable sur l'écran d'accueil, fonctionne hors ligne une fois préparée
 
