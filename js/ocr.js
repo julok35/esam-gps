@@ -14,12 +14,15 @@ var TESS = {
 // Lectures successives : [largeur visée, marge blanche, mode de segmentation, élargissement du cadre]
 var PASSES = [[900, 0, '6', 0], [900, 0, '11', 0], [1800, 0, '11', 0], [900, 0, '4', 0], [1200, 0, '6', 0.25], [1200, 0, '11', 0.25], [1800, 1, '6', 0], [900, 1, '6', 0]];
 var NEED = 3; // lectures concordantes nécessaires
-var AUTO_MIN = 2, AUTO_GAIN = 1.2; // à la lecture, inclinaison résiduelle corrigée d'office au-delà de 2°, si la mesure est nette
+// Inclinaison mesurée : retenue seulement si la mesure est nette (gain) ; à la lecture, si la photo n'a pas été redressée
+// à la main, un reste de AUTO_MIN à AUTO_MAX degrés est essayé une lecture sur deux (les deux variantes votent)
+var AUTO_GAIN = 1.5, AUTO_MIN = 2, AUTO_MAX = 15;
 var TOL = 0.00002; // deux lectures à moins de ~2 m sur un axe votent ensemble
 
 // base : photo telle que prise (aux quarts de tour près) ; work : la même redressée de angle degrés, refaite à la demande
 // zone : la zone lue, agrandie et contrastée, gardée pour vérifier le résultat d'un coup d'œil
-var base = null, angle = 0, work = null, zone = null, gen = 0, sel = { x: .1, y: .3, w: .8, h: .4 }, cv, stage, selEl, drag = null, ocrWorker = null, progCb = function () {};
+// userTilt : l'inclinaison a été réglée (réglette, boutons, Auto) ; la lecture la respecte alors telle quelle
+var base = null, angle = 0, userTilt = false, work = null, zone = null, gen = 0, sel = { x: .1, y: .3, w: .8, h: .4 }, cv, stage, selEl, drag = null, ocrWorker = null, progCb = function () {};
 // Vue de la photo : zoom z (1 = photo entière) et décalage en pixels de l'écran ; doigts posés sur la photo
 var view = { z: 1, tx: 0, ty: 0 }, ptrs = new Map();
 var ZMAX = 8, MIN_SIDE = 0.02, DEAD = 8; // zoom maximal, plus petit côté du cadre, mouvement ignoré (px) avant de bouger quoi que ce soit
@@ -30,7 +33,7 @@ function loadFile(file) {
     var s = Math.min(1, 2400 / Math.max(img.width, img.height));
     base = document.createElement('canvas'); base.width = Math.round(img.width * s); base.height = Math.round(img.height * s);
     base.getContext('2d').drawImage(img, 0, 0, base.width, base.height);
-    angle = 0; work = null; gen++; showAngle(); clearZone();
+    angle = 0; userTilt = false; work = null; gen++; showAngle(); clearZone();
     sel = { x: .15, y: .35, w: .7, h: .35 };
     $('cropBox').hidden = false; $('prog').hidden = true; showWork();
     $('cropBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -126,16 +129,23 @@ function grayOf(c) {
   for (var i = 0; i < g.length; i++) g[i] = d[i * 4];
   return { data: g, w: c.width, h: c.height };
 }
-// inclinaison du texte dans le cadre de img (degrés, 0 si la mesure n'est pas nette)
-function leanIn(img, box, min) {
-  var g = grayOf(prepared(img, box, 600, 0, 0.1)), r = skewAngle(g.data, g.w, g.h, TILT);
-  return Math.abs(r.deg) >= min && r.gain >= AUTO_GAIN ? r.deg : 0;
+// Inclinaison du texte dans le cadre de img : { deg, gain }. Mesurée à la taille de la photo ou en dessous,
+// jamais agrandie (l'agrandissement floute les contours et fausse la mesure).
+function leanIn(img, box, max) {
+  var sx = box.x * img.width, sy = box.y * img.height, sw = Math.max(8, box.w * img.width), sh = Math.max(8, box.h * img.height);
+  var k = Math.min(1, 800 / Math.max(sw, sh)), c = document.createElement('canvas');
+  c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+  var g = c.getContext('2d', { willReadFrequently: true }); g.imageSmoothingQuality = 'high'; g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  var d = g.getImageData(0, 0, c.width, c.height).data, gr = new Uint8Array(c.width * c.height);
+  for (var i = 0; i < gr.length; i++) gr[i] = (d[i * 4] * 299 + d[i * 4 + 1] * 587 + d[i * 4 + 2] * 114) / 1000;
+  return skewAngle(gr, c.width, c.height, max);
 }
 function autoLevel() {
   if (!base) return;
-  var t = leanIn(cv, sel, 0.3);
-  if (!t) { flash($('tAuto'), 'Déjà droit'); return; }
-  setAngle(angle - t); guides();
+  var r = leanIn(getWork(), sel, TILT);
+  if (r.gain < AUTO_GAIN) { flash($('tAuto'), 'Pas net'); return; }
+  if (Math.abs(r.deg) < 0.3) { flash($('tAuto'), 'Déjà droit'); userTilt = true; return; }
+  userTilt = true; setAngle(angle - r.deg); guides();
 }
 function two() { var p = Array.from(ptrs.values()); return { d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1, m: { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 } }; }
 
@@ -201,18 +211,18 @@ function initCrop() {
     if (!base) return;
     var c = document.createElement('canvas'); c.width = base.height; c.height = base.width;
     var g = c.getContext('2d'); g.translate(c.width, 0); g.rotate(Math.PI / 2); g.drawImage(base, 0, 0); base = c; gen++;
-    angle = 0; work = null; showAngle();
+    angle = 0; userTilt = false; work = null; showAngle();
     sel = { x: .1, y: .1, w: .8, h: .8 }; showWork();
   });
   // réglette : rendu au plus une fois par image affichée ; boutons : pas d'un demi-degré
   var pend = null;
   $('tilt').addEventListener('input', function (e) {
-    guides();
+    guides(); userTilt = true;
     if (pend === null) requestAnimationFrame(function () { var v = pend; pend = null; setAngle(v); });
     pend = +e.target.value;
   });
-  $('tL').addEventListener('click', function () { setAngle(angle - 0.5); guides(); });
-  $('tR').addEventListener('click', function () { setAngle(angle + 0.5); guides(); });
+  $('tL').addEventListener('click', function () { userTilt = true; setAngle(angle - 0.5); guides(); });
+  $('tR').addEventListener('click', function () { userTilt = true; setAngle(angle + 0.5); guides(); });
   $('tAuto').addEventListener('click', autoLevel);
   $('cropAll').addEventListener('click', function () { sel = { x: 0, y: 0, w: 1, h: 1 }; view = { z: 1, tx: 0, ty: 0 }; applyView(); });
   $('cropClose').addEventListener('click', function () { $('cropBox').hidden = true; });
@@ -249,11 +259,26 @@ function prepared(img, box, targetW, pad, ex, rot) {
   return o;
 }
 
-// Zone lue pour l'œil : même cadre et même redressement que la lecture, contraste poussé en S
+// Zone lue pour l'œil : même cadre et même redressement que la lecture retenue, plus nette (masque flou), contraste en S
 function zoneImage(img, box, rot) {
-  var c = prepared(img, box, 1400, 0, 0.06, rot), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data, lut = new Uint8Array(256);
+  var c = prepared(img, box, 1400, 0, 0.06, rot), W = c.width, H = c.height, g = c.getContext('2d'), d = g.getImageData(0, 0, W, H), p = d.data;
+  // netteté : la photo moins sa version floue (rayon proportionnel à l'agrandissement), ajoutée à elle-même
+  var R = Math.max(2, Math.round(W / 300)), src = new Float32Array(W * H), tmp = new Float32Array(W * H), bl = new Float32Array(W * H), x, y, i, s;
+  for (i = 0; i < src.length; i++) src[i] = p[i * 4];
+  var box1 = function (from, to, step, len, lines, lstep) {
+    for (var l = 0; l < lines; l++) {
+      var o = l * lstep; s = 0;
+      for (var k = -R; k <= R; k++) s += from[o + Math.min(len - 1, Math.max(0, k)) * step];
+      for (var q = 0; q < len; q++) {
+        to[o + q * step] = s / (2 * R + 1);
+        s += from[o + Math.min(len - 1, q + R + 1) * step] - from[o + Math.max(0, q - R) * step];
+      }
+    }
+  };
+  box1(src, tmp, 1, W, H, W); box1(tmp, bl, W, H, W, 1);
+  var lut = new Uint8Array(256);
   for (var v = 0; v < 256; v++) lut[v] = Math.round(255 / (1 + Math.exp(-(v - 128) / 30)));
-  for (var i = 0; i < p.length; i += 4) p[i] = p[i + 1] = p[i + 2] = lut[p[i]];
+  for (i = 0; i < src.length; i++) { var u = Math.max(0, Math.min(255, Math.round(src[i] + 1.2 * (src[i] - bl[i])))); p[i * 4] = p[i * 4 + 1] = p[i * 4 + 2] = lut[u]; }
   g.putImageData(d, 0, 0);
   return c;
 }
@@ -317,8 +342,9 @@ function read(show) {
   var btn = $('ocrGo'); btn.disabled = true;
   // photo et cadre figés pour toute la lecture ; une nouvelle photo pendant la lecture l'interrompt
   var img = getWork(), box = { x: sel.x, y: sel.y, w: sel.w, h: sel.h }, myGen = gen;
-  // reste d'inclinaison non redressé à la main : corrigé d'office pour toutes les lectures
-  var lean = 0; try { lean = -leanIn(img, box, AUTO_MIN); } catch (err) {}
+  // inclinaison réglée à la main : respectée telle quelle. Sinon, un reste net est essayé une lecture sur deux.
+  var lean = 0;
+  if (!userTilt) try { var lr = leanIn(img, box, AUTO_MAX); if (lr.gain >= AUTO_GAIN && Math.abs(lr.deg) >= AUTO_MIN) lean = -lr.deg; } catch (err) {}
   var stale = function () { return gen !== myGen; };
   var LBL = { 'loading tesseract core': 'Chargement du moteur', 'initializing tesseract': 'Initialisation', 'loading language traineddata': 'Chargement de la langue', 'initializing api': 'Initialisation', 'recognizing text': 'Lecture du texte' };
   progCb = function (m) { setProg((LBL[m.status] || 'Préparation') + '...', m.progress); };
@@ -329,20 +355,21 @@ function read(show) {
     var i = 0;
     var step = function () {
       if (i >= PASSES.length || done() || stale()) return;
-      var ps = PASSES[i++], ik = ps[0] + '_' + ps[1] + '_' + ps[3];
+      var rot = i % 2 ? 0 : lean, ps = PASSES[i++], ik = ps[0] + '_' + ps[1] + '_' + ps[3] + '_' + rot;
       LBL['recognizing text'] = 'Lecture ' + i;
-      imgs[ik] = imgs[ik] || prepared(img, box, ps[0], ps[1], ps[3], lean);
+      imgs[ik] = imgs[ik] || prepared(img, box, ps[0], ps[1], ps[3], rot);
       return w.setParameters({ tessedit_pageseg_mode: ps[2] }).then(function () { return w.recognize(imgs[ik]); }).then(function (r) {
         var txt = (r.data.text || '').trim();
-        runs.push({ txt: txt, p: parse(txt) });
+        runs.push({ txt: txt, p: parse(txt), rot: rot });
       }).then(step);
     };
     return step();
   }).then(function () {
     if (stale()) { setProg('Lecture interrompue : nouvelle photo, touchez Lire', 0); return; }
-    try { showZone(zoneImage(img, box, lean)); } catch (err) { console.error('Zone lue :', err); }
+    var zoneAt = function (rot) { try { showZone(zoneImage(img, box, rot)); } catch (err) { console.error('Zone lue :', err); } };
     var v = votes(runs), total = runs.length, lastParse;
     if (!v.lat.best || !v.lon.best) {
+      zoneAt(0);
       var r0 = runs[0] || { txt: '', p: parse('') };
       show(r0.txt, r0.p);
       setProg('Aucune coordonnée lue : recadrez sur les coordonnées, avec un peu de marge', 1);
@@ -353,6 +380,7 @@ function read(show) {
     var both = LA.runs.filter(function (x) { return LO.runs.indexOf(x) >= 0; });
     var rank = function (x) { var b = runs[x].p.best; return (b.lat.toFixed(6) === LA.v.toFixed(6) ? 0 : 10) + (b.lon.toFixed(6) === LO.v.toFixed(6) ? 0 : 10) + b.notes.length; };
     both.sort(function (a, b) { return rank(a) - rank(b); });
+    zoneAt(both.length ? runs[both[0]].rot : runs[LA.runs[0]].rot);
     if (both.length) { text = runs[both[0]].txt; lastParse = runs[both[0]].p; }
     else {
       text = LA.v.toFixed(6) + ', ' + LO.v.toFixed(6);

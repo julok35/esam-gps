@@ -5,23 +5,42 @@ import { skewAngle } from '../js/skew.js';
 
 // Image d'essai : deux lignes de « caractères » (traits sombres sur fond clair) inclinées de deg degrés, comme un écran
 // de GPS photographié de travers. Graine fixe : même image à chaque essai.
-function lines(deg, w = 420, h = 200, dark = false) {
+// z : taille des caractères (1 : petits, 4 : gros chiffres qui remplissent le cadre), blur : rayon du flou (pixels)
+function lines(deg, w = 420, h = 200, dark = false, z = 1, blur = 0) {
   let seed = 7;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   const glyphs = [];
-  for (const cy of [-30, 30]) for (let x = -170; x < 170; x += 14) if (rnd() > 0.15) glyphs.push({ x, cy, kind: Math.floor(rnd() * 3) });
+  for (let cy = -30 * z; cy <= 30 * z; cy += 60 * (z > 1 ? z / 2 : 1)) for (let x = -w / 2; x < w / 2; x += 14 * z) if (rnd() > 0.15) glyphs.push({ x, cy, kind: Math.floor(rnd() * 3) });
   const a = deg * Math.PI / 180, s = Math.sin(a), c = Math.cos(a), g = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+  const inked = (px, py) => {
     // point ramené dans le repère du texte droit
-    const X = (x - w / 2) * c + (y - h / 2) * s, Y = -(x - w / 2) * s + (y - h / 2) * c;
-    let ink = false;
+    const X = (px - w / 2) * c + (py - h / 2) * s, Y = -(px - w / 2) * s + (py - h / 2) * c;
     for (const q of glyphs) {
       const dx = X - q.x, dy = Y - q.cy;
-      if (dy < -10 || dy > 10 || dx < 0 || dx > 9) continue;
+      const ex = dx / z, ey = dy / z;
+      if (ey < -10 || ey > 10 || ex < 0 || ex > 9) continue;
       // trait gauche, trait droit, barre du haut ou du bas selon le glyphe
-      if (dx < 2.5 || (q.kind !== 1 && dx > 6.5) || (q.kind === 2 && dy > 7.5) || (q.kind === 1 && dy < -7.5)) { ink = true; break; }
+      if (ex < 2.5 || (q.kind !== 1 && ex > 6.5) || (q.kind === 2 && ey > 7.5) || (q.kind === 1 && ey < -7.5)) return true;
     }
-    g[y * w + x] = ink !== dark ? 30 : 220;
+    return false;
+  };
+  // 4 x 4 échantillons par pixel : bords adoucis comme sur une vraie photo
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let ink = 0;
+    for (let u = 0; u < 4; u++) for (let v = 0; v < 4; v++) if (inked(x + (u + 0.5) / 4, y + (v + 0.5) / 4)) ink++;
+    const f = dark ? 1 - ink / 16 : ink / 16;
+    g[y * w + x] = Math.round(220 - 190 * f);
+  }
+  // flou de mise au point : moyenne glissante, deux fois
+  for (let pass = 0; pass < (blur ? 2 : 0); pass++) {
+    const t = Float32Array.from(g);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let sum = 0, n = 0;
+      for (let v = -blur; v <= blur; v++) for (let u = -blur; u <= blur; u++) {
+        const X = x + u, Y = y + v; if (X < 0 || Y < 0 || X >= w || Y >= h) continue; sum += t[Y * w + X]; n++;
+      }
+      g[y * w + x] = Math.round(sum / n);
+    }
   }
   return g;
 }
@@ -30,7 +49,15 @@ for (const deg of [0, 4, -7, 12, -18]) {
   test(`texte incliné de ${deg}° : inclinaison retrouvée`, () => {
     const r = skewAngle(lines(deg), 420, 200);
     assert.ok(Math.abs(r.deg - deg) <= 0.6, `mesuré ${r.deg}°`);
-    if (deg) assert.ok(r.gain > 1.2, `gain ${r.gain}`);
+    assert.ok(r.gain > 1.5, `gain ${r.gain}`);
+  });
+}
+
+// Photo de terrain (v1.13) : gros chiffres flous qui remplissent le cadre ; l'ancienne mesure trouvait près de 40° de trop
+for (const deg of [0, -6, 15]) {
+  test(`gros chiffres flous et serrés, ${deg}° : pas de fausse inclinaison`, () => {
+    const r = skewAngle(lines(deg, 360, 240, false, 4, 3), 360, 240);
+    assert.ok(Math.abs(r.deg - deg) <= 1.5, `mesuré ${r.deg}°`);
   });
 }
 
