@@ -19,7 +19,12 @@ export function fmtDist(d) {
 }
 export var CARD = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSO', 'SO', 'OSO', 'O', 'ONO', 'NO', 'NNO'];
 
-// État partagé entre les modules : point affiché et position du téléphone
+/**
+ * État partagé entre les modules. current : point affiché (Candidate de parser.js, null sans résultat), écrit par
+ * app.js ; me : position du téléphone (acc : précision en mètres), écrite par map.js à chaque relevé GPS.
+ * Après un changement, appeler updateMap() (map.js), qui met à jour distance, dénivelé et boussole.
+ * @type {{ current: import('./parser.js').Candidate | null, me: { lat: number, lon: number, acc: number } | null }}
+ */
 export var state = { current: null, me: null };
 
 export function flash(btn, txt) {

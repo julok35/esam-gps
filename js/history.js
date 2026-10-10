@@ -1,6 +1,8 @@
 /* Historique des 10 derniers points (stockage local du téléphone). */
 import { $, esc, f6 } from './util.js';
 
+// Stockage local (KEY) : tableau JSON, le plus récent d'abord, au plus 10 entrées
+// { k : « lat, lon » à 6 décimales (sert aussi à dédoublonner), src : texte saisi ou lu (400 caractères max), t : date en ms }
 var KEY = 'esam-gps-hist',
   timer = null,
   pending = null;

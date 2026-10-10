@@ -1,6 +1,89 @@
-/* Moteur de detection et de conversion de coordonnees (texte OCR bruite) */
+/* Moteur de détection et de conversion de coordonnées dans un texte bruité (lecture OCR, copier-coller, saisie).
+   Sans DOM : testé sous Node (test/parser.test.js).
+
+   Chemin d'un texte dans parse() :
+   1. normalize : symboles unifiés (°, ', "), lettres mal lues par l'OCR remplacées par des chiffres (O -> 0, l -> 1...).
+   2. tokenize : suite d'éléments (nombre avec son symbole éventuel, lettre d'hémisphère, mot). Un mot inconnu coupe
+      la suite ; runs() en tire des « séquences » de nombres et d'hémisphères consécutifs.
+   3. Fenêtres : dans chaque séquence, chaque sous-suite de 2 à 10 éléments est essayée (candidatesFromWindow).
+      Elle est coupée en un groupe latitude et un groupe longitude, par les lettres d'hémisphère si elles sont là,
+      sinon par splitNums (au milieu, ou au second symbole °), dans les deux ordres.
+   4. interpretGroup : chaque groupe donne une ou plusieurs lectures (DD, DMM, DMS, NMEA, ou ° lu comme un 0), chacune
+      avec une pénalité (PEN) et une explication pour l'utilisateur.
+   5. build : chaque couple latitude / longitude devient un candidat noté (SCORE, voir plus bas).
+      parseUTM ajoute en parallèle les candidats UTM.
+   6. Le meilleur score l'emporte ; les candidats à moins d'un point et à plus de 50 m sont proposés comme
+      autres lectures.
+
+   Le barème (SCORE, PEN) est empirique : il a été réglé sur les cas de test/parser.test.js (pièges de lecture
+   rencontrés). Toute modification d'un poids doit être suivie de « npm test ».
+*/
+
+// ---------- Structures de données (JSDoc, lues par les éditeurs) ----------
+/**
+ * Élément du texte normalisé. s / e : positions de début et de fin dans le texte ; line : numéro de ligne.
+ * num : raw (chiffres, point décimal), neg (signe -), sym (°, ' ou " collé derrière). hemi : v (N, S, E, W ou O).
+ * @typedef {{ k: 'num'|'hemi'|'word', s: number, e: number, line: number,
+ *             raw?: string, neg?: boolean, sym?: string, v?: string }} Token
+ */
+/**
+ * Lecture d'un groupe de nombres pour un axe : valeur en degrés décimaux, format, pénalité (PEN),
+ * explication de la correction supposée, nombre de symboles d'unité présents.
+ * @typedef {{ val: number, fmt: string, pen: number, fix?: string, syms: number }} Reading
+ */
+/**
+ * Avertissement affiché sous le résultat.
+ * @typedef {{ lvl?: 'warn', t: string }} Note
+ */
+/**
+ * Position candidate. s / e : passage du texte normalisé d'où elle vient ; seg : ce passage, affiché « Lu : ».
+ * hemi : lue avec ses lettres d'hémisphère.
+ * @typedef {{ lat: number, lon: number, fmt: string, score: number, notes: Note[], s: number, e: number,
+ *             hemi: boolean, seg?: string }} Candidate
+ */
+/**
+ * Résultat de parse(). conf : 'check' dès qu'il y a un avertissement ou une autre lecture possible ;
+ * norm : texte normalisé ; agree : ajouté par ocr.js (« 5/8 » lectures concordantes) pour une photo.
+ * ocr.js modifie aussi best.notes et alts après le vote entre lectures.
+ * @typedef {{ ok: false, empty?: true, norm?: string }
+ *         | { ok: true, best: Candidate, alts: Candidate[], conf: 'ok'|'check', norm: string, agree?: string }} ParseResult
+ */
+
+// Barème des candidats (build, parseUTM, parse). Ordres de grandeur à garder en tête :
+// une lecture parfaite dans les Alpes avec hémisphères et symboles vaut environ 3 + 3 + 1 + 4 = 11 ;
+// une lecture douteuse (pénalités cumulées de 3 à 5) doit pouvoir perdre face à une lecture propre,
+// mais la position géographique (jusqu'à 4) doit rester capable de départager deux lectures également propres.
+var SCORE = {
+  hemi: 3, // lettres N / S / E / O présentes : l'axe de chaque valeur est certain
+  sym: 0.75, // par symbole d'unité (°, ', ") présent : la structure DMM / DMS est confirmée...
+  symMax: 4, // ... compté au plus 4 fois (3 points), pour ne pas écraser le reste
+  sameFmt: 1, // latitude et longitude dans le même format : cohérent avec un même écran
+  alpes: 4, // dans les Alpes : zone d'intervention habituelle
+  france: 2, // ailleurs en France métropolitaine : plausible
+  swapped: 1.5, // retiré si latitude et longitude sont lues dans l'ordre inverse (sans hémisphère pour le dire)
+  unusedNum: 1.2, // retiré par nombre de la séquence laissé de côté : préférer la lecture qui explique tout le texte
+  utm: 6, // base d'un candidat UTM : son motif (zone, bande, 6-7 chiffres, 7 chiffres) est très peu ambigu
+  altGap: 1, // une autre lecture à moins de 1 point du meilleur est proposée à l'utilisateur...
+  altDist: 50 // ... si elle est à plus de 50 m de celui-ci et des autres propositions
+};
+
+// Pénalités des lectures d'un groupe (interpretGroup) : plus la correction supposée est hasardeuse, plus elle coûte
+var PEN = {
+  ddShort: 1.5, // DD à 1 ou 2 décimales : position à 1 km près au mieux
+  ddInt: 5, // degrés entiers seuls : presque sûrement une valeur tronquée, à n'utiliser qu'en dernier recours
+  nmea: 1, // degrés et minutes collés (4512.345) : format réel de certains GPS, ° simplement absent
+  degAsZero: 3, // 45012.345 lu comme 45°12.345 : le 0 est un ° mal lu par l'OCR, correction plus risquée
+  dmmFix: 0.5 // DMM : par symbole mal lu ou minutes à moins de 3 décimales
+};
+
+// Constantes de l'ellipsoïde WGS84 et de la projection UTM
+var WGS84_A = 6378137, // demi-grand axe (m)
+  WGS84_F = 1 / 298.257223563, // aplatissement
+  UTM_K0 = 0.9996; // facteur d'échelle au méridien central
+
 var ALPES = { la0: 43.0, la1: 48.6, lo0: 4.0, lo1: 17.0 };
 var FRANCE = { la0: 41.0, la1: 51.6, lo0: -5.6, lo1: 10.0 };
+// Boîtes lat / lon approximatives
 function inBox(b, lat, lon) {
   return lat >= b.la0 && lat <= b.la1 && lon >= b.lo0 && lon <= b.lo1;
 }
@@ -9,6 +92,11 @@ export function inRegion(lat, lon) {
   return inBox(ALPES, lat, lon) || inBox(FRANCE, lat, lon);
 }
 
+/**
+ * Texte unifié pour l'analyse : guillemets et symboles de degré ramenés à ' " °, erreurs courantes de l'OCR corrigées.
+ * @param {string} t
+ * @returns {string}
+ */
 export function normalize(t) {
   t = t.normalize('NFKC');
   t = t.replace(/[′’‘´`ʹʼ]/g, "'");
@@ -20,9 +108,9 @@ export function normalize(t) {
   t = t.replace(/(^|[^A-Za-z0-9.,])[oO]{1,2}(?=\d)/g, function (m, p) {
     return p + m.slice(p.length).replace(/[oO]/g, '0');
   });
-  // o / O colle entre un nombre de 1 a 3 chiffres et des minutes : symbole degre mal lu
+  // o / O collé entre un nombre de 1 à 3 chiffres et des minutes : symbole degré mal lu
   t = t.replace(/(^|[^\d.,])(\d{1,3})[oO](?=\s?\d{1,2}(?:[.,][\dOo]|\s*'|\s+\d))/g, '$1$2°');
-  // O / o / l / I / | colles a des chiffres : chiffres mal lus
+  // O / o / l / I / | collés à des chiffres : chiffres mal lus (plusieurs passes : un remplacement peut en rendre possible un autre juste à côté)
   for (var i = 0; i < 3; i++) {
     t = t.replace(/(\d)[oO](?=[\d.,°'"])/g, '$10').replace(/([\d.,])[oO](?=\d)/g, '$10');
     t = t.replace(/(\d)[lI|](?=[\d.,])/g, '$11').replace(/([\d.,])[lI|](?=\d)/g, '$11');
@@ -30,8 +118,11 @@ export function normalize(t) {
   return t;
 }
 
-// Tokenisation : nombres, symboles d'unite, lettres d'hemisphere, mots (coupent les sequences)
+// Tokenisation : nombres, symboles d'unité, lettres d'hémisphère, mots (coupent les séquences).
+// Mots-clés (lat, lon, gps...) et ponctuation neutre ignorés. Retourne des Token, symboles déjà rattachés aux nombres.
 function tokenize(t) {
+  // si le texte contient un point décimal, une virgule entre chiffres sépare deux valeurs (45.1,6.2) ;
+  // sinon c'est une virgule décimale (45,1 6,2)
   var dotDecimal = /\d\.\d/.test(t);
   var toks = [],
     re = /(-?)(\d+(?:[.,]\d+)?)|([°'"])|([A-Za-zÀ-ÿ]+)|(\S)/g,
@@ -43,7 +134,7 @@ function tokenize(t) {
       var raw = m[2];
       if (raw.indexOf(',') >= 0) {
         if (dotDecimal) {
-          // virgule = separateur : couper
+          // virgule = séparateur : couper
           var parts = raw.split(',');
           toks.push({ k: 'num', raw: parts[0], neg: !!m[1], s: s, e: s + m[1].length + parts[0].length });
           re.lastIndex = s + m[1].length + parts[0].length + 1;
@@ -68,7 +159,7 @@ function tokenize(t) {
       else toks.push({ k: 'word', s: s, e: e });
     } else {
       var c = m[5];
-      if (/[,;/\s:()[\]=@&?#+_|!.~*-]/.test(c)) continue; // separateurs neutres
+      if (/[,;/\s:()[\]=@&?#+_|!.~*-]/.test(c)) continue; // séparateurs neutres
       toks.push({ k: 'word', s: s, e: e });
     }
   }
@@ -94,6 +185,7 @@ function tokenize(t) {
   });
 }
 
+// Séquences d'éléments consécutifs sans mot inconnu entre eux : seules ces séquences peuvent former une position
 function runs(toks) {
   var out = [],
     cur = [];
@@ -111,7 +203,7 @@ function isInt(raw) {
   return raw.indexOf('.') < 0;
 }
 
-// Interpretations possibles d'un groupe de nombres pour un axe donne (max 90 ou 180)
+// Lectures possibles (Reading[]) d'un groupe de 1 à 3 nombres pour un axe (max : 90 pour la latitude, 180 pour la longitude)
 function interpretGroup(nums, max) {
   var c = [],
     n = nums.length;
@@ -122,6 +214,7 @@ function interpretGroup(nums, max) {
     return x.sym || '';
   });
   if (n === 1) {
+    // un seul nombre : DD (45.123456), NMEA (4507.4074) ou DMM dont le ° est lu comme un 0 (45007.4074 pour 45°07.4074)
     var raw = nums[0].raw,
       ip = raw.split('.')[0],
       fr = raw.indexOf('.') >= 0 ? '.' + raw.split('.')[1] : '';
@@ -129,42 +222,55 @@ function interpretGroup(nums, max) {
       var dec = fr.length - 1;
       if (dec >= 3) c.push({ val: v[0], fmt: 'DD', pen: 0 });
       else if (dec >= 1)
-        c.push({ val: v[0], fmt: 'DD', pen: 1.5, fix: 'seulement ' + dec + ' décimale(s), position imprécise' });
-      else c.push({ val: v[0], fmt: 'DD', pen: 5, fix: 'degrés entiers sans minutes, valeur probablement tronquée' });
+        c.push({
+          val: v[0],
+          fmt: 'DD',
+          pen: PEN.ddShort,
+          fix: 'seulement ' + dec + ' décimale(s), position imprécise'
+        });
+      else
+        c.push({
+          val: v[0],
+          fmt: 'DD',
+          pen: PEN.ddInt,
+          fix: 'degrés entiers sans minutes, valeur probablement tronquée'
+        });
     }
     if (ip.length >= 3 && !syms[0]) {
       var d = parseInt(ip.slice(0, -2), 10),
         mn = parseFloat(ip.slice(-2) + fr);
       if (d <= max && mn < 60)
-        c.push({ val: d + mn / 60, fmt: 'NMEA', pen: 1, fix: 'degrés et minutes collés (symbole ° absent ?)' });
+        c.push({ val: d + mn / 60, fmt: 'NMEA', pen: PEN.nmea, fix: 'degrés et minutes collés (symbole ° absent ?)' });
     }
     if (ip.length >= 4 && ip.charAt(ip.length - 3) === '0') {
       var d2 = parseInt(ip.slice(0, -3), 10),
         mn2 = parseFloat(ip.slice(-2) + fr);
       if (d2 <= max && mn2 < 60)
-        c.push({ val: d2 + mn2 / 60, fmt: 'DMM', pen: 3, fix: 'symbole ° probablement lu comme un 0' });
+        c.push({ val: d2 + mn2 / 60, fmt: 'DMM', pen: PEN.degAsZero, fix: 'symbole ° probablement lu comme un 0' });
     }
   } else if (n === 2) {
+    // deux nombres : degrés entiers et minutes décimales (DMM)
     if (isInt(nums[0].raw) && v[0] <= max && v[1] < 60) {
       var fixes = [],
         pn = 0,
         md = nums[1].raw.indexOf('.') >= 0 ? nums[1].raw.split('.')[1].length : 0;
       if (syms[0] === "'") {
         fixes.push('symbole ° lu comme une apostrophe');
-        pn += 0.5;
+        pn += PEN.dmmFix;
       }
       // ° suivi de minutes décimales puis " : apostrophe lue comme guillemets, sans ambiguïté
       if (syms[1] === '"' && !(syms[0] === '\u00B0' && md >= 3)) {
         fixes.push('symbole des minutes lu comme des guillemets');
-        pn += 0.5;
+        pn += PEN.dmmFix;
       }
       if (md < 3) {
         fixes.push('minutes à ' + md + ' décimale(s) seulement, chiffre manquant ?');
-        pn += 0.5;
+        pn += PEN.dmmFix;
       }
       c.push({ val: v[0] + v[1] / 60, fmt: 'DMM', pen: pn, fix: fixes.join(', ') || undefined });
     }
   } else if (n === 3) {
+    // trois nombres : degrés, minutes entières, secondes (DMS)
     if (isInt(nums[0].raw) && isInt(nums[1].raw) && v[0] <= max && v[1] < 60 && v[2] < 60)
       c.push({ val: v[0] + v[1] / 60 + v[2] / 3600, fmt: 'DMS', pen: 0 });
   }
@@ -175,8 +281,8 @@ function interpretGroup(nums, max) {
   return c;
 }
 
+// Suite de nombres sans hémisphère : indices où la couper en deux groupes (au second °, et au milieu si pair)
 function splitNums(nums) {
-  // decoupe une suite de nombres sans hemisphere en deux groupes
   var res = [],
     degIdx = [];
   nums.forEach(function (x, i) {
@@ -189,6 +295,10 @@ function splitNums(nums) {
   });
 }
 
+// Candidats d'une fenêtre win (sous-suite d'une séquence). prev / next : éléments qui l'encadrent dans la séquence.
+// Avec hémisphères : exactement deux, tous deux devant (N 45 E 6) ou tous deux derrière (45 N 6 E) leurs nombres ;
+// une fenêtre qui couperait un groupe en deux sur la même ligne est refusée. Sans hémisphère : splitNums, puis
+// les deux ordres (lat, lon) et (lon, lat), le second pénalisé.
 function candidatesFromWindow(win, prev, next) {
   var hemis = win.filter(function (t) {
     return t.k === 'hemi';
@@ -261,18 +371,19 @@ function candidatesFromWindow(win, prev, next) {
   return out;
 }
 
+// Candidate noté à partir des lectures la (latitude) et lo (longitude). Barème : SCORE et PEN, en tête du fichier.
 function build(lat, lon, la, lo, hemi, swapped, win) {
   var score = 0,
     notes = [];
-  if (hemi) score += 3;
-  score += Math.min(4, la.syms + lo.syms) * 0.75;
-  if (la.fmt === lo.fmt) score += 1;
+  if (hemi) score += SCORE.hemi;
+  score += Math.min(SCORE.symMax, la.syms + lo.syms) * SCORE.sym;
+  if (la.fmt === lo.fmt) score += SCORE.sameFmt;
   score -= la.pen + lo.pen;
-  if (inBox(ALPES, lat, lon)) score += 4;
-  else if (inBox(FRANCE, lat, lon)) score += 2;
+  if (inBox(ALPES, lat, lon)) score += SCORE.alpes;
+  else if (inBox(FRANCE, lat, lon)) score += SCORE.france;
   else notes.push({ lvl: 'warn', t: 'Position hors de France métropolitaine : vérifier la lecture.' });
   if (swapped) {
-    score -= 1.5;
+    score -= SCORE.swapped;
     notes.push({ lvl: 'warn', t: "Latitude et longitude saisies dans l'ordre inverse : remises dans l'ordre." });
   }
   if (la.fix) notes.push({ lvl: 'warn', t: 'Latitude : ' + la.fix + ' (vérifier sur la photo).' });
@@ -295,10 +406,11 @@ function build(lat, lon, la, lo, hemi, swapped, win) {
 }
 
 // ---------- UTM ----------
+// UTM -> lat / lon (développement en série classique, Snyder). band : lettre de bande, < N au sud.
 function utmToLatLon(zone, band, E, N) {
-  var a = 6378137,
-    f = 1 / 298.257223563,
-    k0 = 0.9996,
+  var a = WGS84_A,
+    f = WGS84_F,
+    k0 = UTM_K0,
     e2 = f * (2 - f),
     ep2 = e2 / (1 - e2);
   var x = E - 500000,
@@ -334,6 +446,7 @@ function utmToLatLon(zone, band, E, N) {
   return { lat: (lat * 180) / Math.PI, lon: (zone - 1) * 6 - 180 + 3 + (lon * 180) / Math.PI };
 }
 
+// Candidats UTM : « 32T 274729 5009234 », avec ou sans E / N / m entre les valeurs
 function parseUTM(t) {
   var re =
       /(?:^|[^\dA-Za-z])(\d{1,2})\s?([C-HJ-NP-X])(?![A-Za-z])\s*(?:E\s*:?\s*)?(\d{6,7})(?:[.,]\d+)?\s*(?:m\b\s*)?(?:E\b\s*)?(?:N\s*:?\s*)?(\d{7})(?:[.,]\d+)?/g,
@@ -345,9 +458,9 @@ function parseUTM(t) {
     var ll = utmToLatLon(zone, m[2].toUpperCase(), +m[3], +m[4]);
     if (Math.abs(ll.lat) > 84) continue;
     var notes = [],
-      score = 6;
-    if (inBox(ALPES, ll.lat, ll.lon)) score += 4;
-    else if (inBox(FRANCE, ll.lat, ll.lon)) score += 2;
+      score = SCORE.utm;
+    if (inBox(ALPES, ll.lat, ll.lon)) score += SCORE.alpes;
+    else if (inBox(FRANCE, ll.lat, ll.lon)) score += SCORE.france;
     else notes.push({ lvl: 'warn', t: 'Position hors de France métropolitaine : vérifier la zone UTM.' });
     var off = m[0].search(/\d/);
     out.push({
@@ -364,6 +477,11 @@ function parseUTM(t) {
   return out;
 }
 
+/**
+ * Position la plus probable dans un texte, avec les autres lectures plausibles.
+ * @param {string} text
+ * @returns {ParseResult}
+ */
 export function parse(text) {
   if (!text || !text.trim()) return { ok: false, empty: true };
   var t = normalize(text);
@@ -380,7 +498,7 @@ export function parse(text) {
             win.filter(function (x) {
               return x.k === 'num';
             }).length;
-          c.score -= unused * 1.2;
+          c.score -= unused * SCORE.unusedNum;
           cands.push(c);
         });
       }
@@ -396,10 +514,10 @@ export function parse(text) {
   var alts = [];
   cands.slice(1).forEach(function (c) {
     if (
-      c.score >= best.score - 1 &&
-      distM(best, c) > 50 &&
+      c.score >= best.score - SCORE.altGap &&
+      distM(best, c) > SCORE.altDist &&
       alts.every(function (a) {
-        return distM(a, c) > 50;
+        return distM(a, c) > SCORE.altDist;
       })
     )
       alts.push(c);
@@ -417,6 +535,12 @@ export function parse(text) {
   return { ok: true, best: best, alts: alts.slice(0, 2), conf: conf, norm: t };
 }
 
+/**
+ * Distance en mètres sur la sphère (haversine, rayon moyen de la Terre).
+ * @param {{lat: number, lon: number}} a
+ * @param {{lat: number, lon: number}} b
+ * @returns {number}
+ */
 export function distM(a, b) {
   var R = 6371008.8,
     r = Math.PI / 180,
@@ -427,6 +551,12 @@ export function distM(a, b) {
     Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
   return 2 * R * Math.asin(Math.sqrt(h));
 }
+/**
+ * Cap initial de a vers b, en degrés depuis le nord géographique (0 à 360).
+ * @param {{lat: number, lon: number}} a
+ * @param {{lat: number, lon: number}} b
+ * @returns {number}
+ */
 export function bearing(a, b) {
   var r = Math.PI / 180,
     y = Math.sin((b.lon - a.lon) * r) * Math.cos(b.lat * r);
@@ -440,6 +570,9 @@ function pad(n, w) {
   while (s.length < w) s = '0' + s;
   return s;
 }
+// ---------- Sortie dans les autres formats ----------
+// v : degrés décimaux ; isLat : latitude (N / S, degrés sur 2 chiffres) ou longitude (E / O, sur 3)
+/** « N 45°12.345' » @param {number} v @param {boolean} isLat @returns {string} */
 export function toDMM(v, isLat) {
   var h = isLat ? (v < 0 ? 'S' : 'N') : v < 0 ? 'O' : 'E',
     a = Math.abs(v),
@@ -451,6 +584,7 @@ export function toDMM(v, isLat) {
   }
   return h + ' ' + pad(d, isLat ? 2 : 3) + '°' + pad(m.toFixed(3), 6) + "'";
 }
+/** « N 45°12'20.7" » @param {number} v @param {boolean} isLat @returns {string} */
 export function toDMS(v, isLat) {
   var h = isLat ? (v < 0 ? 'S' : 'N') : v < 0 ? 'O' : 'E',
     a = Math.abs(v),
@@ -468,11 +602,17 @@ export function toDMS(v, isLat) {
   }
   return h + ' ' + pad(d, isLat ? 2 : 3) + '°' + pad(m, 2) + "'" + pad(s.toFixed(1), 4) + '"';
 }
+/**
+ * « 32T 274729 5009234 » : zone et bande, est et nord en mètres (zones standard, sans les exceptions Norvège / Svalbard).
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {string}
+ */
 export function toUTM(lat, lon) {
   var zone = Math.floor((lon + 180) / 6) + 1,
-    a = 6378137,
-    f = 1 / 298.257223563,
-    k0 = 0.9996,
+    a = WGS84_A,
+    f = WGS84_F,
+    k0 = UTM_K0,
     e2 = f * (2 - f),
     ep2 = e2 / (1 - e2),
     r = Math.PI / 180;

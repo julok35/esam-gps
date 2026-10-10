@@ -29,6 +29,9 @@ var TOL = 0.00002; // deux lectures à moins de ~2 m sur un axe votent ensemble
 
 // base : photo telle que prise (aux quarts de tour près) ; work : la même redressée de angle degrés, refaite à la demande
 // zone : la zone lue, agrandie et contrastée, gardée pour vérifier le résultat d'un coup d'œil
+// gen : numéro de la photo, incrémenté à chaque nouvelle photo ou quart de tour (une lecture en cours se sait périmée)
+// sel : cadre de lecture, en fractions (0 à 1) de la photo affichée ; cv, stage, selEl : canevas, zone tactile, cadre
+// drag : geste en cours (voir initCrop) ; ocrWorker : promesse du worker Tesseract ; progCb : suivi de chargement
 var base = null,
   angle = 0,
   work = null,
@@ -44,9 +47,9 @@ var base = null,
 // Vue de la photo : zoom z (1 = photo entière) et décalage en pixels de l'écran ; doigts posés sur la photo
 var view = { z: 1, tx: 0, ty: 0 },
   ptrs = new Map();
-var ZMAX = 8,
-  MIN_SIDE = 0.02,
-  DEAD = 8; // zoom maximal, plus petit côté du cadre, mouvement ignoré (px) avant de bouger quoi que ce soit
+var ZMAX = 8, // zoom maximal
+  MIN_SIDE = 0.02, // plus petit côté du cadre (fraction de la photo)
+  DEAD = 8; // mouvement ignoré (px) avant de bouger quoi que ce soit
 
 function loadFile(file) {
   if (!file) return;
@@ -605,7 +608,10 @@ function setProg(t, f) {
   $('progBar').style.width = Math.round((f || 0) * 100) + '%';
 }
 
-// Vote séparé sur la latitude et la longitude ; les valeurs à moins de TOL degré l'une de l'autre votent ensemble
+// ---------- Vote entre lectures ----------
+// Chaque lecture (passe de PASSES) vote séparément pour sa latitude et sa longitude : une lecture qui rate la latitude
+// peut encore confirmer la longitude. Groupe de vote : { v : valeur retenue, w : poids cumulé, n : nombre de lectures,
+// runs : indices des lectures, vals : poids par valeur exacte }. Les valeurs à moins de TOL degré votent ensemble.
 function addVote(list, v, w, idx) {
   var o = null;
   for (var i = 0; i < list.length; i++)
@@ -627,6 +633,8 @@ function addVote(list, v, w, idx) {
     return o.vals[b] - o.vals[a];
   })[0];
 }
+// runs : [{ txt, p : résultat de parse() }]. Une lecture hors zone d'intervention ne vote pas ; une lecture avec
+// avertissements vote pour 0,6. Retour : pour chaque axe, le groupe en tête (best) et son suivant (second), par poids.
 export function votes(runs) {
   var V = { lat: [], lon: [] };
   runs.forEach(function (r, idx) {
@@ -645,6 +653,7 @@ export function votes(runs) {
   };
   return { lat: win(V.lat), lon: win(V.lon) };
 }
+// Axe confirmé : au moins NEED lectures d'accord, et 2 de plus que la valeur concurrente
 export function firm(x) {
   return x.best && x.best.n >= NEED && (!x.second || x.second.n <= x.best.n - 2);
 }
