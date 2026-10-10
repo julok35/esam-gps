@@ -4,6 +4,15 @@
   "description": "Convertisseur de coordonnées GPS de l'ESAM (site statique, sans build).",
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "lint": "eslint .",
+    "format": "prettier --write \"js/**/*.js\" sw.js \"test/**/*.js\" eslint.config.js",
+    "format:check": "prettier --check \"js/**/*.js\" sw.js \"test/**/*.js\" eslint.config.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.0.1",
+    "globals": "17.13.0",
+    "prettier": "3.9.10"
   }
 }

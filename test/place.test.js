@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { nearby, kindOf, fmtDelta } from '../js/place.js';
 
-const P = { lat: 45.1000, lon: 6.0000 };
+const P = { lat: 45.1, lon: 6.0 };
 
 test('sortes de lieux reconnues', () => {
   assert.equal(kindOf({ natural: 'peak' }), 'sommet');
@@ -17,14 +17,24 @@ test('sortes de lieux reconnues', () => {
 
 test('tri par distance, lac mesuré au bord, doublon gardé au plus proche', () => {
   const els = [
-    { type: 'node', lat: 45.1100, lon: 6.0000, tags: { name: 'Pic Loin', natural: 'peak' } },
-    { type: 'node', lat: 45.1010, lon: 6.0000, tags: { name: 'Col du Test', natural: 'saddle' } },
-    { type: 'node', lat: 45.1005, lon: 6.0000, tags: { name: 'Col du Test', mountain_pass: 'yes' } },
-    { type: 'way', tags: { name: 'Lac Rond', natural: 'water' }, geometry: [{ lat: 45.0980, lon: 6.0000 }, { lat: 45.0900, lon: 6.0000 }] },
-    { type: 'node', lat: 45.1001, lon: 6.0001, tags: { name: 'Banc', amenity: 'bench' } },
+    { type: 'node', lat: 45.11, lon: 6.0, tags: { name: 'Pic Loin', natural: 'peak' } },
+    { type: 'node', lat: 45.101, lon: 6.0, tags: { name: 'Col du Test', natural: 'saddle' } },
+    { type: 'node', lat: 45.1005, lon: 6.0, tags: { name: 'Col du Test', mountain_pass: 'yes' } },
+    {
+      type: 'way',
+      tags: { name: 'Lac Rond', natural: 'water' },
+      geometry: [
+        { lat: 45.098, lon: 6.0 },
+        { lat: 45.09, lon: 6.0 }
+      ]
+    },
+    { type: 'node', lat: 45.1001, lon: 6.0001, tags: { name: 'Banc', amenity: 'bench' } }
   ];
   const r = nearby(els, P, 3);
-  assert.deepEqual(r.map((x) => x.name), ['Col du Test', 'Lac Rond', 'Pic Loin']);
+  assert.deepEqual(
+    r.map((x) => x.name),
+    ['Col du Test', 'Lac Rond', 'Pic Loin']
+  );
   assert.ok(Math.abs(r[0].d - 55.6) < 2, 'col à ~56 m');
   assert.ok(Math.abs(r[1].d - 222) < 3, 'lac mesuré au bord le plus proche');
   assert.ok(Math.abs(r[0].b - 180) < 1, 'le point est au sud du col');
