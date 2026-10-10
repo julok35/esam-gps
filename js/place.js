@@ -105,7 +105,10 @@ function overpassQuery(p) {
 }
 export function lieux(p) {
   return once('osm', p, function () {
-    return getJSON('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(overpassQuery(p)), 15000).then(function (j) { return nearby(j && j.elements, p, 3); });
+    var q = '/api/interpreter?data=' + encodeURIComponent(overpassQuery(p));
+    // serveur principal souvent chargé : un second serveur en secours
+    return getJSON('https://overpass-api.de' + q, 12000).catch(function () { return getJSON('https://overpass.kumi.systems' + q, 15000); })
+      .then(function (j) { if (!j || !j.elements) throw new Error('réponse vide'); return nearby(j.elements, p, 3); });
   });
 }
 
@@ -126,6 +129,7 @@ function paint(c) {
   if (near && near.length) h += '<ul class="near">' + near.map(function (n) { return '<li><b>' + esc(n.name) + '</b> <small>' + n.kind + ' · ' + where(n) + '</small></li>'; }).join('') + '</ul>';
   else if (pending('osm', c)) h += '<div class="wait">Lieux proches…</div>';
   else if (near) h += '<div class="wait">Aucun lieu nommé à moins de 2 km</div>';
+  else if (navigator.onLine) h += '<div class="wait">Lieux proches : service OpenStreetMap indisponible pour l\'instant</div>';
   box.innerHTML = h;
 }
 

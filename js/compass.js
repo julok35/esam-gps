@@ -46,29 +46,41 @@ function onOri(e) {
   var x = Math.cos(h * R), y = Math.sin(h * R);
   if (sx === null) { sx = x; sy = y; } else { sx += (x - sx) * 0.25; sy += (y - sy) * 0.25; }
   head = (Math.atan2(sy, sx) / R + 360) % 360;
-  if (waitT) { clearTimeout(waitT); waitT = 0; msg(''); }
+  if (waitT || !$('cmpAsk').hidden) { clearTimeout(waitT); waitT = 0; msg(''); $('cmpAsk').hidden = true; }
   $('cmp').hidden = false;
   if (!raf) raf = requestAnimationFrame(draw);
 }
 
-function needsAsk() { return typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function' && !granted; }
+function canAsk() { return typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'; }
+var IOS = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+var MOBILE = IOS || (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent));
+var BRAVE = typeof navigator !== 'undefined' && !!navigator.brave;
 
+// Où redonner l'accès aux capteurs, selon le téléphone et le navigateur
+function blockedMsg() {
+  if (IOS) return 'Accès aux capteurs refusé. Fermez complètement Safari (ou l\'appli GPS ESAM) puis rouvrez-la, touchez « Activer » et choisissez « Autoriser ». Sinon : Réglages › Safari › Mouvement et orientation.';
+  if (BRAVE) return 'Brave bloque les capteurs de mouvement. Touchez l\'icône à gauche de l\'adresse › Paramètres du site › Capteurs de mouvement › Autoriser, puis rechargez. Si ça ne suffit pas : lion Brave › Boucliers désactivés pour ce site.';
+  return 'Capteurs de mouvement bloqués. Touchez l\'icône à gauche de l\'adresse › Paramètres du site › Capteurs de mouvement › Autoriser, puis rechargez la page.';
+}
+function noHeadingMsg() {
+  return IOS ? 'Le téléphone ne donne pas de cap boussole. Faites un 8 avec le téléphone pour la calibrer, et vérifiez Réglages › Confidentialité › Service de localisation › Services système › Étalonnage du compas.'
+    : 'Le téléphone ne donne pas de cap boussole. Faites un 8 avec le téléphone pour calibrer le compas, puis rechargez la page.';
+}
+
+// Écoute directe ; le bouton n'apparaît que si aucun cap n'arrive (iOS avant autorisation, Brave, capteurs bloqués)
 function start() {
   if (on) return;
-  if (needsAsk()) { $('cmpAsk').hidden = false; return; }
   on = true; seen = 0;
   // les deux : Android donne le cap dans « absolute », iOS dans l'autre ; onOri ignore les mesures sans nord
   window.addEventListener('deviceorientationabsolute', onOri); window.addEventListener('deviceorientation', onOri);
-  // autorisation donnée mais aucun cap reçu : le dire au lieu de ne rien afficher
-  if (asked && head === null) {
-    msg('Boussole activée : bougez le téléphone…');
-    clearTimeout(waitT);
-    waitT = setTimeout(function () {
-      waitT = 0;
-      if (head === null && on) msg(seen ? 'Le téléphone ne donne pas de cap boussole. Faites un 8 avec le téléphone pour la calibrer, et vérifiez Réglages › Confidentialité › Service de localisation › Services système › Étalonnage du compas.'
-        : 'Aucune mesure du capteur d\'orientation. Vérifiez Réglages › Safari › Mouvement et orientation, puis rechargez la page.');
-    }, 4000);
-  }
+  clearTimeout(waitT);
+  if (asked) msg('Boussole activée : bougez le téléphone…');
+  waitT = setTimeout(function () {
+    waitT = 0;
+    if (head !== null || !on) return;
+    if (asked) msg(seen ? noHeadingMsg() : blockedMsg());
+    else if (MOBILE) $('cmpAsk').hidden = false;
+  }, asked ? 4000 : 1500);
 }
 function stop() {
   $('cmpAsk').hidden = true;
@@ -123,12 +135,15 @@ export function initCompass() {
   $('cmpAsk').addEventListener('click', function () {
     var p;
     asked = true;
+    if (!canAsk()) { msg(blockedMsg()); return; } // pas de fenêtre d'autorisation : dire où débloquer
     try { p = DeviceOrientationEvent.requestPermission(); } catch (err) { p = Promise.reject(err); }
     msg('Demande d\'autorisation…');
     Promise.resolve(p).then(function (r) {
-      if (r === 'granted') { granted = true; $('cmpAsk').hidden = true; updateCompass(); return; }
-      // iOS garde le refus jusqu'à la fermeture de l'appli : pas de nouvelle fenêtre en touchant encore
-      msg('Accès aux capteurs refusé. Fermez complètement Safari (ou l\'appli GPS ESAM) puis rouvrez-la, touchez « Activer » et choisissez « Autoriser ».');
+      // refus : iOS le garde jusqu'à la fermeture de l'appli, Brave suit le réglage du site
+      if (r !== 'granted') { msg(blockedMsg()); return; }
+      granted = true; $('cmpAsk').hidden = true;
+      if (on) stop();
+      updateCompass();
     }, function (err) {
       msg('Boussole indisponible : ' + ((err && err.message) || 'erreur du navigateur') + '.');
     });
