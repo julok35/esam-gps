@@ -1,7 +1,7 @@
 /* Service worker GPS ESAM : appli en cache, moteur de lecture gardé une fois téléchargé, tuiles de carte gardées une fois vues. */
-var V = 'esam-gps-v1.11', TILES = 'esam-tiles', LIBS = 'esam-libs';
+var V = 'esam-gps-v1.12', TILES = 'esam-tiles', LIBS = 'esam-libs';
 var SHELL = ['./', 'index.html', 'app.css', 'manifest.webmanifest', 'logo.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png',
-  'js/app.js', 'js/parser.js', 'js/util.js', 'js/map.js', 'js/share.js', 'js/history.js', 'js/ocr.js', 'js/fix.js',
+  'js/app.js', 'js/parser.js', 'js/util.js', 'js/map.js', 'js/share.js', 'js/history.js', 'js/ocr.js', 'js/skew.js', 'js/fix.js',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/leaflet/images/layers.png', 'vendor/leaflet/images/layers-2x.png',
   'vendor/qrcode/qrcode.js', 'vendor/tesseract/tesseract.min.js', 'vendor/tesseract/worker.min.js',
   'vendor/fonts/fonts.css', 'vendor/fonts/anton-latin.woff2', 'vendor/fonts/anton-latin-ext.woff2', 'vendor/fonts/montserrat-latin.woff2',
