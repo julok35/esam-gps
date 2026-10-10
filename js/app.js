@@ -1,10 +1,11 @@
 /* GPS ESAM : point d'entrée. Lecture du texte, affichage du résultat, liens, événements. */
-import { $, esc, f6, copy, state } from './util.js';
+import { $, esc, f6, copy, state, VERSION } from './util.js';
 import { parse, toDMM, toDMS, toUTM } from './parser.js';
 import { initMap, updateMap, startGeo } from './map.js';
 import { initShare, drawQR } from './share.js';
 import { loadHist, drawHist, scheduleHist, flushHist, cancelHist } from './history.js';
 import { initOcr } from './ocr.js';
+import { initFix, openFix, closeFix } from './fix.js';
 
 var src = $('src'), out = $('result');
 var chosen = 0, lastParse = null, sayTimer = null;
@@ -22,6 +23,7 @@ function pilotDM(v) {
 
 function render() {
   var r = lastParse;
+  closeFix();
   if (!r || !r.ok) {
     state.current = null;
     cancelHist();
@@ -38,7 +40,7 @@ function render() {
   state.current = c;
   var warn = c.notes.length || r.alts.length;
   var la = f6(c.lat), lo = f6(c.lon);
-  var h = '<div class="status"><span class="pill ' + (warn ? 'check">À vérifier' : 'ok">Lecture fiable') + '</span><span class="pill fmt">' + esc(c.fmt) + '</span>' + (r.agree && chosen === 0 ? '<span class="pill fmt">' + r.agree + ' lectures</span>' : '') + '</div>';
+  var h = '<div class="status"><span class="pill ' + (warn ? 'check">À vérifier' : 'ok">Lecture fiable') + '</span><span class="pill fmt">' + esc(c.fmt) + '</span>' + (r.agree && chosen === 0 ? '<span class="pill fmt">' + r.agree + ' lectures</span>' : '') + '<button class="chip fixbtn" type="button" data-fix="1">Corriger</button></div>';
   h += '<div class="big1">' + la + ', ' + lo + '</div>';
   h += '<div class="seg1">Lu : ' + esc(c.seg) + '</div>';
   // DJI Pilot 2 : longitude d'abord, puis latitude
@@ -66,8 +68,8 @@ function render() {
   out.className = 'result'; out.innerHTML = h;
 
   $('eq').innerHTML =
-    '<tr><th>DMM</th><td>' + esc(toDMM(c.lat, true)) + '&nbsp;&nbsp;' + esc(toDMM(c.lon, false)) + '</td></tr>' +
-    '<tr><th>DMS</th><td>' + esc(toDMS(c.lat, true)) + '&nbsp;&nbsp;' + esc(toDMS(c.lon, false)) + '</td></tr>' +
+    '<tr><th>DMM</th><td>' + esc(toDMM(c.lat, true)) + '<br>' + esc(toDMM(c.lon, false)) + '</td></tr>' +
+    '<tr><th>DMS</th><td>' + esc(toDMS(c.lat, true)) + '<br>' + esc(toDMS(c.lon, false)) + '</td></tr>' +
     '<tr><th>UTM</th><td>' + esc(toUTM(c.lat, c.lon)) + '</td></tr>';
   $('eqCard').hidden = false; $('shareCard').hidden = false;
   drawQR();
@@ -103,6 +105,7 @@ document.addEventListener('click', function (e) {
   }
   var t = e.target.closest('button'); if (!t) return;
   if (t.dataset.copy) { copy(t.dataset.copy, t); useCurrent(); }
+  else if (t.dataset.fix) openFix(state.current);
   else if (t.dataset.alt) { chosen = +t.dataset.alt; render(); }
   else if (t.dataset.hist) { var x = loadHist()[+t.dataset.hist]; if (x) { src.value = x.src; update(); window.scrollTo({ top: 0 }); } }
 });
@@ -111,6 +114,8 @@ document.addEventListener('click', function (e) {
 initMap();
 initShare(useCurrent);
 initOcr(show);
+initFix(function (t) { src.value = t; update(); });
+$('ver').textContent = 'v' + VERSION;
 drawHist();
 var h0 = decodeURIComponent((location.hash || '').slice(1));
 if (/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(h0)) src.value = h0.replace(',', ', ');

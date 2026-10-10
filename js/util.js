@@ -1,4 +1,7 @@
 /* Petits outils partagés : DOM, échappement, formats, copie. */
+// Version affichée dans le bandeau ; doit suivre le cache V de sw.js (vérifié par les tests)
+export var VERSION = '1.11';
+
 export var $ = function (id) { return document.getElementById(id); };
 
 export function esc(s) {
