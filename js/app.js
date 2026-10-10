@@ -126,15 +126,17 @@ function render() {
   var cell = function (v, u) {
     return '<button class="pv" type="button" data-copy="' + v + '"><b>' + v + '</b><i>' + u + '</i></button>';
   };
-  $('pilot').innerHTML =
-    '<div class="pl">Longitude</div><div class="pr">' +
-    cell(PL.d, '°') +
-    cell(PL.m, "'") +
-    '</div>' +
-    '<div class="pl">Latitude</div><div class="pr">' +
-    cell(PA.d, '°') +
-    cell(PA.m, "'") +
-    '</div>';
+  var line = function (n, P) {
+    return (
+      '<div class="prow"><div class="pl">' +
+      n +
+      '</div><div class="pr">' +
+      cell(P.d, '°') +
+      cell(P.m, "'") +
+      '</div></div>'
+    );
+  };
+  $('pilot').innerHTML = line('1 · Longitude', PL) + line('2 · Latitude', PA);
   $('pilotCard').hidden = false;
 
   // ouvrir le point dans d'autres cartes

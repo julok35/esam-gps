@@ -150,13 +150,27 @@ footer { font-size: .76rem; color: var(--muted); text-align: center; }
 
 .leaflet-top, .leaflet-bottom { z-index: 900; }
 .result, #resCard, #cropBox, #zoneView, #fixCard, #mapCard { scroll-margin-top: 104px; }
-.pilot { background: var(--soft); border-radius: 10px; padding: 10px; display: grid; gap: 6px; }
-.pilot-h { font: 600 .78rem var(--f-label); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.pilot-h small { text-transform: none; letter-spacing: 0; font-weight: 500; }
-.pl { font: 600 .9rem var(--f-label); letter-spacing: .03em; }
-.pr { display: grid; grid-template-columns: 1fr 2.2fr; gap: 8px; }
-.pv { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 48px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; font: 700 1.25rem var(--f-body); font-variant-numeric: tabular-nums; }
-.pv i { font-style: normal; font-weight: 500; color: var(--muted); }
+/* Saisie DJI Pilot 2 : recopie à la main au soleil. Toute la largeur de l'écran, la moitié de sa hauteur,
+   noir sur blanc quel que soit le thème, chiffres aussi grands que la largeur le permet. */
+body { overflow-x: clip; } /* la tuile pleine largeur (100vw) ne doit pas faire défiler la page de côté */
+#pilotCard { --surface: #FFFFFF; --fg: #000000; --muted: #333333; --line: #000000; --ok: #0B5A26; --ok-bg: #D7F0DF;
+  margin-inline: calc(50% - 50vw); border-radius: 0; border-width: 3px 0; background: #FFFFFF; color: #000000; color-scheme: light; }
+#pilotCard > summary .ic { background: var(--jaune); }
+#pilotCard .tile-b { width: 100%; max-width: 1000px; margin-inline: auto; padding-inline: 10px; }
+/* hauteur : la moitié de l'écran, moins le titre et la consigne de la tuile */
+.pilot { container-type: inline-size; display: grid; align-content: space-evenly; gap: 10px; min-height: calc(50vh - 100px); min-height: calc(50svh - 100px); }
+.prow { display: grid; gap: 4px; min-width: 0; }
+.pl { font: 700 clamp(.95rem, 4.2vw, 1.3rem)/1.1 var(--f-label); letter-spacing: .12em; text-transform: uppercase; }
+/* téléphone en portrait : degrés puis minutes, chacun sur toute la largeur, « 59.9999' » tient sur une ligne */
+.pr { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.pv { display: flex; align-items: baseline; justify-content: center; min-width: 0; padding: .02em .14em; border-radius: 10px; border: 3px solid #000000; background: #FFFFFF; color: #000000; cursor: pointer;
+  font: 700 clamp(2rem, min(14vw, 8vh), 7rem)/1.1 var(--f-body); font-size: clamp(2rem, min(15cqi, 8vh), 7rem); font-variant-numeric: tabular-nums lining-nums; letter-spacing: -.01em; white-space: nowrap; }
+.pv i { font-style: normal; font-weight: 700; font-size: .62em; margin-left: .04em; }
+/* écran large ou à l'horizontale : degrés et minutes côte à côte, comme dans Pilot 2 */
+@container (min-width: 560px) {
+  .pr { grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
+  .pv { font-size: clamp(2rem, min(10.5cqi, 11vh), 7rem); }
+}
 .pv.done { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
 .cp { grid-template-columns: 1.4fr 1fr 1fr; }
 
