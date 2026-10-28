@@ -28,7 +28,8 @@ var AUTO_GAIN = 1.5; // Auto : inclinaison appliquée seulement si la mesure est
 var TOL = 0.00002; // deux lectures à moins de ~2 m sur un axe votent ensemble
 
 // base : photo telle que prise (aux quarts de tour près) ; work : la même redressée de angle degrés, refaite à la demande
-// zone : la zone lue, agrandie et contrastée, gardée pour vérifier le résultat d'un coup d'œil
+// zone : les coordonnées lues sur la photo (ou tout le cadre lu), agrandies et contrastées, gardées pour vérifier
+//        le résultat d'un coup d'œil
 // gen : numéro de la photo, incrémenté à chaque nouvelle photo ou quart de tour (une lecture en cours se sait périmée)
 // sel : cadre de lecture, en fractions (0 à 1) de la photo affichée ; cv, stage, selEl : canevas, zone tactile, cadre
 // drag : geste en cours (voir initCrop) ; ocrWorker : promesse du worker Tesseract ; progCb : suivi de chargement
@@ -435,9 +436,10 @@ function initCrop() {
   });
 }
 
-// Image préparée pour la lecture : cadre (box) de l'image img, agrandi vers targetW pixels, niveaux de gris étirés,
-// pad : marge blanche autour du texte, ex : élargissement du cadre
-function prepared(img, box, targetW, pad, ex) {
+// Géométrie d'une image préparée : cadre (box) de l'image img, élargi de ex, découpé en pixels (sx, sy, sw, sh),
+// agrandi k fois vers targetW pixels, puis entouré d'une marge blanche de m pixels si pad.
+// Sert à préparer l'image et, dans l'autre sens, à ramener sur la photo une position donnée par Tesseract.
+function cropGeom(img, box, targetW, pad, ex) {
   var e = ex || 0,
     x0 = Math.max(0, box.x - box.w * e),
     y0 = Math.max(0, box.y - box.h * e),
@@ -448,6 +450,17 @@ function prepared(img, box, targetW, pad, ex) {
     sw = Math.max(8, Math.round((x1 - x0) * img.width)),
     sh = Math.max(8, Math.round((y1 - y0) * img.height));
   var k = Math.max(1, Math.min(8, targetW / sw));
+  return { sx: sx, sy: sy, sw: sw, sh: sh, k: k, m: pad ? Math.round(Math.round(sh * k) / 4) : 0 };
+}
+// Image préparée pour la lecture : cadre (box) de l'image img, agrandi vers targetW pixels, niveaux de gris étirés,
+// pad : marge blanche autour du texte, ex : élargissement du cadre
+function prepared(img, box, targetW, pad, ex) {
+  var geo = cropGeom(img, box, targetW, pad, ex),
+    sx = geo.sx,
+    sy = geo.sy,
+    sw = geo.sw,
+    sh = geo.sh,
+    k = geo.k;
   var c = document.createElement('canvas');
   c.width = Math.round(sw * k);
   c.height = Math.round(sh * k);
@@ -482,7 +495,7 @@ function prepared(img, box, targetW, pad, ex) {
   }
   g.putImageData(d, 0, 0);
   if (!pad) return c;
-  var m = Math.round(c.height / 4),
+  var m = geo.m,
     o = document.createElement('canvas');
   o.width = c.width + 2 * m;
   o.height = c.height + 2 * m;
@@ -491,6 +504,85 @@ function prepared(img, box, targetW, pad, ex) {
   go.fillRect(0, 0, o.width, o.height);
   go.drawImage(c, m, m);
   return o;
+}
+
+// ---------- Où sont les coordonnées sur la photo ----------
+// lines : lignes renvoyées par Tesseract ({ text, bbox : { x0, y0, x1, y1 }, words : [{ text, bbox }] }) pour une
+// lecture ; lat, lon : valeurs retenues par le vote. Retour : rectangle (pixels de l'image lue) des mots qui portent
+// ces coordonnées, ou null si cette lecture ne les retrouve pas. Chaque fenêtre de 1 à 3 lignes consécutives est
+// analysée par parse() ; la première fenêtre qui redonne les valeurs retenues est rognée mot par mot à chaque bout
+// tant que l'analyse redonne les mêmes valeurs (le libellé « Coordonnées : » ou la colonne voisine sortent, les
+// lettres d'hémisphère restent). Sans DOM : testé sous Node (test/ocr-zone.test.js).
+export function coordBox(lines, lat, lon) {
+  var same = function (p) {
+    return p.ok && Math.abs(p.best.lat - lat) < 2 * TOL && Math.abs(p.best.lon - lon) < 2 * TOL;
+  };
+  var wordsOf = function (l, li) {
+    var ws = l.words && l.words.length ? l.words : [l];
+    return ws
+      .filter(function (w) {
+        return w.bbox && (w.text || '').trim();
+      })
+      .map(function (w) {
+        return { t: w.text.trim(), b: w.bbox, li: li };
+      });
+  };
+  var text = function (ws) {
+    var t = '';
+    ws.forEach(function (w, i) {
+      t += (i ? (w.li === ws[i - 1].li ? ' ' : '\n') : '') + w.t;
+    });
+    return t;
+  };
+  var hemi = function (w) {
+    return w && /^[NSEWO]$|^(nord|sud|est|ouest|north|south|east|west)$/i.test(w.t);
+  };
+  for (var n = 1; n <= 3; n++)
+    for (var i = 0; i + n <= lines.length; i++) {
+      var ws = [];
+      for (var j = i; j < i + n; j++) ws = ws.concat(wordsOf(lines[j], j));
+      if (!ws.length || !same(parse(text(ws)))) continue;
+      var a = 0,
+        b = ws.length;
+      while (b - a > 1 && same(parse(text(ws.slice(a + 1, b))))) a++;
+      while (b - a > 1 && same(parse(text(ws.slice(a, b - 1))))) b--;
+      if (hemi(ws[a - 1])) a--;
+      if (hemi(ws[b])) b++;
+      var r = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+      ws.slice(a, b).forEach(function (w) {
+        r.x0 = Math.min(r.x0, w.b.x0);
+        r.y0 = Math.min(r.y0, w.b.y0);
+        r.x1 = Math.max(r.x1, w.b.x1);
+        r.y1 = Math.max(r.y1, w.b.y1);
+      });
+      return r;
+    }
+  return null;
+}
+// Cadre (fractions de img) autour des coordonnées retenues, cherchées dans les lectures d'indices order (dans cet
+// ordre) ; null si aucune ne les situe. Le rectangle trouvé, en pixels de l'image préparée (geo), est ramené sur la
+// photo, puis entouré d'une marge proportionnelle à la hauteur du texte pour garder un peu de contexte.
+function coordZone(img, runs, order, lat, lon) {
+  for (var i = 0; i < order.length; i++) {
+    var r = runs[order[i]],
+      b = r.geo && r.lines ? coordBox(r.lines, lat, lon) : null;
+    if (!b) continue;
+    var g = r.geo,
+      x0 = g.sx + (b.x0 - g.m) / g.k,
+      y0 = g.sy + (b.y0 - g.m) / g.k,
+      x1 = g.sx + (b.x1 - g.m) / g.k,
+      y1 = g.sy + (b.y1 - g.m) / g.k,
+      h = Math.max(12, y1 - y0),
+      mx = 0.6 * h,
+      my = 0.7 * h;
+    x0 = clamp(x0 - mx, 0, img.width);
+    x1 = clamp(x1 + mx, 0, img.width);
+    y0 = clamp(y0 - my, 0, img.height);
+    y1 = clamp(y1 + my, 0, img.height);
+    if (x1 - x0 < 8 || y1 - y0 < 8) continue;
+    return { x: x0 / img.width, y: y0 / img.height, w: (x1 - x0) / img.width, h: (y1 - y0) / img.height };
+  }
+  return null;
 }
 
 // Zone lue pour l'œil : exactement le cadre lu, plus net (masque flou), contraste en S
@@ -540,12 +632,16 @@ export function clearZone() {
   $('cropBox').classList.remove('read');
   $('zoneView').hidden = true;
 }
-function showZone(z) {
+// z : image à montrer ; zoomed : recadrée sur les coordonnées (sinon tout le cadre lu)
+function showZone(z, zoomed) {
   zone = z;
   var c = $('zoneCv');
   c.width = z.width;
   c.height = z.height;
   c.getContext('2d').drawImage(z, 0, 0);
+  $('zoneLbl').textContent = zoomed
+    ? 'Coordonnées lues sur la photo, agrandies : comparez avec le résultat'
+    : 'Zone lue, contraste renforcé : comparez avec le résultat';
   $('cropBox').classList.add('read');
   $('zoneView').hidden = false;
 }
@@ -658,6 +754,15 @@ export function firm(x) {
   return x.best && x.best.n >= NEED && (!x.second || x.second.n <= x.best.n - 2);
 }
 
+// Zone montrée après la lecture : zb (cadre autour des coordonnées) si elles ont été situées, sinon tout le cadre lu
+function showZoneSafe(img, box, zb) {
+  try {
+    showZone(zoneImage(img, zb || box), !!zb);
+  } catch (err) {
+    console.error('Zone lue :', err);
+  }
+}
+
 // show(texte, résultat d'analyse) : affiche le résultat dans l'appli
 function read(show) {
   if (!base) return;
@@ -682,6 +787,7 @@ function read(show) {
   };
   setProg('Préparation...', 0);
   var imgs = {},
+    geos = {},
     runs = [];
   var done = function () {
     var v = votes(runs);
@@ -695,7 +801,10 @@ function read(show) {
         var ps = PASSES[i++],
           ik = ps[0] + '_' + ps[1];
         LBL['recognizing text'] = 'Lecture ' + i;
-        imgs[ik] = imgs[ik] || prepared(img, box, ps[0], ps[1]);
+        if (!imgs[ik]) {
+          imgs[ik] = prepared(img, box, ps[0], ps[1]);
+          geos[ik] = cropGeom(img, box, ps[0], ps[1]);
+        }
         return w
           .setParameters({ tessedit_pageseg_mode: ps[2] })
           .then(function () {
@@ -703,7 +812,8 @@ function read(show) {
           })
           .then(function (r) {
             var txt = (r.data.text || '').trim();
-            runs.push({ txt: txt, p: parse(txt) });
+            // lignes et mots avec leur position : pour montrer ensuite les coordonnées lues, agrandies
+            runs.push({ txt: txt, p: parse(txt), lines: r.data.lines || [], geo: geos[ik] });
           })
           .then(step);
       };
@@ -714,15 +824,11 @@ function read(show) {
         setProg('Lecture interrompue : nouvelle photo, touchez Lire', 0);
         return;
       }
-      try {
-        showZone(zoneImage(img, box));
-      } catch (err) {
-        console.error('Zone lue :', err);
-      }
       var v = votes(runs),
         total = runs.length,
         lastParse;
       if (!v.lat.best || !v.lon.best) {
+        showZoneSafe(img, box, null);
         var r0 = runs[0] || { txt: '', p: parse('') };
         show(r0.txt, r0.p);
         setProg('Aucune coordonnée lue : recadrez sur les coordonnées, avec un peu de marge', 1);
@@ -746,6 +852,12 @@ function read(show) {
       both.sort(function (a, b) {
         return rank(a) - rank(b);
       });
+      // zone montrée : les coordonnées retenues, cherchées d'abord dans les lectures de référence, puis dans toutes
+      var order = both.slice();
+      runs.forEach(function (r, idx) {
+        if (order.indexOf(idx) < 0) order.push(idx);
+      });
+      showZoneSafe(img, box, coordZone(img, runs, order, LA.v, LO.v));
       if (both.length) {
         text = runs[both[0]].txt;
         lastParse = runs[both[0]].p;
