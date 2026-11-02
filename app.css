@@ -261,6 +261,7 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .crop.persp .sel, .crop.persp .tilt, .crop.persp .frame-lbl, .crop.persp > .row4, .crop.read > .persp-row { display: none; }
 .crop.persp .persp-row { display: grid; }
 .crop.persp .persp-row .row4 { display: grid; }
+.crop.persp .zoombar { right: 50%; transform: translateX(50%); display: flex; }
 .tilt { grid-template-columns: 42px 1fr 42px auto auto auto; }
 .tilt .btn { padding-inline: 8px; font-size: .74rem; }
 /* contraste et netteté à la main */

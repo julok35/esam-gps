@@ -322,7 +322,8 @@ function defaultQuad() {
 function drawQuad() {
   var svg = $('quadSvg');
   if (!svg || !base || mode !== 'persp' || !quad) {
-    if (svg) svg.hidden = true;
+    if (svg) svg.setAttribute('hidden', ''); // un élément SVG n'a pas de propriété hidden
+
     stage.querySelectorAll('.qh').forEach(function (h) {
       h.hidden = true;
     });
@@ -334,7 +335,7 @@ function drawQuad() {
     pts = quad.map(function (p) {
       return [view.tx + p[0] * kx, view.ty + p[1] * ky];
     });
-  svg.hidden = false;
+  svg.removeAttribute('hidden');
   svg.setAttribute('viewBox', '0 0 ' + d.W + ' ' + d.H);
   $('quadPoly').setAttribute(
     'points',
@@ -641,13 +642,14 @@ export function setEnh(e) {
 
 // Image préparée pour la lecture : cadre (box) de l'image img, agrandi vers targetW pixels, niveaux de gris étirés,
 // contraste et netteté selon enh (netteté choisie d'elle-même si enh.sharp est null : d'après le flou du cadre à sa
-// taille réelle), pad : marge blanche autour du texte. Retour : { c : canevas, p : réglages appliqués }
-export function prepared(img, box, targetW, pad) {
+// taille réelle), pad : marge blanche autour du texte, shrink : réduction permise (lecture de toute la photo).
+// Retour : { c : canevas, p : réglages appliqués }
+export function prepared(img, box, targetW, pad, shrink) {
   var sx = Math.round(box.x * img.width),
     sy = Math.round(box.y * img.height),
     sw = Math.max(8, Math.round(box.w * img.width)),
     sh = Math.max(8, Math.round(box.h * img.height));
-  var k = Math.max(1, Math.min(8, targetW / sw));
+  var k = Math.max(shrink ? 0.1 : 1, Math.min(8, targetW / sw));
   var c = document.createElement('canvas');
   c.width = Math.round(sw * k);
   c.height = Math.round(sh * k);
@@ -835,7 +837,7 @@ export function firm(x) {
 // Lecture pleine image (mode texte épars), pour trouver où sont les coordonnées : { lines, text } (lignes avec mots,
 // boîtes en pixels de img et confiances). stale() : vrai si la photo a changé entre-temps.
 export function recognizeFull(img, stale) {
-  var pr = prepared(img, { x: 0, y: 0, w: 1, h: 1 }, FULL_W, 0),
+  var pr = prepared(img, { x: 0, y: 0, w: 1, h: 1 }, FULL_W, 0, true),
     k = pr.c.width / img.width;
   var fix = function (b) {
     return { x0: b.x0 / k, y0: b.y0 / k, x1: b.x1 / k, y1: b.y1 / k };
