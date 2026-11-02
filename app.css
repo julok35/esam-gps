@@ -315,3 +315,22 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .bx:disabled { opacity: .35; cursor: default; }
 .ba .chip { padding: 6px 10px; font-size: .74rem; }
 #batchCard { scroll-margin-top: 104px; }
+
+/* Relief du suivi : altitude de chaque point, montée / descente de l'étape, profil du terrain */
+.tp-z { font-size: .85rem; font-variant-numeric: tabular-nums; margin-top: 4px; }
+.zt { font-weight: 600; white-space: nowrap; }
+.zt.up { color: #C2410C; } .zt.down { color: #1E6FD9; } .zt.flat { color: var(--muted); }
+@media (prefers-color-scheme: dark) { .zt.up { color: #FB923C; } .zt.down { color: #7DB3FF; } }
+.tprof { margin-top: 10px; }
+.tprof:empty { display: none; }
+.pf-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pf-h small { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; text-align: right; }
+.pf { display: block; width: 100%; height: auto; touch-action: pan-y; user-select: none; margin-top: 4px; }
+.pf-g { stroke: var(--line); stroke-width: 1; }
+.pf-t { fill: var(--muted); font: 500 15px var(--f-body); }
+.pf-a { fill: #8B6A3E; fill-opacity: .22; }
+.pf-l { fill: none; stroke: #8B6A3E; stroke-width: 2.5; stroke-linejoin: round; }
+.pf-p { fill: #1E6FD9; stroke: #fff; stroke-width: 2; }
+.pf-n { fill: #fff; font: 700 12px var(--f-label); pointer-events: none; }
+.pf-z { fill: var(--fg); font: 700 14px var(--f-body); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+.pf-c { stroke: var(--fg); stroke-width: 1.5; stroke-dasharray: 4 3; }

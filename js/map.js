@@ -2,7 +2,7 @@
 import { $, f6, esc, fmtDist, CARD, state } from './util.js';
 import { fmtWhen } from './track.js';
 import { distM, bearing } from './parser.js';
-import { updateRelief } from './place.js';
+import { updateRelief, knownAlt, fmtAlt } from './place.js';
 import { updateCompass } from './compass.js';
 
 var map = null,
@@ -185,6 +185,7 @@ function drawPins() {
             f6(p.lat) +
             ', ' +
             f6(p.lon) +
+            (knownAlt(p) !== undefined ? ' · ' + fmtAlt(knownAlt(p)) : '') +
             (p.label ? '<br>' + esc(p.label) : '') +
             (i > g.ids[0] ? '<br><small>à ' + fmtDist(distM(trackPts[i - 1], p)) + ' du point ' + i + '</small>' : '')
           );
@@ -218,6 +219,22 @@ function markCurrent(c) {
     if (is) hit = true;
   });
   return hit;
+}
+// Repère du profil du relief : endroit lu au doigt sur le profil (q : { lat, lon } ou null pour le retirer)
+var probeMark = null;
+export function probe(q) {
+  if (!map) return;
+  if (!probeMark)
+    probeMark = L.circleMarker([0, 0], {
+      radius: 7,
+      color: '#111',
+      weight: 2,
+      fillColor: '#FFD400',
+      fillOpacity: 1,
+      interactive: false
+    });
+  if (q) probeMark.setLatLng([q.lat, q.lon]).addTo(map);
+  else map.removeLayer(probeMark);
 }
 export function fitTrack() {
   if (!map || !trackPts.length) return;

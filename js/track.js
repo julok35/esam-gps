@@ -4,6 +4,9 @@ import { distM, bearing } from './parser.js';
 import { fmtDist, CARD, f6, $, esc, copy, openTile } from './util.js';
 import { setTrack, fitTrack } from './map.js';
 import { shareText } from './share.js';
+import { altitudes, fmtAlt, fmtDelta } from './place.js';
+import { samplePath, pointAlts, climbs, slope, profileSvg } from './profile.js';
+import { probe } from './map.js';
 
 /**
  * Point du suivi : { lat, lon, t : date en ms, label : étiquette libre (facultative) }.
@@ -74,16 +77,32 @@ export function fmtWhen(t) {
   );
 }
 
-// Message de partage du suivi : chaque point, puis chaque étape, puis le bilan
-export function trackText(points, name) {
+// Message de partage du suivi : chaque point, puis chaque étape, puis le bilan.
+// alts : altitudes du terrain aux points (null si inconnue), facultatives
+export function trackText(points, name, alts) {
   if (!points.length) return '';
-  var L = legs(points),
+  var A = alts && alts.length === points.length ? alts : null,
+    za = function (i) {
+      return A && A[i] !== null && A[i] !== undefined;
+    },
+    L = legs(points),
     s = stats(points),
     out = [
       'Suivi ESAM' + (name ? ' · ' + name : '') + ' : ' + points.length + ' point' + (points.length > 1 ? 's' : '')
     ];
   points.forEach(function (p, i) {
-    out.push(i + 1 + '. ' + fmtWhen(p.t) + (p.label ? ' ' + p.label : '') + ' : ' + f6(p.lat) + ', ' + f6(p.lon));
+    out.push(
+      i +
+        1 +
+        '. ' +
+        fmtWhen(p.t) +
+        (p.label ? ' ' + p.label : '') +
+        ' : ' +
+        f6(p.lat) +
+        ', ' +
+        f6(p.lon) +
+        (za(i) ? ', alt. ' + fmtAlt(A[i]) : '')
+    );
     if (i) {
       var l = L[i - 1];
       out.push(
@@ -95,6 +114,7 @@ export function trackText(points, name) {
           Math.round(l.b) +
           '° ' +
           card(l.b) +
+          (za(i) && za(i - 1) ? ', dénivelé ' + fmtDelta(A[i] - A[i - 1]) : '') +
           ', en ' +
           fmtDur(l.dt) +
           (l.v !== null ? ' (' + fmtSpeed(l.v) + ')' : '')
@@ -113,7 +133,8 @@ export function trackText(points, name) {
         ' à vol d’oiseau du premier au dernier point, cap ' +
         Math.round(s.bearing) +
         '° ' +
-        card(s.bearing)
+        card(s.bearing) +
+        (za(0) && za(points.length - 1) ? ', dénivelé ' + fmtDelta(A[points.length - 1] - A[0]) : '')
     );
   return out.join('\n');
 }
@@ -409,10 +430,100 @@ export function trackInfo(c) {
     '.'
   );
 }
+// ---------- Relief : altitudes du terrain le long du suivi (réseau), gardées tant que les points ne changent pas ----------
+var relief = { id: '', samples: [], zs: null, alts: [], wait: false },
+  prof = null;
+function reliefOf(pts) {
+  var samples = samplePath(pts, 100),
+    id = samples
+      .map(function (q) {
+        return q.lat.toFixed(5) + ',' + q.lon.toFixed(5);
+      })
+      .join(';');
+  if (id !== relief.id) {
+    relief = {
+      id: id,
+      samples: samples,
+      zs: null,
+      alts: pts.map(function () {
+        return null;
+      }),
+      wait: false
+    };
+    if (pts.length && typeof navigator !== 'undefined' && navigator.onLine) {
+      var mine = relief;
+      mine.wait = true;
+      altitudes(samples).then(
+        function (zs) {
+          if (relief !== mine) return;
+          mine.zs = zs;
+          mine.alts = pointAlts(samples, zs, pts.length);
+          mine.wait = false;
+          drawTrack();
+        },
+        function () {
+          if (relief !== mine) return;
+          mine.wait = false;
+          relief.id = ''; // nouvel essai au prochain affichage
+          drawProfile();
+        }
+      );
+    }
+  }
+  return relief;
+}
+function drawProfile() {
+  var box = $('trackProfile');
+  if (!box) return;
+  var R = relief;
+  prof = R.zs && relief.samples.length > 1 ? profileSvg(R.samples, R.zs, fmtDist) : null;
+  if (prof) {
+    box.innerHTML =
+      '<div class="pf-h"><span class="lbl flush">Relief</span><small id="pfRead">Touchez le profil pour lire l’altitude</small></div>' +
+      prof.svg +
+      '<p class="hint flush">Terrain en ligne droite d’un point au suivant : le trajet réel de l’animal peut contourner.</p>';
+  } else
+    box.innerHTML =
+      relief.samples.length > 1
+        ? '<p class="hint flush">' +
+          (R.wait ? 'Relief du parcours : chargement…' : 'Relief du parcours : réseau nécessaire.') +
+          '</p>'
+        : '';
+}
+// Lecture du profil au doigt : altitude et distance sous le doigt, repère sur la carte
+function readProfile(e) {
+  var svg = e.target.closest && e.target.closest('svg.pf');
+  if (!svg || !prof || !relief.zs) return;
+  var r = svg.getBoundingClientRect(),
+    vx = ((e.clientX - r.left) / r.width) * 600,
+    best = -1,
+    bd = Infinity;
+  relief.samples.forEach(function (q, i) {
+    if (typeof relief.zs[i] !== 'number') return;
+    var dd = Math.abs(prof.x(q.d) - vx);
+    if (dd < bd) {
+      bd = dd;
+      best = i;
+    }
+  });
+  if (best < 0) return;
+  var q = relief.samples[best],
+    cur = $('pfCur');
+  cur.setAttribute('x1', prof.x(q.d));
+  cur.setAttribute('x2', prof.x(q.d));
+  cur.setAttribute('visibility', 'visible');
+  $('pfRead').textContent =
+    fmtAlt(relief.zs[best]) + ' · à ' + fmtDist(q.d) + ' du point 1' + (q.k >= 0 ? ' (point ' + (q.k + 1) + ')' : '');
+  probe(q);
+}
+
 export function drawTrack() {
   var pts = loadTrack(),
     L = legs(pts),
-    s = stats(pts);
+    s = stats(pts),
+    R = reliefOf(pts),
+    A = R.alts,
+    cl = climbs(A);
   $('trackCard').hidden = !pts.length;
   setTrack(pts);
   $('trackName').value = trackName();
@@ -420,6 +531,7 @@ export function drawTrack() {
     $('trackSum').textContent = '';
     $('trackList').innerHTML = '';
     $('trackStats').innerHTML = '';
+    drawProfile();
     return;
   }
   $('trackSum').textContent =
@@ -456,6 +568,13 @@ export function drawTrack() {
         '" placeholder="Étiquette (ex. collier 8 h)" aria-label="Étiquette du point ' +
         (i + 1) +
         '"></div>' +
+        (A[i] !== null
+          ? '<div class="tp-z"><b>' +
+            fmtAlt(A[i]) +
+            '</b>' +
+            (leg && A[i - 1] !== null ? zTag(A[i] - A[i - 1], leg.d) : '') +
+            '</div>'
+          : '') +
         (leg
           ? '<div class="tp-l">' +
             fmtDist(leg.d) +
@@ -491,13 +610,42 @@ export function drawTrack() {
         Math.round(s.bearing) +
         '° ' +
         card(s.bearing) +
-        '</small></div>'
+        '</small></div>' +
+        (A[0] !== null && A[A.length - 1] !== null
+          ? '<div><span>Dénivelé</span><b>' +
+            fmtDelta(A[A.length - 1] - A[0]) +
+            '</b><small>' +
+            fmtDelta(cl.up) +
+            ' / ' +
+            fmtDelta(-cl.down) +
+            ' entre points</small></div>'
+          : '')
       : '<p class="hint flush">Un point. Ajoutez le prochain signalement pour mesurer la distance parcourue.</p>';
+  drawProfile();
+}
+// Montée / descente d'une étape : flèche, dénivelé, pente moyenne
+function zTag(dz, d) {
+  var sl = slope(dz, d),
+    cls = Math.abs(dz) < 5 ? 'flat' : dz > 0 ? 'up' : 'down';
+  return (
+    ' <span class="zt ' +
+    cls +
+    '">' +
+    (cls === 'flat' ? '→' : cls === 'up' ? '↗' : '↘') +
+    ' ' +
+    fmtDelta(dz) +
+    (sl !== null && cls !== 'flat' ? ' · pente ' + Math.round(Math.abs(sl)) + ' %' : '') +
+    '</span>'
+  );
 }
 var onName = function () {};
 // onChange : appelé quand le nom ou les points changent par la tuile (le bouton d'ajout du point affiché se met à jour)
 export function initTrack(onChange) {
   onName = onChange || onName;
+  $('trackProfile').addEventListener('pointerdown', readProfile);
+  $('trackProfile').addEventListener('pointermove', function (e) {
+    if (e.buttons || e.pointerType === 'mouse') readProfile(e);
+  });
   $('trackList').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-tdel]');
     if (!b) return;
@@ -523,10 +671,10 @@ export function initTrack(onChange) {
     onName();
   });
   $('trackShare').addEventListener('click', function () {
-    shareText(trackText(loadTrack(), trackName()), $('trackShare'));
+    shareText(trackText(loadTrack(), trackName(), relief.alts), $('trackShare'));
   });
   $('trackCopy').addEventListener('click', function () {
-    copy(trackText(loadTrack(), trackName()), $('trackCopy'));
+    copy(trackText(loadTrack(), trackName(), relief.alts), $('trackCopy'));
   });
   // reprendre ailleurs : lien (ouvert sur un autre téléphone, le suivi s'y installe), fichier GPX, import
   $('trackLink').addEventListener('click', function () {

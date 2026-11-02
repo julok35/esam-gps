@@ -92,6 +92,96 @@ function altCopernicus(p) {
     return z;
   });
 }
+// Plusieurs altitudes d'un coup (profil du suivi) : une requête par paquet de 100 points ; null si inconnue
+function altsIgn(ps) {
+  return getJSON(
+    'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=' +
+      ps
+        .map(function (p) {
+          return p.lon.toFixed(6);
+        })
+        .join('|') +
+      '&lat=' +
+      ps
+        .map(function (p) {
+          return p.lat.toFixed(6);
+        })
+        .join('|') +
+      '&resource=ign_rge_alti_wld&zonly=true',
+    12000
+  ).then(function (j) {
+    var zs = (j && j.elevations) || [];
+    if (zs.length !== ps.length) throw new Error('réponse IGN incomplète');
+    zs = zs.map(function (z) {
+      if (z && typeof z === 'object') z = z.z;
+      return typeof z === 'number' && isFinite(z) && z > -1000 ? z : null;
+    });
+    if (zs.indexOf(null) >= 0) throw new Error('hors modèle IGN');
+    return zs;
+  });
+}
+function altsCopernicus(ps) {
+  return getJSON(
+    'https://api.open-meteo.com/v1/elevation?latitude=' +
+      ps
+        .map(function (p) {
+          return p.lat.toFixed(6);
+        })
+        .join(',') +
+      '&longitude=' +
+      ps
+        .map(function (p) {
+          return p.lon.toFixed(6);
+        })
+        .join(','),
+    12000
+  ).then(function (j) {
+    var zs = (j && j.elevation) || [];
+    if (zs.length !== ps.length) throw new Error('altitudes inconnues');
+    return zs.map(function (z) {
+      return typeof z === 'number' && isFinite(z) ? z : null;
+    });
+  });
+}
+var altsMemo = {};
+export function altitudes(ps) {
+  var id = ps.map(key).join(';');
+  if (altsMemo[id]) return altsMemo[id];
+  var packs = [];
+  for (var i = 0; i < ps.length; i += 100) packs.push(ps.slice(i, i + 100));
+  altsMemo[id] = Promise.all(
+    packs.map(function (pk) {
+      return altsIgn(pk).catch(function () {
+        return altsCopernicus(pk);
+      });
+    })
+  ).then(
+    function (r) {
+      var zs = [].concat.apply([], r);
+      // les points du suivi servent aussi à la fiche du point (même cache que l'altitude d'un point seul)
+      ps.forEach(function (p, i) {
+        if (zs[i] !== null) {
+          var k = 'alt:' + key(p);
+          if (!(k in done)) {
+            done[k] = zs[i];
+            memo[k] = Promise.resolve(zs[i]);
+          }
+        }
+      });
+      return zs;
+    },
+    function (e) {
+      delete altsMemo[id];
+      throw e;
+    }
+  );
+  return altsMemo[id];
+}
+// Altitude du terrain déjà connue au point (undefined sinon)
+export function knownAlt(p) {
+  return known('alt', p);
+}
+
 export function altitude(p) {
   return once('alt', p, function () {
     return altIgn(p).catch(function () {
