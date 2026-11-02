@@ -235,3 +235,57 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .tile[open] > summary .ts { display: none; }
 .tile-b { padding: 0 12px 12px; display: grid; gap: 10px; min-width: 0; }
 .tile-b > .srcwrap, .tile-b > .crop { margin-top: 0; }
+
+/* Étapes automatiques après une photo : icône d'état, titre, résultat, bouton de reprise à la main */
+.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.steps li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; background: var(--soft); min-height: 44px; }
+.st-ic { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 700 .9rem/1 var(--f-label); background: var(--line); color: var(--muted); }
+.st-ok .st-ic { background: var(--ok-bg); color: var(--ok); }
+.st-warn .st-ic { background: var(--rouge); color: #fff; }
+.st-fail .st-ic { background: var(--noir); color: var(--jaune); }
+.st-run .st-ic { background: var(--jaune); color: var(--noir); }
+.st-info .st-ic { background: var(--line); color: var(--fg); }
+.st-t { display: grid; min-width: 0; }
+.st-t b { font: 700 .78rem var(--f-label); letter-spacing: .06em; text-transform: uppercase; }
+.st-msg { font-size: .82rem; color: var(--muted); overflow-wrap: anywhere; }
+.st-warn .st-msg, .st-fail .st-msg { color: var(--rouge); font-weight: 600; }
+.st-wait { opacity: .6; }
+.steps .chip { padding: 6px 10px; font-size: .74rem; }
+@media (prefers-reduced-motion: no-preference) { .st-run .st-ic { animation: pulse 1s infinite alternate; } @keyframes pulse { to { opacity: .4; } } }
+/* perspective : quadrilatère et ses quatre coins sur la scène ; le cadre et la réglette s'effacent */
+.quad { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+.quad polygon { fill: rgba(255,212,0,.12); stroke: var(--jaune); stroke-width: 3; }
+.qh { position: absolute; z-index: 3; width: 30px; height: 30px; margin: -15px 0 0 -15px; background: var(--jaune); border: 2px solid var(--noir); border-radius: 50%; touch-action: none; }
+.qh::after { content: ""; position: absolute; inset: -12px; border-radius: 50%; }
+.persp-row { display: none; gap: 8px; }
+.crop.persp .sel, .crop.persp .tilt, .crop.persp .frame-lbl, .crop.persp > .row4, .crop.read > .persp-row { display: none; }
+.crop.persp .persp-row { display: grid; }
+.crop.persp .persp-row .row4 { display: grid; }
+.tilt { grid-template-columns: 42px 1fr 42px auto auto auto; }
+.tilt .btn { padding-inline: 8px; font-size: .74rem; }
+/* contraste et netteté à la main */
+.enh { display: grid; gap: 8px; }
+.enh-row { display: grid; grid-template-columns: 6rem 1fr 3.4rem; gap: 8px; align-items: center; font: 600 .78rem var(--f-label); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.enh-row input { width: 100%; min-width: 0; accent-color: var(--jaune); height: 42px; }
+.enh-row output { text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); }
+/* confiance et retenue : point douteux non transmissible */
+.pill.conf.c-ok { background: var(--ok-bg); color: var(--ok); }
+.pill.conf.c-no { background: var(--pale); color: var(--fg); border: 1.5px solid var(--rouge); }
+.big1.held { color: var(--muted); }
+.big1.held small { color: var(--rouge); }
+.hold { background: var(--pale); border-left: 6px solid var(--rouge); border-radius: 0 10px 10px 0; padding: 10px 12px; display: grid; gap: 8px; font-size: .88rem; }
+.trk { display: grid; gap: 6px; justify-items: start; font-size: .85rem; color: var(--muted); }
+/* suivi des points : liste numérotée, étapes, bilan */
+.tlist { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.tp { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); }
+.tp-h { display: grid; grid-template-columns: 26px minmax(0, 1fr) 36px; gap: 8px; align-items: center; }
+.tp-n { width: 26px; height: 26px; border-radius: 50%; background: #1E6FD9; color: #fff; display: grid; place-items: center; font: 700 .82rem/1 var(--f-label); }
+.tp-c { text-align: left; border: 0; background: none; padding: 0; color: var(--fg); font: 600 .95rem var(--f-body); font-variant-numeric: tabular-nums; cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+.tp-c.done { color: var(--ok); }
+.tp-x { width: 36px; height: 36px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 1rem; }
+.tp-e { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.tp-e input { min-width: 0; width: 100%; font: 500 .82rem var(--f-body); color: var(--fg); background: var(--surface); border: 1.5px solid var(--line); border-radius: 8px; padding: 7px 8px; }
+.tp-l { font-size: .82rem; color: var(--muted); }
+.tstats { margin-top: 0; }
+.pin-n { width: 24px; height: 24px; border-radius: 50%; background: #1E6FD9; color: #fff; border: 2px solid #fff; display: grid; place-items: center; font: 700 .8rem/1 var(--f-label); box-shadow: 0 0 0 1.5px #1E6FD9, 0 2px 6px rgba(0,0,0,.4); }
+#steps, #enhBox, #trackCard { scroll-margin-top: 104px; }

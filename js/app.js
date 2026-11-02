@@ -4,10 +4,13 @@ import { parse, toDMM, toDMS, toUTM } from './parser.js';
 import { initMap, updateMap, startGeo } from './map.js';
 import { initShare, drawQR, shareText } from './share.js';
 import { loadHist, drawHist, scheduleHist, flushHist, cancelHist } from './history.js';
-import { initOcr, clearZone } from './ocr.js';
+import { clearZone } from './ocr.js';
+import { initAuto, hideSteps } from './auto.js';
 import { initFix, openFix, closeFix } from './fix.js';
 import { initPlace, showPlace, placeText } from './place.js';
 import { initCompass } from './compass.js';
+import { confidence, trusted } from './trust.js';
+import { initTrack, addPoint, trackInfo } from './track.js';
 
 var src = $('src'),
   out = $('result');
@@ -64,32 +67,41 @@ function render() {
   var all = [r.best].concat(r.alts),
     c = all[Math.min(chosen, all.length - 1)];
   state.current = c;
-  var warn = c.notes.length || r.alts.length;
+  // confiance : calculée par auto.js après une photo, sinon d'après les avertissements du texte saisi
+  if (!r.trust || chosen !== 0) r.trust = confidence({ manual: true, notes: c.notes.length, alts: r.alts.length });
+  var ok = trusted(r),
+    warn = c.notes.length || r.alts.length;
   var la = f6(c.lat),
     lo = f6(c.lon);
   var h =
     '<div class="status"><span class="pill ' +
-    (warn ? 'check">À vérifier' : 'ok">Lecture fiable') +
+    (r.verified ? 'ok">Vérifié à la main' : ok ? 'ok">Lecture fiable' : 'check">À vérifier') +
     '</span><span class="pill fmt">' +
     esc(c.fmt) +
     '</span>' +
-    (r.agree && chosen === 0 ? '<span class="pill fmt">' + r.agree + ' lectures</span>' : '') +
+    (r.trust && (r.ocr || !ok)
+      ? '<span class="pill conf ' + (ok ? 'c-ok' : 'c-no') + '">Confiance ' + r.trust.pct + ' %</span>'
+      : '') +
+    (r.agree && chosen === 0 ? '<span class="pill fmt">' + r.agree.n + '/' + r.agree.total + ' lectures</span>' : '') +
     '<button class="chip fixbtn" type="button" data-fix="1">Corriger</button></div>';
-  // coordonnées : un toucher les copie
-  h +=
-    '<button class="big1" type="button" data-copy="' +
-    la +
-    ', ' +
-    lo +
-    '">' +
-    la +
-    ', ' +
-    lo +
-    '<small>Toucher pour copier</small></button>';
+  // coordonnées : un toucher les copie (seulement une fois le point sûr)
+  h += ok
+    ? '<button class="big1" type="button" data-copy="' +
+      la +
+      ', ' +
+      lo +
+      '">' +
+      la +
+      ', ' +
+      lo +
+      '<small>Toucher pour copier</small></button>'
+    : '<div class="big1 held">' + la + ', ' + lo + '<small>Douteux : à vérifier sur la photo</small></div>';
   h += '<div class="seg1">Lu : ' + esc(c.seg) + '</div>';
   h += '<div class="place" id="place"></div>';
   var notes = c.notes.slice();
   if (r.alts.length) notes.push({ t: 'Plusieurs lectures possibles : comparez avec la photo.' });
+  if (!ok && r.trust && r.trust.why.length && r.ocr)
+    notes.push({ t: 'Confiance ' + r.trust.pct + ' % : ' + r.trust.why.join(', ') + '.' });
   if (notes.length)
     h +=
       '<ul class="notes">' +
@@ -116,9 +128,32 @@ function render() {
     });
     h += '</div>';
   }
+  if (!ok)
+    h +=
+      '<div class="hold"><p class="flush"><b>Coordonnées douteuses : rien n\u2019est transmis.</b> Comparez chiffre par chiffre avec la photo. Corrigez-les avec les molettes, ou confirmez-les si elles sont justes.</p>' +
+      '<div class="row2"><button class="btn" type="button" data-fix="1">Corriger</button><button class="btn sec" type="button" data-verify="1">Justes : confirmer</button></div></div>';
+  else {
+    var ti = trackInfo(c);
+    h +=
+      '<div class="trk">' +
+      (ti ? '<p class="flush">' + esc(ti) + '</p>' : '') +
+      '<button class="chip" type="button" data-track="1">Ajouter au suivi des points</button></div>';
+  }
   $('resCard').classList.remove('empty');
   out.innerHTML = h;
-  $('resSum').textContent = (warn ? 'à vérifier · ' : '') + f6(c.lat).slice(0, -1) + ', ' + f6(c.lon).slice(0, -1);
+  $('resSum').textContent = (ok ? '' : 'à vérifier · ') + f6(c.lat).slice(0, -1) + ', ' + f6(c.lon).slice(0, -1);
+  if (!ok) {
+    // rien n'est proposé au partage, au drone ni aux autres cartes tant que le point n'est pas sûr
+    $('pilotCard').hidden = true;
+    $('eqCard').hidden = true;
+    $('shareCard').hidden = true;
+    showPlace();
+    updateMap(true);
+    cancelHist();
+    say('À vérifier : ' + la + ', ' + lo);
+    setHash('');
+    return;
+  }
 
   // DJI Pilot 2 : longitude d'abord, puis latitude
   var PL = pilotDM(c.lon),
@@ -189,7 +224,7 @@ function render() {
   // historique : pas pendant la frappe (valeurs partielles), seulement une fois le champ quitté
   if (document.activeElement !== src) scheduleHist(c, src.value);
   else cancelHist();
-  say((warn ? 'À vérifier : ' : 'Lecture fiable : ') + la + ', ' + lo);
+  say((warn ? 'Vérifié : ' : 'Lecture fiable : ') + la + ', ' + lo);
   setHash(la + ',' + lo);
 }
 function eqRows(c) {
@@ -217,9 +252,11 @@ function eqText(c) {
     (p ? '\n' + p : '')
   );
 }
-function update() {
+// verified : texte vérifié à la main (molettes validées) : transmissible même avec un avertissement
+function update(verified) {
   chosen = 0;
   lastParse = parse(src.value);
+  if (verified && lastParse.ok) lastParse.verified = true;
   render();
 }
 function show(text, p) {
@@ -294,7 +331,9 @@ document.addEventListener('visibilitychange', function () {
 });
 
 // ---------- Événements ----------
-src.addEventListener('input', update);
+src.addEventListener('input', function () {
+  update();
+});
 // champ quitté : le point affiché entre dans l'historique
 src.addEventListener('change', useCurrent);
 document.addEventListener('visibilitychange', function () {
@@ -304,6 +343,7 @@ $('clear').addEventListener('click', function () {
   src.value = '';
   $('cropBox').hidden = true;
   clearZone();
+  hideSteps();
   update();
   src.focus();
 });
@@ -340,8 +380,17 @@ document.addEventListener('click', function (e) {
     copy(t.dataset.copy, v || t);
     useCurrent();
   } else if (t.dataset.fix) openFix(state.current);
-  else if (t.dataset.alt) {
+  else if (t.dataset.verify) {
+    // l'utilisateur a comparé avec la photo : le point devient transmissible
+    if (lastParse && lastParse.ok) lastParse.verified = true;
+    render();
+    useCurrent();
+  } else if (t.dataset.track) {
+    addPoint(state.current);
+    render();
+  } else if (t.dataset.alt) {
     chosen = +t.dataset.alt;
+    if (lastParse) lastParse.verified = false;
     render();
   } else if (t.dataset.hist) {
     var x = loadHist()[+t.dataset.hist];
@@ -359,11 +408,12 @@ document.addEventListener('click', function (e) {
 initTiles();
 initMap();
 initShare(useCurrent);
-initOcr(show);
+initAuto(show);
 initFix(function (t) {
   src.value = t;
-  update();
+  update(true);
 });
+initTrack();
 initPlace();
 initCompass();
 $('ver').textContent = 'v' + VERSION;

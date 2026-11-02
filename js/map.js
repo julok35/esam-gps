@@ -9,6 +9,8 @@ var map = null,
   meMark = null,
   meCirc = null,
   line = null,
+  track = null, // couche du suivi : points numérotés reliés dans l'ordre
+  trackPts = [],
   firstFix = true,
   watchId = null;
 
@@ -59,6 +61,7 @@ export function initMap() {
   });
   meCirc = L.circle([0, 0], { radius: 1, color: '#1E6FD9', weight: 1, fillOpacity: 0.12, interactive: false });
   line = L.polyline([], { color: '#E6332A', weight: 3, dashArray: '8 8', interactive: false });
+  track = L.layerGroup().addTo(map);
 
   // carte dépliée : Leaflet recalcule sa taille (elle était nulle tant que la tuile était repliée)
   $('mapCard').addEventListener('toggle', function () {
@@ -112,6 +115,40 @@ export function updateMap(recentre) {
   $('dA').textContent = me ? '± ' + Math.round(me.acc) + ' m' : '-';
   updateRelief();
   updateCompass();
+}
+
+// Suivi : points numérotés dans l'ordre (chien signalé le matin, puis le soir...), reliés par un trait plein
+export function setTrack(pts) {
+  trackPts = pts || [];
+  if (!track) return;
+  track.clearLayers();
+  if (!trackPts.length) return;
+  var ll = trackPts.map(function (p) {
+    return [p.lat, p.lon];
+  });
+  if (ll.length > 1) L.polyline(ll, { color: '#1E6FD9', weight: 4, opacity: 0.8, interactive: false }).addTo(track);
+  trackPts.forEach(function (p, i) {
+    L.marker([p.lat, p.lon], {
+      icon: L.divIcon({
+        className: '',
+        html: '<div class="pin-n">' + (i + 1) + '</div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      })
+    })
+      .bindPopup('<b>Point ' + (i + 1) + '</b><br>' + f6(p.lat) + ', ' + f6(p.lon) + (p.label ? '<br>' + p.label : ''))
+      .addTo(track);
+  });
+}
+export function fitTrack() {
+  if (!map || !trackPts.length) return;
+  map.invalidateSize();
+  var ll = trackPts.map(function (p) {
+    return [p.lat, p.lon];
+  });
+  if (state.current) ll.push([state.current.lat, state.current.lon]);
+  if (ll.length === 1) map.setView(ll[0], 15);
+  else map.fitBounds(L.latLngBounds(ll), { padding: [40, 40], maxZoom: 16 });
 }
 
 function fit() {
