@@ -275,7 +275,10 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .big1.held { color: var(--muted); }
 .big1.held small { color: var(--rouge); }
 .hold { background: var(--pale); border-left: 6px solid var(--rouge); border-radius: 0 10px 10px 0; padding: 10px 12px; display: grid; gap: 8px; font-size: .88rem; }
-.trk { display: grid; gap: 6px; justify-items: start; font-size: .85rem; color: var(--muted); }
+.trk { display: grid; gap: 6px; font-size: .85rem; color: var(--muted); }
+.trk .btn.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+.tname { width: 100%; font: 700 1rem var(--f-body); color: var(--fg); background: var(--field); border: 2px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.tname:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px var(--jaune); }
 /* suivi des points : liste numérotée, étapes, bilan */
 .tlist { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .tp { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); }
@@ -288,5 +291,26 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .tp-e input { min-width: 0; width: 100%; font: 500 .82rem var(--f-body); color: var(--fg); background: var(--surface); border: 1.5px solid var(--line); border-radius: 8px; padding: 7px 8px; }
 .tp-l { font-size: .82rem; color: var(--muted); }
 .tstats { margin-top: 0; }
+.pin-n.cur { background: var(--jaune); color: var(--noir); border-color: var(--noir); box-shadow: 0 0 0 3px #1E6FD9, 0 2px 8px rgba(0,0,0,.5); transform: scale(1.3); }
 .pin-n { width: 24px; height: 24px; border-radius: 50%; background: #1E6FD9; color: #fff; border: 2px solid #fff; display: grid; place-items: center; font: 700 .8rem/1 var(--f-label); box-shadow: 0 0 0 1.5px #1E6FD9, 0 2px 6px rgba(0,0,0,.4); }
 #steps, #enhBox, #trackCard { scroll-margin-top: 104px; }
+
+/* Lot de photos : poignée, vignette, date, état, flèches ; ligne soulevée pendant le glisser */
+.blist { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.bp { display: grid; grid-template-columns: 28px 56px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); }
+.bp.drag { position: relative; z-index: 2; box-shadow: 0 6px 16px rgba(0,0,0,.3); background: var(--pale); }
+.bp.over { outline: 2px dashed var(--jaune); }
+.bh { display: grid; place-items: center; width: 28px; height: 44px; border-radius: 6px; color: var(--muted); font: 700 1rem/1 var(--f-body); letter-spacing: -.2em; cursor: grab; touch-action: none; user-select: none; }
+.bt { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; background: var(--soft); display: block; }
+.bb { display: grid; gap: 2px; min-width: 0; }
+.bn { font-size: .85rem; font-variant-numeric: tabular-nums; }
+.bn small { color: var(--muted); font: 600 .68rem var(--f-label); letter-spacing: .06em; text-transform: uppercase; }
+.bm { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+.bp.st-ok .bm { color: var(--ok); font-weight: 600; }
+.bp.st-check .bm, .bp.st-fail .bm { color: var(--rouge); font-weight: 600; }
+.bp.st-run .bm { color: var(--fg); }
+.ba { display: grid; gap: 4px; justify-items: end; }
+.bx { width: 34px; height: 30px; border-radius: 6px; border: 1.5px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; font-size: .8rem; }
+.bx:disabled { opacity: .35; cursor: default; }
+.ba .chip { padding: 6px 10px; font-size: .74rem; }
+#batchCard { scroll-margin-top: 104px; }

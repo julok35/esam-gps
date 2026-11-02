@@ -16,23 +16,32 @@ export function confidence(info) {
     if (info.notes) why.push(info.notes + (info.notes > 1 ? ' avertissements' : ' avertissement'));
     if (info.alts) why.push('plusieurs lectures possibles');
   } else {
-    var base = typeof info.tess === 'number' ? info.tess : 75,
+    // La concordance de lectures faites avec des préparations différentes de l'image est le signal principal :
+    // trois lectures d'accord donnent 88, chaque lecture d'accord en plus ajoute 2 (95 au plus, 100 avec un moteur sûr).
+    // La confiance du moteur sur les chiffres, souvent basse même quand il lit juste, ne fait que nuancer (−10 à +5).
+    var a = info.agree,
       f = 1;
-    if (info.firm) why.push(info.agree.n + ' lectures sur ' + info.agree.total + ' concordantes');
-    else {
-      f *= info.agree.total ? (0.8 * info.agree.n) / info.agree.total : 0;
+    if (info.firm) {
+      pct = 88 + Math.min(7, 2 * Math.max(0, a.n - 3));
+      why.push(a.n + ' lectures sur ' + a.total + ' concordantes');
+    } else {
+      pct = a.total ? (75 * a.n) / a.total : 0;
       why.push(
-        info.agree.total
+        a.total
           ? 'seulement ' +
-              info.agree.n +
+              a.n +
               ' lecture' +
-              (info.agree.n > 1 ? 's' : '') +
+              (a.n > 1 ? 's' : '') +
               ' sur ' +
-              info.agree.total +
+              a.total +
               ' concordante' +
-              (info.agree.n > 1 ? 's' : '')
+              (a.n > 1 ? 's' : '')
           : 'aucune lecture concordante'
       );
+    }
+    if (typeof info.tess === 'number') {
+      pct += Math.max(-10, Math.min(5, (info.tess - 60) / 4));
+      if (info.tess < 60) why.push('moteur hésitant sur les chiffres (' + Math.round(info.tess) + ' %)');
     }
     if (info.rival) {
       f *= 0.6;
@@ -46,8 +55,7 @@ export function confidence(info) {
       f *= 0.8;
       why.push('plusieurs lectures possibles');
     }
-    why.push('moteur sûr à ' + Math.round(base) + ' %');
-    pct = Math.round(base * f);
+    pct = Math.round(pct * f);
   }
   pct = Math.max(0, Math.min(100, pct));
   var ok = !info.notes && !info.alts && (info.manual || !info.agree || (info.firm && !info.rival)) && pct >= 70;

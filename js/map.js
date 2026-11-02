@@ -11,6 +11,7 @@ var map = null,
   line = null,
   track = null, // couche du suivi : points numérotés reliés dans l'ordre
   trackPts = [],
+  trackMarks = [],
   firstFix = true,
   watchId = null;
 
@@ -83,7 +84,9 @@ export function updateMap(recentre) {
   var current = state.current,
     me = state.me;
   if (map) {
-    if (current) {
+    // le point affiché est déjà un point du suivi : pas de repère jaune par-dessus, sa pastille est mise en évidence
+    var onTrack = current && markCurrent(current);
+    if (current && !onTrack) {
       tMark.setLatLng([current.lat, current.lon]).addTo(map);
       tMark.bindPopup('<b>' + f6(current.lat) + ', ' + f6(current.lon) + '</b>');
     } else map.removeLayer(tMark);
@@ -127,8 +130,8 @@ export function setTrack(pts) {
     return [p.lat, p.lon];
   });
   if (ll.length > 1) L.polyline(ll, { color: '#1E6FD9', weight: 4, opacity: 0.8, interactive: false }).addTo(track);
-  trackPts.forEach(function (p, i) {
-    L.marker([p.lat, p.lon], {
+  trackMarks = trackPts.map(function (p, i) {
+    return L.marker([p.lat, p.lon], {
       icon: L.divIcon({
         className: '',
         html: '<div class="pin-n">' + (i + 1) + '</div>',
@@ -139,6 +142,19 @@ export function setTrack(pts) {
       .bindPopup('<b>Point ' + (i + 1) + '</b><br>' + f6(p.lat) + ', ' + f6(p.lon) + (p.label ? '<br>' + p.label : ''))
       .addTo(track);
   });
+  if (state.current) markCurrent(state.current);
+}
+// Pastille du suivi qui est le point affiché (à moins de 3 m) mise en évidence ; vrai s'il y en a une
+function markCurrent(c) {
+  var hit = false;
+  trackMarks.forEach(function (m, i) {
+    var is = distM(trackPts[i], c) < 3,
+      el = m.getElement();
+    if (el && el.firstChild) el.firstChild.classList.toggle('cur', is);
+    m.setZIndexOffset(is ? 1000 : 0);
+    if (is) hit = true;
+  });
+  return hit;
 }
 export function fitTrack() {
   if (!map || !trackPts.length) return;

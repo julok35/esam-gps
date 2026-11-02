@@ -35,10 +35,10 @@
     <div class="tile-b">
       <div class="row2">
         <label class="btn big" for="cam">Photographier</label>
-        <label class="btn big sec" for="gal">Choisir une photo</label>
+        <label class="btn big sec" for="gal">Choisir des photos</label>
       </div>
     <input id="cam" type="file" accept="image/*" capture="environment" hidden>
-    <input id="gal" type="file" accept="image/*" hidden>
+    <input id="gal" type="file" accept="image/*" multiple hidden>
     <p class="hint flush">Photo ou capture d'écran : l'appli redresse, améliore, trouve les coordonnées, les lit et note sa confiance. Chaque étape se reprend à la main.</p>
     <ol class="steps" id="steps" hidden></ol>
     <button class="btn sec wide" type="button" id="stepsStop" hidden>Arrêter et cadrer à la main</button>
@@ -104,6 +104,19 @@
     </div>
     </div>
   </details>
+  <details class="block tile" id="batchCard" open hidden>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="13" rx="2"/><path d="M8 4h11a2 2 0 0 1 2 2v11"/><circle cx="8" cy="12" r="1.6"/><path d="M3 17l4-4 3 3 2-2 4 4"/></svg><span class="tt">Lot de photos</span><small class="ts" id="batchSum"></small></summary>
+    <div class="tile-b">
+      <p class="hint flush">Dans l'ordre de prise de vue (date de la photo, sinon du fichier). Glissez une photo par sa poignée ⋮⋮, ou ▲ ▼, pour changer l'ordre : sa date est alors replacée entre ses voisines. Chaque photo est lue séparément ; les points sûrs rejoignent le suivi datés de la photo, les autres sont à vérifier.</p>
+      <ol class="blist" id="batchList"></ol>
+      <div class="row3">
+        <button class="btn" type="button" id="batchGo">Lire tout</button>
+        <label class="btn sec" for="gal">Ajouter</label>
+        <button class="btn sec" type="button" id="batchClear">Vider</button>
+      </div>
+      <p class="hint flush" id="batchMsg" hidden></p>
+    </div>
+  </details>
   <details class="block tile fixer" id="fixCard" open hidden>
     <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg><span class="tt">Corriger la lecture</span></summary>
     <div class="tile-b">
@@ -155,13 +168,24 @@
     <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="18" r="2.5"/><circle cx="12" cy="8" r="2.5"/><circle cx="19" cy="14" r="2.5"/><path d="M6.8 16.2l3.8-6M13.8 9.4l3.6 2.9"/></svg><span class="tt">Suivi des points</span><small class="ts" id="trackSum"></small></summary>
     <div class="tile-b">
       <p class="hint flush">Signalements successifs d'un même animal : distance parcourue entre deux points, direction, vitesse. Corrigez la date et l'heure de chaque point si le signalement est plus ancien.</p>
+      <input class="tname" type="text" id="trackName" placeholder="Animal recherché (ex. Pirate)" aria-label="Animal recherché" maxlength="40" autocomplete="off">
       <ol class="tlist" id="trackList"></ol>
       <div class="dist tstats" id="trackStats"></div>
       <div class="grid2">
         <button class="btn" type="button" id="trackShare">Partager le suivi</button>
         <button class="btn sec" type="button" id="trackCopy">Copier le suivi</button>
-        <button class="btn sec" type="button" id="trackClear">Vider le suivi</button>
       </div>
+      <span class="lbl">Poursuivre plus tard ou sur un autre téléphone</span>
+      <div class="grid2">
+        <button class="btn sec" type="button" id="trackLink">Partager le lien</button>
+        <button class="btn sec" type="button" id="trackLinkCopy">Copier le lien</button>
+        <button class="btn sec" type="button" id="trackGpx">Fichier GPX</button>
+        <label class="btn sec" for="trackFile">Importer</label>
+        <input id="trackFile" type="file" accept=".gpx,.txt,application/gpx+xml,text/plain" hidden>
+      </div>
+      <p class="hint flush">Le lien ouvert dans GPS ESAM sur un autre téléphone y installe le suivi. Le GPX s'ouvre aussi dans les applis de carte ; importer accepte un GPX ou un lien de suivi.</p>
+      <p class="hint flush" id="trackMsg" hidden></p>
+      <button class="btn sec wide" type="button" id="trackClear">Vider le suivi</button>
     </div>
   </details>
   <details class="block tile" id="shareCard" hidden>

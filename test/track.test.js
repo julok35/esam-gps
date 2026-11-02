@@ -1,7 +1,18 @@
 // Tests du suivi de plusieurs points (js/track.js, partie calcul) : `npm test`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { legs, stats, fmtDur, fmtSpeed, trackText } from '../js/track.js';
+import {
+  legs,
+  stats,
+  fmtDur,
+  fmtSpeed,
+  trackText,
+  encodeTrack,
+  decodeTrack,
+  toGPX,
+  parseGPX,
+  mergeTracks
+} from '../js/track.js';
 
 const H = 3600000;
 // chien perdu : collier le matin, nouveau signalement le soir 1,5 km plus au nord-est, puis le lendemain
@@ -58,4 +69,53 @@ test('message de partage : chaque point, chaque étape, le bilan', () => {
   assert.match(t, /depuis le point 1, cap 4\d° NE, en 9 h 30/);
   assert.match(t, /Total : /);
   assert.equal(trackText([]), '');
+});
+
+test('nom de l’animal dans le message', () => {
+  assert.match(trackText(pts, 'Pirate'), /^Suivi ESAM · Pirate : 3 points/);
+});
+
+test('lien de suivi : nom et points encodés puis relus, étiquettes avec accents et espaces', () => {
+  const h = encodeTrack('Pirate', pts);
+  assert.match(h, /^s=Pirate~45\.200000,6\.200000,28800,collier~/);
+  const tr = decodeTrack('#' + h);
+  assert.equal(tr.name, 'Pirate');
+  assert.equal(tr.points.length, 3);
+  assert.equal(tr.points[2].label, 'vu près du lac');
+  assert.equal(tr.points[1].t, 17.5 * H);
+  // point mal formé ignoré, autre fragment refusé
+  assert.equal(decodeTrack('#s=Rex~abc,def,1~45.2,6.2,100,').points.length, 1);
+  assert.equal(decodeTrack('#45.2,6.2'), null);
+});
+
+test('GPX : waypoints et trace, relus avec étiquettes et dates ; GPX d’une autre source aussi', () => {
+  const g = toGPX('Pirate & co', pts);
+  assert.match(g, /<name>Pirate &amp; co<\/name>/);
+  assert.match(
+    g,
+    /<wpt lat="45\.200000" lon="6\.200000"><time>1970-01-01T08:00:00\.000Z<\/time><name>1 · collier<\/name><\/wpt>/
+  );
+  assert.equal((g.match(/<trkpt /g) || []).length, 3);
+  const tr = parseGPX(g);
+  assert.equal(tr.name, 'Pirate & co');
+  assert.deepEqual(
+    tr.points.map((p) => p.label),
+    ['collier', '', 'vu près du lac']
+  );
+  assert.equal(tr.points[1].t, 17.5 * H);
+  const other = parseGPX(
+    '<gpx><trk><name>Rando</name><trkseg><trkpt lat="45.1" lon="6.1"><time>2026-11-02T08:00:00Z</time></trkpt></trkseg></trk></gpx>'
+  );
+  assert.equal(other.name, 'Rando');
+  assert.equal(other.points.length, 1);
+  assert.equal(parseGPX('<gpx></gpx>'), null);
+});
+
+test('fusion : doublons ignorés, points triés par date', () => {
+  const m = mergeTracks([pts[1], pts[0]], [pts[1], { lat: 45.22, lon: 6.22, t: 40 * H, label: 'x' }]);
+  assert.equal(m.length, 3);
+  assert.deepEqual(
+    m.map((p) => p.t),
+    [8 * H, 17.5 * H, 40 * H]
+  );
 });

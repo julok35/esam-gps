@@ -7,6 +7,13 @@ import { coordZone } from './zone.js';
 import { confidence } from './trust.js';
 import { autoParams } from './enhance.js';
 
+// onFiles(fichiers) : plusieurs photos choisies ; vrai si le lot les prend (batch.js)
+var onFiles = function () {
+  return false;
+};
+export function setFilesHandler(fn) {
+  onFiles = fn;
+}
 var STEPS = [
   ['photo', 'Photo'],
   ['level', 'Redressement'],
@@ -347,9 +354,14 @@ function readEnh() {
 
 export function initAuto(show) {
   showCb = show;
-  ocr.initOcr(function () {
-    runAll();
-  });
+  ocr.initOcr(
+    function () {
+      runAll();
+    },
+    function (files) {
+      return onFiles(files);
+    }
+  );
   reset();
   $('steps').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-adj]');

@@ -5,9 +5,10 @@ Convertisseur de coordonnées GPS de l'Équipe de Secours Animalier en Montagne 
 **Appli en ligne : https://julok35.github.io/esam-gps/** (à ouvrir sur le téléphone, puis « Ajouter à l'écran d'accueil » pour l'installer).
 
 - Photo de l'écran (Garmin, téléphone) ou capture d'écran : tout s'enchaîne seul, étape par étape, chacune affichée avec son résultat et reprenable à la main : redressement (perspective d'après les bords de l'écran, inclinaison du texte), contraste et netteté, zone des coordonnées trouvée par une première lecture de toute la photo, lecture du texte sur le téléphone (Tesseract.js, plusieurs lectures et vote), note de confiance
+- Lot de photos : plusieurs photos choisies d'un coup, triées par date de prise de vue (EXIF, sinon date du fichier), réordonnables au doigt (la date suit), lues en parallèle par plusieurs moteurs ; les points sûrs rejoignent le suivi datés de la photo, les autres s'ouvrent une par une pour être repris à la main
 - Un point douteux (lectures discordantes, moteur hésitant, avertissement) n'est jamais transmis : partage, drone, autres formats et suivi restent fermés tant qu'il n'est pas corrigé ou confirmé après comparaison avec la photo
 - Correction de la lecture chiffre par chiffre, avec des molettes comme un cadenas à code ; zoom au pincement, cadre et quatre coins de perspective au doigt
-- Suivi de plusieurs points : signalements successifs d'un même animal, distance parcourue, cap, durée et vitesse entre les points, tracé numéroté sur la carte, message de suivi à partager
+- Suivi de plusieurs points : signalements successifs d'un même animal (nommé), distance parcourue, cap, durée et vitesse entre les points, tracé numéroté sur la carte, message de suivi à partager ; le suivi se poursuit plus tard ou sur un autre téléphone par un lien (`#s=...`, qui l'installe à l'ouverture) ou un fichier GPX (export et import, lisible aussi par les applis de carte)
 - Détection automatique du format : DD, DMM, DMS, NMEA, UTM, liens Google Maps
 - Sortie en degrés décimaux pour la RC Plus du M30T, saisie DJI Pilot 2
 - Carte (Plan IGN, topo, photo aérienne) avec la position du téléphone, distance, cap et dénivelé
@@ -27,7 +28,9 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `js/app.js` | Point d'entrée : résultat, liens, événements |
 | `js/parser.js` | Détection et conversion des coordonnées (sans DOM, testé sous Node) |
 | `js/auto.js` | Enchaînement automatique après une photo : étapes affichées, reprise à la main de chacune |
-| `js/ocr.js` | Photo, zoom, cadre et coins de perspective, lecture Tesseract (pleine photo puis cadre) et vote entre lectures |
+| `js/ocr.js` | Photo, zoom, cadre et coins de perspective, lecture Tesseract (pleine photo puis cadre, plusieurs moteurs) et vote entre lectures |
+| `js/batch.js` | Lot de photos : ordre, glisser-déposer, lecture de chaque photo sans écran, points versés au suivi |
+| `js/exif.js` | Date de prise de vue dans les métadonnées JPEG (sans DOM, testé sous Node) |
 | `js/skew.js` | Mesure de l'inclinaison du texte (sans DOM, testé sous Node) |
 | `js/warp.js` | Perspective : bords de l'écran (Hough), homographie, redressement (sans DOM, testé sous Node) |
 | `js/enhance.js` | Contraste, netteté et mesure du flou (sans DOM, testé sous Node) |
