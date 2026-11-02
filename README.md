@@ -2,6 +2,8 @@
 
 Convertisseur de coordonnées GPS de l'Équipe de Secours Animalier en Montagne (ESAM).
 
+**Appli en ligne : https://julok35.github.io/esam-gps/** (à ouvrir sur le téléphone, puis « Ajouter à l'écran d'accueil » pour l'installer).
+
 - Photo de l'écran (Garmin, téléphone), zoom au pincement pour cadrer, redressement d'une photo de travers (réglette ou automatique), lecture du texte sur le téléphone (Tesseract.js, plusieurs lectures et vote)
 - Correction de la lecture chiffre par chiffre, avec des molettes comme un cadenas à code
 - Détection automatique du format : DD, DMM, DMS, NMEA, UTM, liens Google Maps
