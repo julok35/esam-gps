@@ -119,3 +119,14 @@ test('fusion : doublons ignorés, points triés par date', () => {
     [8 * H, 17.5 * H, 40 * H]
   );
 });
+
+test('message de partage avec altitudes du terrain', () => {
+  const pts = [
+    { lat: 45.1007, lon: 5.902133, t: Date.parse('2026-11-02T20:38:00'), label: '' },
+    { lat: 45.103283, lon: 5.913967, t: Date.parse('2026-11-02T21:30:00'), label: '' }
+  ];
+  const t = trackText(pts, '', [1280, 1462]);
+  assert.match(t, /alt\. 1\s280 m/);
+  assert.match(t, /dénivelé \+182 m, en 52 min/);
+  assert.doesNotMatch(trackText(pts, '', [null, 1462]), /dénivelé/);
+});

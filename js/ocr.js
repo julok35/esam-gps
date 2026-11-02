@@ -92,13 +92,18 @@ export function photoDate(file) {
     }
   );
 }
-var photoT = null; // date de la photo affichée (ms) ou null
+var photoT = null, // date de la photo affichée (ms) ou null
+  photoF = null; // fichier de la photo affichée
 export function photoTime() {
   return photoT;
+}
+export function photoFile() {
+  return photoF;
 }
 // t : date de la photo déjà connue (lot), sinon lue dans ses métadonnées
 export function loadFile(file, t) {
   if (!file) return;
+  photoF = file;
   photoT = t || null;
   if (!t)
     photoDate(file).then(function (d) {

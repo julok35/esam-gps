@@ -1,7 +1,8 @@
 /* Carte Leaflet (IGN, topo, photo aérienne, OSM), position du téléphone, distance et cap. */
-import { $, f6, fmtDist, CARD, state } from './util.js';
+import { $, f6, esc, fmtDist, CARD, state } from './util.js';
+import { fmtWhen } from './track.js';
 import { distM, bearing } from './parser.js';
-import { updateRelief } from './place.js';
+import { updateRelief, knownAlt, fmtAlt } from './place.js';
 import { updateCompass } from './compass.js';
 
 var map = null,
@@ -63,6 +64,7 @@ export function initMap() {
   meCirc = L.circle([0, 0], { radius: 1, color: '#1E6FD9', weight: 1, fillOpacity: 0.12, interactive: false });
   line = L.polyline([], { color: '#E6332A', weight: 3, dashArray: '8 8', interactive: false });
   track = L.layerGroup().addTo(map);
+  map.on('zoomend', drawPins);
 
   // carte dépliée : Leaflet recalcule sa taille (elle était nulle tant que la tuile était repliée)
   $('mapCard').addEventListener('toggle', function () {
@@ -120,41 +122,119 @@ export function updateMap(recentre) {
   updateCompass();
 }
 
-// Suivi : points numérotés dans l'ordre (chien signalé le matin, puis le soir...), reliés par un trait plein
+// Suivi : points numérotés dans l'ordre (chien signalé le matin, puis le soir...), reliés par un trait plein.
+// Points trop proches à l'écran pour être distingués : une seule pastille « 2-3 » (ou « 2,5 »), détaillée au toucher ;
+// elle se sépare en zoomant.
+var GROUP_PX = 26;
 export function setTrack(pts) {
   trackPts = pts || [];
   if (!track) return;
   track.clearLayers();
+  trackMarks = [];
   if (!trackPts.length) return;
   var ll = trackPts.map(function (p) {
     return [p.lat, p.lon];
   });
   if (ll.length > 1) L.polyline(ll, { color: '#1E6FD9', weight: 4, opacity: 0.8, interactive: false }).addTo(track);
-  trackMarks = trackPts.map(function (p, i) {
-    return L.marker([p.lat, p.lon], {
+  drawPins();
+}
+// Regroupe les points dont les pastilles se chevauchent au zoom courant (indices dans l'ordre du suivi)
+export function groupPins(px, minPx) {
+  var groups = [];
+  px.forEach(function (q, i) {
+    var g = groups.find(function (g) {
+      return Math.hypot(g.x - q.x, g.y - q.y) < minPx;
+    });
+    if (g) g.ids.push(i);
+    else groups.push({ x: q.x, y: q.y, ids: [i] });
+  });
+  return groups;
+}
+// « 2-4 » pour des numéros qui se suivent, « 2,5 » sinon
+export function pinLabel(ids) {
+  var n = ids.map(function (i) {
+    return i + 1;
+  });
+  if (n.length === 1) return String(n[0]);
+  var seq = n.every(function (v, k) {
+    return !k || v === n[k - 1] + 1;
+  });
+  return seq ? n[0] + '-' + n[n.length - 1] : n.join(',');
+}
+var pinLayer = null;
+function drawPins() {
+  if (!map || !track) return;
+  if (pinLayer) track.removeLayer(pinLayer);
+  pinLayer = L.layerGroup().addTo(track);
+  var px = trackPts.map(function (p) {
+    return map.latLngToLayerPoint([p.lat, p.lon]);
+  });
+  trackMarks = groupPins(px, GROUP_PX).map(function (g) {
+    var lab = pinLabel(g.ids),
+      p0 = trackPts[g.ids[0]],
+      w = Math.max(24, 10 + lab.length * 8),
+      pop = g.ids
+        .map(function (i) {
+          var p = trackPts[i];
+          return (
+            '<b>Point ' +
+            (i + 1) +
+            '</b> ' +
+            (p.t ? fmtWhen(p.t) : '') +
+            '<br>' +
+            f6(p.lat) +
+            ', ' +
+            f6(p.lon) +
+            (knownAlt(p) !== undefined ? ' · ' + fmtAlt(knownAlt(p)) : '') +
+            (p.label ? '<br>' + esc(p.label) : '') +
+            (i > g.ids[0] ? '<br><small>à ' + fmtDist(distM(trackPts[i - 1], p)) + ' du point ' + i + '</small>' : '')
+          );
+        })
+        .join('<hr>');
+    var m = L.marker([p0.lat, p0.lon], {
       icon: L.divIcon({
         className: '',
-        html: '<div class="pin-n">' + (i + 1) + '</div>',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
+        html: '<div class="pin-n' + (g.ids.length > 1 ? ' multi' : '') + '">' + lab + '</div>',
+        iconSize: [w, 24],
+        iconAnchor: [w / 2, 12]
       })
     })
-      .bindPopup('<b>Point ' + (i + 1) + '</b><br>' + f6(p.lat) + ', ' + f6(p.lon) + (p.label ? '<br>' + p.label : ''))
-      .addTo(track);
+      .bindPopup(pop)
+      .addTo(pinLayer);
+    m.ids = g.ids;
+    return m;
   });
   if (state.current) markCurrent(state.current);
 }
-// Pastille du suivi qui est le point affiché (à moins de 3 m) mise en évidence ; vrai s'il y en a une
+// Pastille du suivi qui porte le point affiché (à moins de 3 m) mise en évidence ; vrai s'il y en a une
 function markCurrent(c) {
   var hit = false;
-  trackMarks.forEach(function (m, i) {
-    var is = distM(trackPts[i], c) < 3,
+  trackMarks.forEach(function (m) {
+    var is = m.ids.some(function (i) {
+        return distM(trackPts[i], c) < 3;
+      }),
       el = m.getElement();
     if (el && el.firstChild) el.firstChild.classList.toggle('cur', is);
     m.setZIndexOffset(is ? 1000 : 0);
     if (is) hit = true;
   });
   return hit;
+}
+// Repère du profil du relief : endroit lu au doigt sur le profil (q : { lat, lon } ou null pour le retirer)
+var probeMark = null;
+export function probe(q) {
+  if (!map) return;
+  if (!probeMark)
+    probeMark = L.circleMarker([0, 0], {
+      radius: 7,
+      color: '#111',
+      weight: 2,
+      fillColor: '#FFD400',
+      fillOpacity: 1,
+      interactive: false
+    });
+  if (q) probeMark.setLatLng([q.lat, q.lon]).addTo(map);
+  else map.removeLayer(probeMark);
 }
 export function fitTrack() {
   if (!map || !trackPts.length) return;

@@ -293,6 +293,7 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .tstats { margin-top: 0; }
 .pin-n.cur { background: var(--jaune); color: var(--noir); border-color: var(--noir); box-shadow: 0 0 0 3px #1E6FD9, 0 2px 8px rgba(0,0,0,.5); transform: scale(1.3); }
 .pin-n { width: 24px; height: 24px; border-radius: 50%; background: #1E6FD9; color: #fff; border: 2px solid #fff; display: grid; place-items: center; font: 700 .8rem/1 var(--f-label); box-shadow: 0 0 0 1.5px #1E6FD9, 0 2px 6px rgba(0,0,0,.4); }
+.pin-n.multi { width: 100%; padding: 0 6px; border-radius: 12px; box-sizing: border-box; white-space: nowrap; }
 #steps, #enhBox, #trackCard { scroll-margin-top: 104px; }
 
 /* Lot de photos : poignée, vignette, date, état, flèches ; ligne soulevée pendant le glisser */
@@ -314,3 +315,22 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .bx:disabled { opacity: .35; cursor: default; }
 .ba .chip { padding: 6px 10px; font-size: .74rem; }
 #batchCard { scroll-margin-top: 104px; }
+
+/* Relief du suivi : altitude de chaque point, montée / descente de l'étape, profil du terrain */
+.tp-z { font-size: .85rem; font-variant-numeric: tabular-nums; margin-top: 4px; }
+.zt { font-weight: 600; white-space: nowrap; }
+.zt.up { color: #C2410C; } .zt.down { color: #1E6FD9; } .zt.flat { color: var(--muted); }
+@media (prefers-color-scheme: dark) { .zt.up { color: #FB923C; } .zt.down { color: #7DB3FF; } }
+.tprof { margin-top: 10px; }
+.tprof:empty { display: none; }
+.pf-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pf-h small { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; text-align: right; }
+.pf { display: block; width: 100%; height: auto; touch-action: pan-y; user-select: none; margin-top: 4px; }
+.pf-g { stroke: var(--line); stroke-width: 1; }
+.pf-t { fill: var(--muted); font: 500 15px var(--f-body); }
+.pf-a { fill: #8B6A3E; fill-opacity: .22; }
+.pf-l { fill: none; stroke: #8B6A3E; stroke-width: 2.5; stroke-linejoin: round; }
+.pf-p { fill: #1E6FD9; stroke: #fff; stroke-width: 2; }
+.pf-n { fill: #fff; font: 700 12px var(--f-label); pointer-events: none; }
+.pf-z { fill: var(--fg); font: 700 14px var(--f-body); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+.pf-c { stroke: var(--fg); stroke-width: 1.5; stroke-dasharray: 4 3; }
