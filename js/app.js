@@ -10,13 +10,15 @@ import { initPlace, showPlace, placeText } from './place.js';
 import { initCompass } from './compass.js';
 import { confidence, trusted } from './trust.js';
 import { initTrack, addPoint, trackInfo, trackName, indexOf, decodeTrack, importTrack } from './track.js';
-import { initBatch } from './batch.js';
-import { clearZone, photoTime } from './ocr.js';
+import { initBatch, batchChecked } from './batch.js';
+import { clearZone, photoTime, photoFile } from './ocr.js';
 
 var src = $('src'),
   out = $('result');
 var chosen = 0,
   lastParse = null,
+  // texte issu d'une photo (lecture, puis corrections à la main) : le point du suivi garde la date de la photo
+  fromPhoto = false,
   sayTimer = null;
 
 // Annonce courte pour les lecteurs d'écran, une fois la saisie posée
@@ -274,6 +276,7 @@ function show(text, p) {
   src.value = text;
   chosen = 0;
   lastParse = p;
+  fromPhoto = !!(p && p.ocr);
   render();
 }
 function useCurrent() {
@@ -352,6 +355,7 @@ document.addEventListener('visibilitychange', function () {
 });
 $('clear').addEventListener('click', function () {
   src.value = '';
+  fromPhoto = false;
   $('cropBox').hidden = true;
   clearZone();
   hideSteps();
@@ -398,7 +402,8 @@ document.addEventListener('click', function (e) {
     useCurrent();
   } else if (t.dataset.track) {
     // point lu sur une photo datée : daté de la photo
-    var n = addPoint(state.current, '', lastParse && lastParse.ocr ? photoTime() : null);
+    var n = addPoint(state.current, '', fromPhoto ? photoTime() : null);
+    batchChecked(photoFile(), state.current);
     trackButton();
     say('Point ' + n + ' ajouté au suivi');
   } else if (t.dataset.alt) {
@@ -409,6 +414,7 @@ document.addEventListener('click', function (e) {
     var x = loadHist()[+t.dataset.hist];
     if (x) {
       src.value = x.src;
+      fromPhoto = false;
       clearZone();
       update();
       openTile('resCard');

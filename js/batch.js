@@ -347,6 +347,28 @@ function initDrag() {
   list.addEventListener('pointercancel', end);
 }
 
+// Photo du lot reprise à la main (bouton Vérifier) puis ajoutée au suivi : elle passe en lue, avec le point retenu
+export function batchChecked(file, c) {
+  var ph =
+    file &&
+    c &&
+    photos.find(function (p) {
+      return p.file === file;
+    });
+  if (!ph) return;
+  ph.st = 'ok';
+  ph.p = { best: { lat: c.lat, lon: c.lon } };
+  ph.msg = 'vérifiée à la main';
+  var left = photos.filter(function (p) {
+    return p.st === 'check' || p.st === 'fail';
+  }).length;
+  $('batchMsg').hidden = false;
+  $('batchMsg').textContent = left
+    ? 'Encore ' + left + ' photo' + (left > 1 ? 's' : '') + ' à vérifier.'
+    : 'Toutes les photos du lot sont au suivi.';
+  paint();
+}
+
 export function initBatch() {
   setFilesHandler(function (files) {
     if (!files.length || (files.length < 2 && !photos.length)) return false;

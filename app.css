@@ -293,6 +293,7 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .tstats { margin-top: 0; }
 .pin-n.cur { background: var(--jaune); color: var(--noir); border-color: var(--noir); box-shadow: 0 0 0 3px #1E6FD9, 0 2px 8px rgba(0,0,0,.5); transform: scale(1.3); }
 .pin-n { width: 24px; height: 24px; border-radius: 50%; background: #1E6FD9; color: #fff; border: 2px solid #fff; display: grid; place-items: center; font: 700 .8rem/1 var(--f-label); box-shadow: 0 0 0 1.5px #1E6FD9, 0 2px 6px rgba(0,0,0,.4); }
+.pin-n.multi { width: 100%; padding: 0 6px; border-radius: 12px; box-sizing: border-box; white-space: nowrap; }
 #steps, #enhBox, #trackCard { scroll-margin-top: 104px; }
 
 /* Lot de photos : poignée, vignette, date, état, flèches ; ligne soulevée pendant le glisser */
