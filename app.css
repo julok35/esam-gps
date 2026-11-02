@@ -275,7 +275,10 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .big1.held { color: var(--muted); }
 .big1.held small { color: var(--rouge); }
 .hold { background: var(--pale); border-left: 6px solid var(--rouge); border-radius: 0 10px 10px 0; padding: 10px 12px; display: grid; gap: 8px; font-size: .88rem; }
-.trk { display: grid; gap: 6px; justify-items: start; font-size: .85rem; color: var(--muted); }
+.trk { display: grid; gap: 6px; font-size: .85rem; color: var(--muted); }
+.trk .btn.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+.tname { width: 100%; font: 700 1rem var(--f-body); color: var(--fg); background: var(--field); border: 2px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.tname:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px var(--jaune); }
 /* suivi des points : liste numérotée, étapes, bilan */
 .tlist { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .tp { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); }

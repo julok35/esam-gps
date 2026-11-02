@@ -155,13 +155,24 @@
     <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="18" r="2.5"/><circle cx="12" cy="8" r="2.5"/><circle cx="19" cy="14" r="2.5"/><path d="M6.8 16.2l3.8-6M13.8 9.4l3.6 2.9"/></svg><span class="tt">Suivi des points</span><small class="ts" id="trackSum"></small></summary>
     <div class="tile-b">
       <p class="hint flush">Signalements successifs d'un même animal : distance parcourue entre deux points, direction, vitesse. Corrigez la date et l'heure de chaque point si le signalement est plus ancien.</p>
+      <input class="tname" type="text" id="trackName" placeholder="Animal recherché (ex. Pirate)" aria-label="Animal recherché" maxlength="40" autocomplete="off">
       <ol class="tlist" id="trackList"></ol>
       <div class="dist tstats" id="trackStats"></div>
       <div class="grid2">
         <button class="btn" type="button" id="trackShare">Partager le suivi</button>
         <button class="btn sec" type="button" id="trackCopy">Copier le suivi</button>
-        <button class="btn sec" type="button" id="trackClear">Vider le suivi</button>
       </div>
+      <span class="lbl">Poursuivre plus tard ou sur un autre téléphone</span>
+      <div class="grid2">
+        <button class="btn sec" type="button" id="trackLink">Partager le lien</button>
+        <button class="btn sec" type="button" id="trackLinkCopy">Copier le lien</button>
+        <button class="btn sec" type="button" id="trackGpx">Fichier GPX</button>
+        <label class="btn sec" for="trackFile">Importer</label>
+        <input id="trackFile" type="file" accept=".gpx,.txt,application/gpx+xml,text/plain" hidden>
+      </div>
+      <p class="hint flush">Le lien ouvert dans GPS ESAM sur un autre téléphone y installe le suivi. Le GPX s'ouvre aussi dans les applis de carte ; importer accepte un GPX ou un lien de suivi.</p>
+      <p class="hint flush" id="trackMsg" hidden></p>
+      <button class="btn sec wide" type="button" id="trackClear">Vider le suivi</button>
     </div>
   </details>
   <details class="block tile" id="shareCard" hidden>

@@ -10,7 +10,7 @@ import { initFix, openFix, closeFix } from './fix.js';
 import { initPlace, showPlace, placeText } from './place.js';
 import { initCompass } from './compass.js';
 import { confidence, trusted } from './trust.js';
-import { initTrack, addPoint, trackInfo } from './track.js';
+import { initTrack, addPoint, trackInfo, trackName, indexOf, decodeTrack, importTrack } from './track.js';
 
 var src = $('src'),
   out = $('result');
@@ -132,15 +132,10 @@ function render() {
     h +=
       '<div class="hold"><p class="flush"><b>Coordonnées douteuses : rien n\u2019est transmis.</b> Comparez chiffre par chiffre avec la photo. Corrigez-les avec les molettes, ou confirmez-les si elles sont justes.</p>' +
       '<div class="row2"><button class="btn" type="button" data-fix="1">Corriger</button><button class="btn sec" type="button" data-verify="1">Justes : confirmer</button></div></div>';
-  else {
-    var ti = trackInfo(c);
-    h +=
-      '<div class="trk">' +
-      (ti ? '<p class="flush">' + esc(ti) + '</p>' : '') +
-      '<button class="chip" type="button" data-track="1">Ajouter au suivi des points</button></div>';
-  }
+  else h += '<div class="trk" id="trk"></div>';
   $('resCard').classList.remove('empty');
   out.innerHTML = h;
+  if (ok) trackButton();
   $('resSum').textContent = (ok ? '' : 'à vérifier · ') + f6(c.lat).slice(0, -1) + ', ' + f6(c.lon).slice(0, -1);
   if (!ok) {
     // rien n'est proposé au partage, au drone ni aux autres cartes tant que le point n'est pas sûr
@@ -226,6 +221,21 @@ function render() {
   else cancelHist();
   say((warn ? 'Vérifié : ' : 'Lecture fiable : ') + la + ', ' + lo);
   setHash(la + ',' + lo);
+}
+// Bouton d'ajout au suivi, sous le point : gros, avec le nom de l'animal ; « déjà dans le suivi » si le point y est
+function trackButton() {
+  var c = state.current,
+    el = $('trk');
+  if (!c || !el) return;
+  var i = indexOf(c),
+    n = trackName(),
+    ti = trackInfo(c);
+  el.innerHTML =
+    (i >= 0
+      ? '<div class="btn ok wide" role="status">Point ' + (i + 1) + ' du suivi' + (n ? ' · ' + esc(n) : '') + '</div>'
+      : '<button class="btn wide" type="button" data-track="1">Ajouter au suivi' +
+        (n ? ' · ' + esc(n) : ' des points') +
+        '</button>') + (ti && i < 0 ? '<p class="flush">' + esc(ti) + '</p>' : '');
 }
 function eqRows(c) {
   return [
@@ -386,8 +396,9 @@ document.addEventListener('click', function (e) {
     render();
     useCurrent();
   } else if (t.dataset.track) {
-    addPoint(state.current);
-    render();
+    var n = addPoint(state.current);
+    trackButton();
+    say('Point ' + n + ' ajouté au suivi');
   } else if (t.dataset.alt) {
     chosen = +t.dataset.alt;
     if (lastParse) lastParse.verified = false;
@@ -413,13 +424,20 @@ initFix(function (t) {
   src.value = t;
   update(true);
 });
-initTrack();
+initTrack(trackButton);
 initPlace();
 initCompass();
 $('ver').textContent = 'v' + VERSION;
 drawHist();
 var h0 = decodeURIComponent((location.hash || '').slice(1));
 if (/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(h0)) src.value = h0.replace(',', ', ');
+// lien de suivi (partagé depuis un autre téléphone) : le suivi s'installe ici
+var tr0 = decodeTrack(location.hash);
+if (tr0) {
+  $('trackMsg').hidden = false;
+  $('trackMsg').textContent = importTrack(tr0);
+  setHash('');
+}
 lastParse = parse(src.value);
 render();
 cancelHist(); // un lien ouvert n'entre pas dans l'historique tant qu'on ne s'en sert pas

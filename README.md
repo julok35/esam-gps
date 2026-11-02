@@ -7,7 +7,7 @@ Convertisseur de coordonnées GPS de l'Équipe de Secours Animalier en Montagne 
 - Photo de l'écran (Garmin, téléphone) ou capture d'écran : tout s'enchaîne seul, étape par étape, chacune affichée avec son résultat et reprenable à la main : redressement (perspective d'après les bords de l'écran, inclinaison du texte), contraste et netteté, zone des coordonnées trouvée par une première lecture de toute la photo, lecture du texte sur le téléphone (Tesseract.js, plusieurs lectures et vote), note de confiance
 - Un point douteux (lectures discordantes, moteur hésitant, avertissement) n'est jamais transmis : partage, drone, autres formats et suivi restent fermés tant qu'il n'est pas corrigé ou confirmé après comparaison avec la photo
 - Correction de la lecture chiffre par chiffre, avec des molettes comme un cadenas à code ; zoom au pincement, cadre et quatre coins de perspective au doigt
-- Suivi de plusieurs points : signalements successifs d'un même animal, distance parcourue, cap, durée et vitesse entre les points, tracé numéroté sur la carte, message de suivi à partager
+- Suivi de plusieurs points : signalements successifs d'un même animal (nommé), distance parcourue, cap, durée et vitesse entre les points, tracé numéroté sur la carte, message de suivi à partager ; le suivi se poursuit plus tard ou sur un autre téléphone par un lien (`#s=...`, qui l'installe à l'ouverture) ou un fichier GPX (export et import, lisible aussi par les applis de carte)
 - Détection automatique du format : DD, DMM, DMS, NMEA, UTM, liens Google Maps
 - Sortie en degrés décimaux pour la RC Plus du M30T, saisie DJI Pilot 2
 - Carte (Plan IGN, topo, photo aérienne) avec la position du téléphone, distance, cap et dénivelé
