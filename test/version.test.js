@@ -12,6 +12,24 @@ test('version du bandeau = version du cache sw.js', () => {
 
 test('chaque module de js/ est dans le cache hors ligne', () => {
   const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  for (const f of ['app', 'parser', 'util', 'map', 'share', 'history', 'ocr', 'skew', 'fix', 'place', 'compass'])
+  for (const f of [
+    'app',
+    'parser',
+    'util',
+    'map',
+    'share',
+    'history',
+    'ocr',
+    'skew',
+    'fix',
+    'place',
+    'compass',
+    'auto',
+    'enhance',
+    'warp',
+    'zone',
+    'trust',
+    'track'
+  ])
     assert.ok(sw.includes("'js/" + f + ".js'"), f);
 });
