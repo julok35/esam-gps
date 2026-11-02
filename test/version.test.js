@@ -29,7 +29,9 @@ test('chaque module de js/ est dans le cache hors ligne', () => {
     'warp',
     'zone',
     'trust',
-    'track'
+    'track',
+    'exif',
+    'batch'
   ])
     assert.ok(sw.includes("'js/" + f + ".js'"), f);
 });

@@ -29,6 +29,8 @@ var SHELL = [
   'js/zone.js',
   'js/trust.js',
   'js/track.js',
+  'js/exif.js',
+  'js/batch.js',
   'vendor/leaflet/leaflet.js',
   'vendor/leaflet/leaflet.css',
   'vendor/leaflet/images/layers.png',

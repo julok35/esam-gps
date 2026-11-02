@@ -339,20 +339,35 @@ export function loadTrack() {
     return [];
   }
 }
+// Le suivi est toujours dans l'ordre des dates (tri stable : deux points à la même date gardent leur ordre d'entrée)
 function save(pts) {
+  pts.sort(function (a, b) {
+    return a.t - b.t;
+  });
   try {
     localStorage.setItem(KEY, JSON.stringify(pts));
   } catch (e) {}
 }
-// Le point affiché entre dans le suivi, daté de maintenant (la date se corrige ensuite dans la liste)
-export function addPoint(c, label) {
+// Le point affiché entre dans le suivi, daté de la photo (t) ou de maintenant (la date se corrige dans la liste).
+// Retour : son numéro dans le suivi
+export function addPoint(c, label, t) {
   if (!c) return 0;
-  var pts = loadTrack();
-  pts.push({ lat: c.lat, lon: c.lon, t: Date.now(), label: label || '' });
+  var pts = loadTrack(),
+    p = { lat: c.lat, lon: c.lon, t: t || Date.now(), label: label || '' };
+  pts.push(p);
   save(pts);
   drawTrack();
   openTrack();
-  return pts.length;
+  return pts.indexOf(p) + 1;
+}
+// Plusieurs points d'un coup (lot de photos), sans doublon. Retour : nombre ajouté
+export function addPoints(list) {
+  var cur = loadTrack(),
+    merged = mergeTracks(cur, list);
+  save(merged);
+  drawTrack();
+  if (merged.length) openTrack();
+  return merged.length - cur.length;
 }
 function openTrack() {
   var d = $('trackCard');

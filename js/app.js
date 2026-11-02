@@ -4,13 +4,14 @@ import { parse, toDMM, toDMS, toUTM } from './parser.js';
 import { initMap, updateMap, startGeo } from './map.js';
 import { initShare, drawQR, shareText } from './share.js';
 import { loadHist, drawHist, scheduleHist, flushHist, cancelHist } from './history.js';
-import { clearZone } from './ocr.js';
 import { initAuto, hideSteps } from './auto.js';
 import { initFix, openFix, closeFix } from './fix.js';
 import { initPlace, showPlace, placeText } from './place.js';
 import { initCompass } from './compass.js';
 import { confidence, trusted } from './trust.js';
 import { initTrack, addPoint, trackInfo, trackName, indexOf, decodeTrack, importTrack } from './track.js';
+import { initBatch } from './batch.js';
+import { clearZone, photoTime } from './ocr.js';
 
 var src = $('src'),
   out = $('result');
@@ -396,7 +397,8 @@ document.addEventListener('click', function (e) {
     render();
     useCurrent();
   } else if (t.dataset.track) {
-    var n = addPoint(state.current);
+    // point lu sur une photo datée : daté de la photo
+    var n = addPoint(state.current, '', lastParse && lastParse.ocr ? photoTime() : null);
     trackButton();
     say('Point ' + n + ' ajouté au suivi');
   } else if (t.dataset.alt) {
@@ -420,6 +422,7 @@ initTiles();
 initMap();
 initShare(useCurrent);
 initAuto(show);
+initBatch();
 initFix(function (t) {
   src.value = t;
   update(true);

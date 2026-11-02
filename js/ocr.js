@@ -5,6 +5,7 @@ import { parse, inRegion, distM } from './parser.js';
 import { skewAngle } from './skew.js';
 import { toGray, stretchBounds, enhance, autoParams } from './enhance.js';
 import { findQuad, homography, invert, warp, rectFor, grow } from './warp.js';
+import { exifDate } from './exif.js';
 
 // Bibliothèque et worker hébergés avec l'appli (worker de même origine : contrôlé par le service worker, donc utilisable hors ligne).
 // Moteur WebAssembly et langue sur le CDN (versions figées), gardés en cache par le service worker.
@@ -50,9 +51,9 @@ var orig = null,
   stage,
   selEl,
   drag = null,
-  ocrWorker = null,
   progCb = function () {},
-  photoCb = function () {};
+  photoCb = function () {},
+  filesCb = function () {};
 // Vue de la photo : zoom z (1 = photo entière) et décalage en pixels de l'écran ; doigts posés sur la photo
 var view = { z: 1, tx: 0, ty: 0 },
   ptrs = new Map();
@@ -60,14 +61,51 @@ var ZMAX = 8, // zoom maximal
   MIN_SIDE = 0.02, // plus petit côté du cadre (fraction de la photo)
   DEAD = 8; // mouvement ignoré (px) avant de bouger quoi que ce soit
 
-function loadFile(file) {
-  if (!file) return;
+// Fichier image -> canevas (orientation EXIF appliquée), grand côté max pixels au plus
+export function loadCanvas(file, max) {
   var done = function (img) {
-    var s = Math.min(1, 2400 / Math.max(img.width, img.height));
-    orig = document.createElement('canvas');
-    orig.width = Math.round(img.width * s);
-    orig.height = Math.round(img.height * s);
-    orig.getContext('2d').drawImage(img, 0, 0, orig.width, orig.height);
+    var s = Math.min(1, (max || 2400) / Math.max(img.width, img.height)),
+      c = document.createElement('canvas');
+    c.width = Math.round(img.width * s);
+    c.height = Math.round(img.height * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    if (img.close) img.close();
+    return c;
+  };
+  return (
+    window.createImageBitmap
+      ? createImageBitmap(file, { imageOrientation: 'from-image' }).catch(function () {
+          return viaImg(file);
+        })
+      : viaImg(file)
+  ).then(done);
+}
+// Date de prise de vue (EXIF), sinon date du fichier : { t, exif : vrai si lue dans la photo }
+export function photoDate(file) {
+  return (file.slice ? file.slice(0, 131072).arrayBuffer() : Promise.reject()).then(
+    function (b) {
+      var t = exifDate(b);
+      return t ? { t: t, exif: true } : { t: file.lastModified || Date.now(), exif: false };
+    },
+    function () {
+      return { t: file.lastModified || Date.now(), exif: false };
+    }
+  );
+}
+var photoT = null; // date de la photo affichée (ms) ou null
+export function photoTime() {
+  return photoT;
+}
+// t : date de la photo déjà connue (lot), sinon lue dans ses métadonnées
+export function loadFile(file, t) {
+  if (!file) return;
+  photoT = t || null;
+  if (!t)
+    photoDate(file).then(function (d) {
+      photoT = d.exif ? d.t : null;
+    });
+  loadCanvas(file, 2400).then(function (c) {
+    orig = c;
     base = orig;
     angle = 0;
     work = null;
@@ -82,29 +120,30 @@ function loadFile(file) {
     $('prog').hidden = true;
     showWork();
     photoCb(file);
-  };
-  if (window.createImageBitmap)
-    createImageBitmap(file, { imageOrientation: 'from-image' }).then(done, function () {
-      viaImg(file, done);
-    });
-  else viaImg(file, done);
+  });
 }
-function viaImg(file, cb) {
-  var u = URL.createObjectURL(file),
-    im = new Image();
-  im.onload = function () {
-    cb(im);
-    URL.revokeObjectURL(u);
-  };
-  im.src = u;
+function viaImg(file) {
+  return new Promise(function (res, rej) {
+    var u = URL.createObjectURL(file),
+      im = new Image();
+    im.onload = function () {
+      URL.revokeObjectURL(u);
+      res(im);
+    };
+    im.onerror = rej;
+    im.src = u;
+  });
 }
 // Photo tournée de deg degrés autour de son centre, dans un canevas agrandi pour n'en rien perdre ; échelle s.
 // Les coins laissés vides prennent la teinte moyenne de la photo, pour ne pas fausser le contraste de la lecture.
-function rotDims(deg) {
+function rotDimsOf(img, deg) {
   var a = (deg * Math.PI) / 180,
     c = Math.abs(Math.cos(a)),
     si = Math.abs(Math.sin(a));
-  return { w: base.width * c + base.height * si, h: base.width * si + base.height * c };
+  return { w: img.width * c + img.height * si, h: img.width * si + img.height * c };
+}
+function rotDims(deg) {
+  return rotDimsOf(base, deg);
 }
 function meanColor(img) {
   var g = document.createElement('canvas').getContext('2d');
@@ -112,14 +151,15 @@ function meanColor(img) {
   g.drawImage(img, 0, 0, 1, 1);
   return g.getImageData(0, 0, 1, 1).data;
 }
-function drawRotated(deg, s) {
-  var r = rotDims(deg),
+export function rotateCanvas(img, deg, s) {
+  var r = rotDimsOf(img, deg),
     c = document.createElement('canvas');
+  s = s || 1;
   c.width = Math.max(1, Math.round(r.w * s));
   c.height = Math.max(1, Math.round(r.h * s));
   var g = c.getContext('2d');
   if (deg) {
-    var m = meanColor(base);
+    var m = meanColor(img);
     g.fillStyle = 'rgb(' + m[0] + ',' + m[1] + ',' + m[2] + ')';
     g.fillRect(0, 0, c.width, c.height);
   }
@@ -127,8 +167,11 @@ function drawRotated(deg, s) {
   g.translate(c.width / 2, c.height / 2);
   g.rotate((deg * Math.PI) / 180);
   g.scale(s, s);
-  g.drawImage(base, -base.width / 2, -base.height / 2);
+  g.drawImage(img, -img.width / 2, -img.height / 2);
   return c;
+}
+function drawRotated(deg, s) {
+  return rotateCanvas(base, deg, s);
 }
 export function getWork() {
   if (!work) work = angle ? drawRotated(angle, 1) : base;
@@ -353,15 +396,17 @@ function drawQuad() {
   });
 }
 // Cadre de l'écran trouvé dans la photo : { quad, gain, tilt, cover } ou null
-export function detectQuad() {
-  if (!base) return null;
-  var G = grayOf(base, null, 480),
+export function detectQuadIn(img) {
+  var G = grayOf(img, null, 480),
     q = findQuad(G.g, G.w, G.h);
   if (!q) return null;
   q.quad = q.quad.map(function (p) {
     return [p[0] / G.k, p[1] / G.k];
   });
   return q;
+}
+export function detectQuad() {
+  return base ? detectQuadIn(base) : null;
 }
 export function setQuad(q) {
   quad = q;
@@ -372,10 +417,9 @@ export function getQuad() {
 }
 // La photo d'origine redressée : le quadrilatère q (pixels de orig) devient un rectangle, avec une marge de 3 %
 // autour pour ne rien perdre si un bord est un peu à côté. Les pixels hors photo prennent sa teinte moyenne.
-export function applyQuad(q) {
-  if (!orig || !q) return false;
+export function warpCanvas(img, q, max) {
   var src = grow(q, 0.03),
-    r = rectFor(src, 2400),
+    r = rectFor(src, max || 2400),
     H = homography(src, [
       [0, 0],
       [r.w, 0],
@@ -383,15 +427,21 @@ export function applyQuad(q) {
       [0, r.h]
     ]),
     Hi = H && invert(H);
-  if (!Hi) return false;
-  var g = orig.getContext('2d', { willReadFrequently: true }),
-    d = g.getImageData(0, 0, orig.width, orig.height),
-    m = meanColor(orig),
-    out = warp(d.data, orig.width, orig.height, 4, Hi, r.w, r.h, [m[0], m[1], m[2], 255]);
+  if (!Hi) return null;
+  var g = img.getContext('2d', { willReadFrequently: true }),
+    d = g.getImageData(0, 0, img.width, img.height),
+    m = meanColor(img),
+    out = warp(d.data, img.width, img.height, 4, Hi, r.w, r.h, [m[0], m[1], m[2], 255]);
   var c = document.createElement('canvas');
   c.width = r.w;
   c.height = r.h;
   c.getContext('2d').putImageData(new ImageData(out, r.w, r.h), 0, 0);
+  return c;
+}
+export function applyQuad(q) {
+  if (!orig || !q) return false;
+  var c = warpCanvas(orig, q, 2400);
+  if (!c) return false;
   base = c;
   quad = q;
   angle = 0;
@@ -605,8 +655,10 @@ function initCrop() {
     e.target.value = '';
   });
   $('gal').addEventListener('change', function (e) {
-    loadFile(e.target.files[0]);
+    var fs = Array.from(e.target.files || []);
     e.target.value = '';
+    // plusieurs photos (ou un lot déjà ouvert) : le lot les prend ; sinon la photo seule
+    if (!filesCb(fs)) loadFile(fs[0]);
   });
 }
 // Scène visible, dans le mode demandé, cadrage à la place de la zone lue
@@ -726,8 +778,15 @@ function loadScript(u) {
 }
 // Chien de garde : Tesseract ne signale pas toujours un moteur qui ne se charge pas ; sans aucun progrès pendant STALL ms, échec
 var STALL = 60000;
-export function getWorker() {
-  if (ocrWorker) return ocrWorker;
+// Moteurs de lecture : le premier sert à la photo affichée, les suivants au lot de photos (lectures en parallèle)
+var workers = [];
+export function workerCount() {
+  var n = (navigator.hardwareConcurrency || 2) - 1;
+  return Math.max(1, Math.min(3, n));
+}
+export function getWorker(i) {
+  i = i || 0;
+  if (workers[i]) return workers[i];
   var timer,
     settled = false,
     kick = function (fail) {
@@ -737,7 +796,7 @@ export function getWorker() {
         fail(new Error('bloqué'));
       }, STALL);
     };
-  ocrWorker = new Promise(function (resolve, reject) {
+  var pr = new Promise(function (resolve, reject) {
     kick(reject);
     (window.Tesseract ? Promise.resolve() : loadScript(TESS.lib))
       .then(function () {
@@ -748,13 +807,14 @@ export function getWorker() {
           langPath: TESS.lang,
           logger: function (m) {
             kick(reject);
-            progCb(m);
+            if (!i) progCb(m);
           }
         });
       })
       .then(resolve, reject);
   });
-  ocrWorker.then(
+  workers[i] = pr;
+  pr.then(
     function () {
       settled = true;
       clearTimeout(timer);
@@ -762,10 +822,10 @@ export function getWorker() {
     function () {
       settled = true;
       clearTimeout(timer);
-      ocrWorker = null;
+      workers[i] = null;
     }
   );
-  return ocrWorker;
+  return pr;
 }
 var LBL = {
   'loading tesseract core': 'Chargement du moteur',
@@ -836,13 +896,13 @@ export function firm(x) {
 
 // Lecture pleine image (mode texte épars), pour trouver où sont les coordonnées : { lines, text } (lignes avec mots,
 // boîtes en pixels de img et confiances). stale() : vrai si la photo a changé entre-temps.
-export function recognizeFull(img, stale) {
+export function recognizeFull(img, stale, wi) {
   var pr = prepared(img, { x: 0, y: 0, w: 1, h: 1 }, FULL_W, 0, true),
     k = pr.c.width / img.width;
   var fix = function (b) {
     return { x0: b.x0 / k, y0: b.y0 / k, x1: b.x1 / k, y1: b.y1 / k };
   };
-  return getWorker().then(function (w) {
+  return getWorker(wi).then(function (w) {
     if (stale()) return null;
     return w
       .setParameters({ tessedit_pageseg_mode: '11' })
@@ -888,7 +948,7 @@ export function recognizeFull(img, stale) {
  *   rival : une valeur concurrente aussi lue, tess : confiance moyenne du moteur sur les mots de la lecture retenue,
  *   none : aucune coordonnée dans aucune lecture, enh : réglages appliqués }
  */
-export function readBox(img, box, onPass, stale) {
+export function readBox(img, box, onPass, stale, wi) {
   var imgs = {},
     runs = [],
     p0 = null;
@@ -896,7 +956,7 @@ export function readBox(img, box, onPass, stale) {
     var v = votes(runs);
     return firm(v.lat) && firm(v.lon);
   };
-  return getWorker().then(function (w) {
+  return getWorker(wi).then(function (w) {
     var i = 0;
     var step = function () {
       if (i >= PASSES.length || done() || stale()) return;
@@ -1100,11 +1160,12 @@ function prepareOffline() {
 }
 
 // onPhoto(file) : appelé à chaque nouvelle photo chargée (auto.js enchaîne les étapes)
-export function initOcr(onPhoto) {
+export function initOcr(onPhoto, onFiles) {
   cv = $('cv');
   stage = $('stage');
   selEl = $('sel');
   photoCb = onPhoto || photoCb;
+  filesCb = onFiles || filesCb;
   initCrop();
   $('prepOff').addEventListener('click', prepareOffline);
 }
