@@ -22,7 +22,7 @@ var STEPS = [
   ['read', 'Lecture'],
   ['trust', 'Confiance']
 ];
-var ICON = { wait: '·', run: '…', ok: '✓', warn: '!', fail: '✕', info: '–' };
+var ICON = { wait: '·', run: '…', ok: '✓', warn: '!', fail: '✕', info: '-' };
 var ZONE_PAD = 0.35; // marge autour des mots trouvés (fraction de la hauteur de la zone)
 var state = {},
   job = 0,
@@ -101,7 +101,7 @@ function stepEnh() {
   var G = ocr.grayOf(ocr.getWork(), null, 800),
     p = autoParams(G.g, G.w, G.h),
     e = ocr.getEnh(),
-    msg = 'contraste étiré (' + p.lo + '–' + p.hi + ' → 0–255)';
+    msg = 'contraste étiré (' + p.lo + '-' + p.hi + ' → 0-255)';
   if (e.sharp === null) msg += p.sharp ? ', netteté renforcée ×' + String(p.sharp).replace('.', ',') : ', photo nette';
   else msg += ', netteté ×' + String(e.sharp).replace('.', ',') + ' (réglée à la main)';
   if (e.contrast !== 1) msg += ', contraste ×' + String(e.contrast).replace('.', ',');

@@ -1,5 +1,5 @@
 /* Service worker GPS ESAM : appli en cache, moteur de lecture gardé une fois téléchargé, tuiles de carte gardées une fois vues. */
-var V = 'esam-gps-v1.29',
+var V = 'esam-gps-v1.30',
   TILES = 'esam-tiles',
   LIBS = 'esam-libs';
 var SHELL = [
@@ -17,6 +17,7 @@ var SHELL = [
   'js/util.js',
   'js/map.js',
   'js/share.js',
+  'js/go.js',
   'js/history.js',
   'js/ocr.js',
   'js/skew.js',

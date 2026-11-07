@@ -31,7 +31,8 @@ test('chaque module de js/ est dans le cache hors ligne', () => {
     'trust',
     'track',
     'exif',
-    'batch'
+    'batch',
+    'go'
   ])
     assert.ok(sw.includes("'js/" + f + ".js'"), f);
 });

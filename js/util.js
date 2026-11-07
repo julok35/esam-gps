@@ -1,6 +1,6 @@
 /* Petits outils partagés : DOM, échappement, formats, copie. */
 // Version affichée dans le bandeau ; doit suivre le cache V de sw.js (vérifié par les tests)
-export var VERSION = '1.29';
+export var VERSION = '1.30';
 
 export var $ = function (id) {
   return document.getElementById(id);
@@ -42,15 +42,17 @@ export function copy(text, btn) {
   };
   try {
     navigator.clipboard.writeText(text).then(ok, function () {
-      fallback(text);
+      execCopy(text);
       ok();
     });
   } catch (e) {
-    fallback(text);
+    execCopy(text);
     ok();
   }
 }
-function fallback(text) {
+// Copie par un champ caché (navigateurs sans presse-papiers asynchrone) ; vrai si le navigateur dit avoir copié
+export function execCopy(text) {
+  var done = false;
   var ta = document.createElement('textarea');
   ta.value = text;
   ta.setAttribute('readonly', '');
@@ -59,9 +61,29 @@ function fallback(text) {
   document.body.appendChild(ta);
   ta.select();
   try {
-    document.execCommand('copy');
+    done = document.execCommand('copy');
   } catch (e) {}
   document.body.removeChild(ta);
+  return !!done;
+}
+// Copie avec résultat : Promise<boolean>, presse-papiers asynchrone d'abord, champ caché ensuite
+export function clip(text) {
+  return new Promise(function (res) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+          function () {
+            res(true);
+          },
+          function () {
+            res(execCopy(text));
+          }
+        );
+        return;
+      }
+    } catch (e) {}
+    res(execCopy(text));
+  });
 }
 
 // Tuiles repliables : chacune garde son état (ouverte / repliée) sur ce téléphone
