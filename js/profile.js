@@ -182,7 +182,7 @@ export function profileSvg(samples, zs, fmtDist) {
       py = r1(g.py),
       lo = Math.min.apply(null, g.zs),
       hi = Math.max.apply(null, g.zs),
-      zt = Math.round(lo).toLocaleString('fr-FR') + (hi - lo >= 5 ? '–' + Math.round(hi).toLocaleString('fr-FR') : ''),
+      zt = Math.round(lo).toLocaleString('fr-FR') + (hi - lo >= 5 ? '-' + Math.round(hi).toLocaleString('fr-FR') : ''),
       show = px - lastX >= 30 + zt.length * 4;
     s +=
       '<rect class="pf-p" x="' +

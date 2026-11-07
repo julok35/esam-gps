@@ -15,6 +15,8 @@ Convertisseur de coordonnées GPS de l'Équipe de Secours Animalier en Montagne 
 - Lieu du point : commune, altitude du terrain, lieux nommés à moins de 2 km (sommet, col, lac, cascade, refuge...), avec du réseau
 - Boussole active d'elle-même dans le bandeau du haut : on pointe le téléphone vers la victime, le repère jaune (gauche / droite selon le cap, haut / bas selon la hauteur du point) entre dans le viseur, « Tournez à gauche / droite » quand il est hors champ
 - Écran en tuiles repliables (icône, titre, résumé une fois repliée), état gardé sur le téléphone
+- AirOps sous le point : un toucher copie « lat, lon » et ouvre la carte AirOps centrée ; dans AirOps, loupe, coller, choisir le résultat, puis toucher le repère rouge pour les restrictions de vol (AirOps ne pose pas de repère par lien, d'où la copie). Aide « ? » à côté du bouton ; si la copie est refusée, les coordonnées s'affichent en gros avec un bouton Copier
+- Itinéraire : Google Maps en voiture depuis la position du téléphone (l'appli Maps sur Android), ou « Autre appli GPS » par un lien geo: (OsmAnd, Waze...). AirOps et Itinéraire restent désactivés, avec la raison, tant que le point est douteux, hors de France métropolitaine (latitude 41 à 51,5, longitude -5,5 à 10) ou semble inversé (l'inversion est alors proposée)
 - Partage natif, WhatsApp, QR code (appli, Google Maps, geo:)
 - Installable sur l'écran d'accueil, fonctionne hors ligne une fois préparée
 
@@ -41,6 +43,7 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `js/map.js` | Carte, position du téléphone, distance et cap |
 | `js/place.js` | Commune (geo.api.gouv.fr, Nominatim hors de France), lieux proches (Overpass, OpenStreetMap), altitude du terrain (IGN RGE ALTI, Copernicus via Open-Meteo hors de France) et dénivelé |
 | `js/compass.js` | Bandeau boussole (capteurs d'orientation, déclinaison magnétique approchée) |
+| `js/go.js` | AirOps et Itinéraire : contrôle du point (France métropolitaine, ordre lat / lon) et liens (sans DOM, testé sous Node) |
 | `js/share.js`, `js/history.js`, `js/util.js` | Partage et QR, historique, outils communs |
 | `sw.js` | Service worker : appli hors ligne, moteur de lecture et tuiles en cache |
 | `test/` | Tests Node (`node --test`), dont une vraie photo d'écran Garmin en niveaux de gris |

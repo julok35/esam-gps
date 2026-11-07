@@ -1,5 +1,6 @@
 /* GPS ESAM : point d'entrée. Lecture du texte, affichage du résultat, liens, événements. */
-import { $, esc, f6, copy, state, VERSION, initTiles, openTile } from './util.js';
+import { $, esc, f6, copy, clip, state, VERSION, initTiles, openTile } from './util.js';
+import { checkPoint, ddText, airopsUrl, routeUrl, geoUrl } from './go.js';
 import { parse, toDMM, toDMS, toUTM } from './parser.js';
 import { initMap, updateMap, startGeo } from './map.js';
 import { initShare, drawQR, shareText } from './share.js';
@@ -19,7 +20,8 @@ var chosen = 0,
   lastParse = null,
   // texte issu d'une photo (lecture, puis corrections à la main) : le point du suivi garde la date de la photo
   fromPhoto = false,
-  sayTimer = null;
+  sayTimer = null,
+  goTimer = null;
 
 // Annonce courte pour les lecteurs d'écran, une fois la saisie posée
 function say(t) {
@@ -57,7 +59,8 @@ function render() {
     out.innerHTML =
       r && r.empty
         ? '<div class="status"><span class="pill none">En attente de coordonnées</span></div>'
-        : '<div class="status"><span class="pill check">Aucune coordonnée trouvée</span></div><p class="flush">Corrigez le texte ou recadrez sur les coordonnées.</p>';
+        : '<div class="status"><span class="pill check">Aucune coordonnée trouvée</span></div><p class="flush">Corrigez le texte ou recadrez sur les coordonnées.</p>' +
+          goBlock(null, 'Pas de coordonnées valides : AirOps et Itinéraire désactivés.');
     $('resSum').textContent = r && r.empty ? '' : 'aucune coordonnée';
     $('eqCard').hidden = true;
     $('shareCard').hidden = true;
@@ -101,6 +104,7 @@ function render() {
     : '<div class="big1 held">' + la + ', ' + lo + '<small>Douteux : à vérifier sur la photo</small></div>';
   h += '<div class="seg1">Lu : ' + esc(c.seg) + '</div>';
   h += '<div class="place" id="place"></div>';
+  if (ok) h += goBlock(c);
   var notes = c.notes.slice();
   if (r.alts.length) notes.push({ t: 'Plusieurs lectures possibles : comparez avec la photo.' });
   if (!ok && r.trust && r.trust.why.length && r.ocr)
@@ -134,7 +138,11 @@ function render() {
   if (!ok)
     h +=
       '<div class="hold"><p class="flush"><b>Coordonnées douteuses : rien n\u2019est transmis.</b> Comparez chiffre par chiffre avec la photo. Corrigez-les avec les molettes, ou confirmez-les si elles sont justes.</p>' +
-      '<div class="row2"><button class="btn" type="button" data-fix="1">Corriger</button><button class="btn sec" type="button" data-verify="1">Justes : confirmer</button></div></div>';
+      '<div class="row2"><button class="btn" type="button" data-fix="1">Corriger</button><button class="btn sec" type="button" data-verify="1">Justes : confirmer</button></div></div>' +
+      goBlock(
+        null,
+        'Coordonnées à vérifier : AirOps et Itinéraire s\u2019activent une fois le point corrigé ou confirmé.'
+      );
   else h += '<div class="trk" id="trk"></div>';
   $('resCard').classList.remove('empty');
   out.innerHTML = h;
@@ -179,15 +187,6 @@ function render() {
 
   // ouvrir le point dans d'autres cartes
   $('links').innerHTML =
-    '<a target="_blank" rel="noopener" data-airops="' +
-    la +
-    ', ' +
-    lo +
-    '" href="https://airops-supuav.fr/map/#15/' +
-    la +
-    '/' +
-    lo +
-    '">AirOps</a>' +
     '<a target="_blank" rel="noopener" href="https://cartes.gouv.fr/explorer-les-cartes/?c=' +
     lo +
     ',' +
@@ -198,7 +197,6 @@ function render() {
     ',' +
     lo +
     '">Google Maps</a>';
-  $('linkMsg').hidden = true;
 
   // autres formats : chaque ligne se copie d'un toucher, le tout se partage
   $('eq').innerHTML = eqRows(c)
@@ -225,6 +223,100 @@ function render() {
   say((warn ? 'Vérifié : ' : 'Lecture fiable : ') + la + ', ' + lo);
   setHash(la + ',' + lo);
 }
+// AirOps et Itinéraire, sous le point. c : point sûr (contrôlé ici), ou null avec why : boutons désactivés
+function goBlock(c, why) {
+  var chk = c ? checkPoint(c.lat, c.lon) : { ok: false, msg: why };
+  var help =
+    '<ol class="go-help" id="goHelp" hidden>' +
+    '<li>Touchez <b>AirOps</b> : les coordonnées sont copiées et la carte s\u2019ouvre centrée sur le point.</li>' +
+    '<li>Dans AirOps, touchez la <b>loupe</b> (Adresse, coordonnées ou zone), <b>collez</b>, puis choisissez le résultat : un repère rouge se pose.</li>' +
+    '<li>Touchez le <b>repère rouge</b> : le panneau Informations des zones donne les restrictions, le gestionnaire et son téléphone.</li>' +
+    '<li class="go-note">Page d\u2019accueil AirOps à la première visite : touchez Accès à la carte dynamique, puis reprenez à l\u2019étape 2 (la recherche trouve le point même si la carte n\u2019est pas centrée).</li>' +
+    '<li class="go-note"><b>Itinéraire</b> : trajet en voiture dans Google Maps depuis votre position. <b>Autre appli GPS</b> : OsmAnd, Waze, Organic Maps...</li>' +
+    '</ol>';
+  var qm =
+    '<button class="go-q" type="button" data-gohelp="1" aria-expanded="false" aria-controls="goHelp" aria-label="Aide AirOps et Itinéraire">?</button>';
+  if (!chk.ok)
+    return (
+      '<div class="go off"><div class="go-row">' +
+      '<button class="btn big" type="button" disabled>AirOps</button>' +
+      qm +
+      '<button class="btn big" type="button" disabled>Itinéraire</button></div>' +
+      '<p class="go-why flush">' +
+      esc(chk.msg) +
+      '</p>' +
+      (chk.swap
+        ? '<button class="btn sec wide" type="button" data-swap="1">Inverser : ' + ddText(c.lon, c.lat) + '</button>'
+        : '') +
+      help +
+      '</div>'
+    );
+  return (
+    '<div class="go"><div class="go-row">' +
+    '<a class="btn big" target="_blank" rel="noopener" data-airops="' +
+    ddText(c.lat, c.lon) +
+    '" href="' +
+    airopsUrl(c.lat, c.lon) +
+    '">AirOps</a>' +
+    qm +
+    '<a class="btn big" target="_blank" rel="noopener" data-go="1" href="' +
+    esc(routeUrl(c.lat, c.lon)) +
+    '">Itinéraire</a></div>' +
+    '<a class="go-alt" data-go="1" href="' +
+    geoUrl(c.lat, c.lon) +
+    '">Autre appli GPS</a>' +
+    '<p class="go-msg flush" id="goMsg" role="status" hidden></p>' +
+    '<div class="go-manual" id="goManual" hidden></div>' +
+    help +
+    '</div>'
+  );
+}
+// Message AirOps : reste affiché 15 s une fois l'appli revenue au premier plan (AirOps s'ouvre dans un autre onglet)
+function goSay(t) {
+  var m = $('goMsg');
+  if (!m) return;
+  m.textContent = t;
+  m.hidden = false;
+  goArm();
+}
+function goArm() {
+  clearTimeout(goTimer);
+  if (document.hidden) return;
+  goTimer = setTimeout(function () {
+    var m = $('goMsg');
+    if (m) m.hidden = true;
+  }, 15000);
+}
+document.addEventListener('visibilitychange', function () {
+  var m = $('goMsg');
+  if (m && !m.hidden) goArm();
+});
+// AirOps : copie « lat, lon » pour sa recherche (le lien s'ouvre de lui-même dans un nouvel onglet)
+function airopsGo(a) {
+  var t = a.dataset.airops;
+  clip(t).then(function (done) {
+    if (done) {
+      $('goManual').hidden = true;
+      goSay(
+        'Coordonnées copiées. Dans AirOps : touchez la loupe, collez, choisissez le résultat, puis touchez le repère rouge.'
+      );
+      return;
+    }
+    // copie refusée : coordonnées en gros, copie à la main
+    var g = $('goManual');
+    g.innerHTML =
+      '<p class="flush">Copie automatique impossible. Copiez ces coordonnées, puis collez-les dans la recherche AirOps :</p>' +
+      '<div class="go-big">' +
+      esc(t) +
+      '</div><button class="btn wide" type="button" data-copy="' +
+      esc(t) +
+      '">Copier</button>';
+    g.hidden = false;
+    $('goMsg').hidden = true;
+  });
+  useCurrent();
+}
+
 // Bouton d'ajout au suivi, sous le point : gros, avec le nom de l'animal ; « déjà dans le suivi » si le point y est
 function trackButton() {
   var c = state.current,
@@ -377,17 +469,27 @@ $('eqShare').addEventListener('click', function () {
 document.addEventListener('click', function (e) {
   var a = e.target.closest('a[data-airops]');
   if (a) {
-    // secours : coordonnées dans le presse-papier pour la recherche AirOps
-    try {
-      navigator.clipboard.writeText(a.dataset.airops).catch(function () {});
-    } catch (err) {}
-    $('linkMsg').hidden = false;
-    $('linkMsg').textContent = 'Coordonnées copiées : si AirOps ne se centre pas, collez-les dans sa recherche.';
+    airopsGo(a);
+    return;
+  }
+  if (e.target.closest('a[data-go]')) {
     useCurrent();
     return;
   }
   var t = e.target.closest('button');
   if (!t) return;
+  if (t.dataset.gohelp) {
+    var hb = $('goHelp');
+    hb.hidden = !hb.hidden;
+    t.setAttribute('aria-expanded', String(!hb.hidden));
+    return;
+  }
+  if (t.dataset.swap && state.current) {
+    // inversion proposée et choisie : la latitude passe en premier
+    src.value = ddText(state.current.lon, state.current.lat);
+    update();
+    return;
+  }
   // ligne d'autres formats : seule la valeur affiche « Copié », la ligne garde sa hauteur
   if (t.dataset.copy) {
     var v = t.querySelector('.eqv');
