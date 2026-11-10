@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupPins, pinLabel, focusView } from '../js/map.js';
+import { groupPins, pinLabel, focusView, bothView } from '../js/map.js';
 
 test('pastilles proches à l’écran regroupées, éloignées séparées', () => {
   const g = groupPins(
@@ -59,4 +59,17 @@ test('lot lu : un seul point → centrage sur lui et moi', () => {
     [45.2, 5.8]
   ]);
   assert.deepEqual(focusView([{ lat: 45.1, lon: 5.9 }], null), [[45.1, 5.9]]);
+});
+
+test('« Les deux » : moi, le point affiché et tous les points, sans doublon', () => {
+  const me = { lat: 45.2, lon: 5.8 },
+    cur = { lat: 45.1, lon: 5.9 };
+  assert.deepEqual(bothView(me, cur, [cur, { lat: 45.11, lon: 5.91 }, { lat: 45.12, lon: 5.92 }]), [
+    [45.2, 5.8],
+    [45.1, 5.9],
+    [45.11, 5.91],
+    [45.12, 5.92]
+  ]);
+  assert.deepEqual(bothView(null, null, [{ lat: 45.1, lon: 5.9 }]), [[45.1, 5.9]]);
+  assert.deepEqual(bothView(null, null, []), []);
 });

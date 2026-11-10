@@ -31,6 +31,18 @@
 </header>
 
 <main>
+  <section class="block dog" id="dogCard">
+    <label class="lbl" for="trackName">Animal recherché</label>
+    <input class="tname" type="text" id="trackName" placeholder="Nom de l'animal (ex. Pirate)" maxlength="40" autocomplete="off" aria-describedby="nameMsg">
+    <p class="hint flush name-msg" id="nameMsg">Nom à renseigner : il accompagne le suivi, les partages et le GPX.</p>
+    <div class="resume" id="resume" role="group" aria-labelledby="resumeTxt" hidden>
+      <p class="flush" id="resumeTxt"></p>
+      <div class="row2">
+        <button class="btn" type="button" id="resumeGo">Continuer ce suivi</button>
+        <button class="btn sec" type="button" id="resumeNew">Repartir de zéro</button>
+      </div>
+    </div>
+  </section>
   <details class="block tile" id="inCard" open>
     <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="tt">Lire les coordonnées</span></summary>
     <div class="tile-b">
@@ -168,7 +180,6 @@
     <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="18" r="2.5"/><circle cx="12" cy="8" r="2.5"/><circle cx="19" cy="14" r="2.5"/><path d="M6.8 16.2l3.8-6M13.8 9.4l3.6 2.9"/></svg><span class="tt">Suivi des points</span><small class="ts" id="trackSum"></small></summary>
     <div class="tile-b">
       <p class="hint flush">Signalements successifs d'un même animal : distance parcourue entre deux points, direction, vitesse. Corrigez la date et l'heure de chaque point si le signalement est plus ancien.</p>
-      <input class="tname" type="text" id="trackName" placeholder="Animal recherché (ex. Pirate)" aria-label="Animal recherché" maxlength="40" autocomplete="off">
       <ol class="tlist" id="trackList"></ol>
       <div class="dist tstats" id="trackStats"></div>
       <div class="tprof" id="trackProfile"></div>
