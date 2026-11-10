@@ -1,9 +1,7 @@
 /* Enchaînement automatique après une photo : redressement (perspective, inclinaison), contraste et netteté, zone des
    coordonnées, lecture, confiance. Chaque étape s'affiche avec son résultat et peut être reprise à la main. */
 import { $, esc, openTile } from './util.js';
-import { parse } from './parser.js';
 import * as ocr from './ocr.js';
-import { coordZone } from './zone.js';
 import { confidence } from './trust.js';
 import { autoParams } from './enhance.js';
 
@@ -102,9 +100,12 @@ function stepZone(stale) {
     if (state.zone.st === 'run') set('zone', 'run', t + (f ? ` ${Math.round(f * 100)} %` : ''));
   }, 'photo entière');
   const img = ocr.getWork();
-  return ocr.recognizeFull(img, stale).then((full) => {
-    if (!full || stale()) return false;
-    const z = coordZone(full.lines, parse);
+  const onView = function (name, i) {
+    // au-delà de la première vue, l'étape dit ce qu'elle essaie
+    if (i > 1 && state.zone.st === 'run') set('zone', 'run', `nouvel essai : ${name}…`);
+  };
+  return ocr.findZone(img, stale, 0, onView).then((z) => {
+    if (z === undefined || stale()) return false;
     if (!z) {
       set('zone', 'warn', 'coordonnées non trouvées : cadrez-les à la main');
       return false;
@@ -129,7 +130,7 @@ function stepZone(stale) {
       'ok',
       `trouvée : « ${z.text.replace(/\s+/g, ' ').slice(0, 40)} »${
         z.conf !== null ? `, moteur sûr à ${z.conf} %` : ''
-      }${more}`
+      }${z.view !== 'photo entière' ? ` (${z.view})` : ''}${more}`
     );
     return true;
   });
@@ -140,35 +141,40 @@ function stepRead(stale, manual) {
     if (state.read.st === 'run' && /moteur|langue|Initialisation/.test(t)) set('read', 'run', t);
   });
   const img = ocr.getWork(),
-    box = ocr.getSel();
-  return ocr
-    .readBox(
-      img,
-      box,
-      (i) => {
-        set('read', 'run', `lecture ${i}…`);
-      },
-      stale
-    )
-    .then((res) => {
-      if (!res || stale()) return null;
-      lastRead = { img, box };
-      ocr.showZoneOf(img, box);
-      if (res.none) {
-        set('read', 'fail', `aucune coordonnée lue dans le cadre${manual ? '' : ' : recadrez à la main'}`);
-        set('trust', 'fail', 'rien à transmettre');
-        return res;
-      }
-      const a = res.p.agree || { n: 0, total: res.total };
-      set(
-        'read',
-        res.sure ? 'ok' : 'warn',
-        `${a.n} lecture${a.n > 1 ? 's' : ''} sur ${a.total} concordante${a.n > 1 ? 's' : ''}${
-          res.rival ? ', valeurs concurrentes' : ''
-        }${manual ? ' (cadre manuel)' : ''}`
-      );
+    box0 = ocr.getSel(),
+    onPass = function (i) {
+      set('read', 'run', `lecture ${i}…`);
+    };
+  let wider = false;
+  // zone trouvée d'elle-même : si rien ne s'y lit, second essai sur le cadre élargi aux lignes voisines
+  return (
+    manual
+      ? ocr.readBox(img, box0, onPass, stale)
+      : ocr.readFound(img, box0, onPass, stale, 0, () => {
+          wider = true;
+          set('read', 'run', 'pas d’accord net : nouvel essai, cadre élargi aux lignes voisines…');
+        })
+  ).then((res) => {
+    if (!res || stale()) return null;
+    const box = res.box || box0;
+    if (wider && box !== box0) ocr.setSel(box);
+    lastRead = { img, box };
+    ocr.showZoneOf(img, box);
+    if (res.none) {
+      set('read', 'fail', `aucune coordonnée lue dans le cadre${manual ? '' : ' : recadrez à la main'}`);
+      set('trust', 'fail', 'rien à transmettre');
       return res;
-    });
+    }
+    const a = res.p.agree || { n: 0, total: res.total };
+    set(
+      'read',
+      res.sure ? 'ok' : 'warn',
+      `${a.n} lecture${a.n > 1 ? 's' : ''} sur ${a.total} concordante${a.n > 1 ? 's' : ''}${
+        res.rival ? ', valeurs concurrentes' : ''
+      }${manual ? ' (cadre manuel)' : ''}`
+    );
+    return res;
+  });
 }
 function stepTrust(res) {
   const p = res.p;

@@ -3,7 +3,8 @@
 import { $, flash } from './util.js';
 import { parse, inRegion, distM } from './parser.js';
 import { skewAngle } from './skew.js';
-import { toGray, stretchBounds, enhance, autoParams } from './enhance.js';
+import { toGray, stretchBounds, enhance, autoParams, flatten, screenBox } from './enhance.js';
+import { coordZone } from './zone.js';
 import { findQuad, homography, invert, warp, rectFor, grow } from './warp.js';
 import { exifDate } from './exif.js';
 
@@ -23,15 +24,20 @@ const OUT = { text: true, blocks: true };
 function abs(path) {
   return new URL(path, document.baseURI).href;
 }
-// Lectures successives : [largeur visée, marge blanche, mode de segmentation]. Toutes lisent exactement le cadre
-// affiché, avec la photo telle que redressée à l'écran : rien n'est élargi ni tourné en coulisse.
+// Lectures successives : [largeur visée, marge blanche, mode de segmentation, fond égalisé]. Toutes lisent exactement
+// le cadre affiché, avec la photo telle que redressée à l'écran : rien n'est élargi ni tourné en coulisse. Les lectures
+// au fond égalisé (voir flatten dans enhance.js) préparent l'image autrement : elles rattrapent les photos difficiles
+// (écran lumineux dans le noir, reflet) et donnent au vote des lectures vraiment indépendantes.
 const PASSES = [
   [900, 0, '6'],
   [900, 0, '11'],
   [1800, 0, '11'],
+  [900, 0, '6', true],
   [900, 0, '4'],
+  [1200, 0, '11', true],
   [1200, 0, '6'],
   [1200, 0, '11'],
+  [1800, 0, '6', true],
   [1800, 1, '6'],
   [900, 1, '6']
 ];
@@ -205,6 +211,20 @@ export function rotateCanvas(img, deg, s) {
   g.scale(s, s);
   g.drawImage(img, -img.width / 2, -img.height / 2);
   return c;
+}
+// Cadre box (fractions de img) retrouvé dans turned, la même image tournée de deg degrés par rotateCanvas :
+// même endroit de la photo, même taille en pixels
+export function turnBox(box, img, turned, deg) {
+  const a = (deg * Math.PI) / 180,
+    c = Math.cos(a),
+    s = Math.sin(a),
+    cx = (box.x + box.w / 2 - 0.5) * img.width,
+    cy = (box.y + box.h / 2 - 0.5) * img.height,
+    w = Math.min(1, (box.w * img.width) / turned.width),
+    h = Math.min(1, (box.h * img.height) / turned.height),
+    mx = (cx * c - cy * s) / turned.width + 0.5,
+    my = (cx * s + cy * c) / turned.height + 0.5;
+  return { x: clamp(mx - w / 2, 0, 1 - w), y: clamp(my - h / 2, 0, 1 - h), w, h };
 }
 function drawRotated(deg, s) {
   return rotateCanvas(base, deg, s);
@@ -911,13 +931,92 @@ export function firm(x) {
   return x.best && x.best.n >= NEED && (!x.second || x.second.n <= x.best.n - 2);
 }
 
-// Lecture pleine image (mode texte épars), pour trouver où sont les coordonnées : { lines, text } (lignes avec mots,
-// boîtes en pixels de img et confiances). stale() : vrai si la photo a changé entre-temps.
-export function recognizeFull(img, stale, wi) {
-  const pr = prepared(img, { x: 0, y: 0, w: 1, h: 1 }, FULL_W, 0, true),
-    k = pr.c.width / img.width;
+// ---------- Recherche de la zone des coordonnées ----------
+// Cadre box de img à targetW pixels de large, fond égalisé (voir flatten) : pour les photos que l'étirement du
+// contraste ne suffit pas à rendre lisibles (écran lumineux dans le noir, reflets)
+function flatView(img, box, targetW, maxK) {
+  const sw = Math.max(8, box.w * img.width),
+    sh = Math.max(8, box.h * img.height),
+    k = Math.max(0.1, Math.min(maxK || 4, targetW / sw)),
+    c = document.createElement('canvas');
+  c.width = Math.round(sw * k);
+  c.height = Math.round(sh * k);
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(img, box.x * img.width, box.y * img.height, sw, sh, 0, 0, c.width, c.height);
+  // voisinage : plus large que l'épaisseur d'un trait, plus étroit qu'un dégradé d'éclairage
+  const R = Math.max(8, Math.min(Math.round(c.width / 30), Math.round(c.height / 6))),
+    d = g.getImageData(0, 0, c.width, c.height),
+    out = flatten(toGray(d.data, c.width, c.height), c.width, c.height, R);
+  for (let i = 0; i < out.length; i++) d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = out[i];
+  g.putImageData(d, 0, 0);
+  return { c, p: { flat: true } };
+}
+const FULL = { x: 0, y: 0, w: 1, h: 1 };
+/**
+ * Vues successives de la photo pour y chercher les coordonnées, de la plus simple à la plus travaillée :
+ * la photo entière, la même au fond égalisé, puis l'écran seul (zone claire recadrée et agrandie), des deux façons.
+ * Vue : { name, box : cadre en fractions de img, flat : fond égalisé }.
+ */
+export function zoneViews(img) {
+  const views = [
+    { name: 'photo entière', box: FULL, flat: false },
+    { name: 'photo entière, fond égalisé', box: FULL, flat: true }
+  ];
+  const G = grayOf(img, null, 160),
+    s = screenBox(G.g, G.w, G.h);
+  if (s)
+    views.push(
+      { name: 'écran recadré', box: s, flat: false },
+      { name: 'écran recadré, fond égalisé', box: s, flat: true }
+    );
+  return views;
+}
+// Zone nette : position lue sans avertissement ni autre lecture possible, dans la zone d'intervention
+function cleanZone(z) {
+  const b = z.p.best;
+  return !b.notes.length && !z.p.alts.length && inRegion(b.lat, b.lon);
+}
+/**
+ * Zone des coordonnées dans img : chaque vue (zoneViews) est lue en entier jusqu'à en trouver une où les coordonnées
+ * se lisent nettement ; à défaut, la meilleure zone trouvée. onView(nom, i, total) : vue en cours.
+ * Retour (promesse) : résultat de coordZone (boîte en pixels de img) avec view (nom de la vue), ou null ;
+ * undefined si la photo a changé entre-temps (stale).
+ */
+export function findZone(img, stale, wi, onView) {
+  const views = zoneViews(img);
+  let best = null,
+    i = 0;
+  const next = function () {
+    if (stale()) return undefined;
+    if (i >= views.length) return best;
+    const v = views[i++];
+    if (onView) onView(v.name, i, views.length);
+    return recognizeFull(img, stale, wi, v).then((full) => {
+      if (!full) return undefined;
+      const z = coordZone(full.lines, parse);
+      if (z) {
+        z.view = v.name;
+        z.rank = z.p.best.score - 0.5 * z.p.best.notes.length - 0.5 * z.p.alts.length;
+        if (!best || z.rank > best.rank) best = z;
+        if (cleanZone(z)) return z;
+      }
+      return next();
+    });
+  };
+  return getWorker(wi).then(next);
+}
+
+// Lecture d'une vue de la photo (mode texte épars) : { lines, text } (lignes avec mots, boîtes en pixels de img et
+// confiances). view : voir zoneViews (photo entière par défaut). stale() : vrai si la photo a changé entre-temps.
+export function recognizeFull(img, stale, wi, view) {
+  const v = view || { box: FULL, flat: false },
+    pr = v.flat ? flatView(img, v.box, FULL_W) : prepared(img, v.box, FULL_W, 0, true),
+    k = pr.c.width / (v.box.w * img.width),
+    ox = v.box.x * img.width,
+    oy = v.box.y * img.height;
   const fix = function (b) {
-    return { x0: b.x0 / k, y0: b.y0 / k, x1: b.x1 / k, y1: b.y1 / k };
+    return { x0: ox + b.x0 / k, y0: oy + b.y0 / k, x1: ox + b.x1 / k, y1: oy + b.y1 / k };
   };
   return getWorker(wi).then((w) => {
     if (stale()) return null;
@@ -954,12 +1053,12 @@ export function recognizeFull(img, stale, wi) {
 
 /**
  * Lecture du cadre box de img : passes successives (PASSES) jusqu'à NEED lectures concordantes, vote entre lectures.
- * onPass(i) : passe en cours ; stale() : la photo a changé. Retour (promesse) :
+ * onPass(i) : passe en cours ; stale() : la photo a changé ; limit : nombre de passes au plus. Retour (promesse) :
  * { runs, v : votes, text, p : résultat retenu (notes, alts et agree ajustés), sure : les deux axes confirmés,
  *   rival : une valeur concurrente aussi lue, tess : confiance moyenne du moteur sur les mots de la lecture retenue,
  *   none : aucune coordonnée dans aucune lecture, enh : réglages appliqués }
  */
-export function readBox(img, box, onPass, stale, wi) {
+export function readBox(img, box, onPass, stale, wi, limit) {
   const imgs = {};
   const runs = [];
   let p0 = null;
@@ -970,12 +1069,12 @@ export function readBox(img, box, onPass, stale, wi) {
   return getWorker(wi).then((w) => {
     let i = 0;
     const step = function () {
-      if (i >= PASSES.length || done() || stale()) return;
+      if (i >= (limit || PASSES.length) || done() || stale()) return;
       const ps = PASSES[i++],
-        ik = `${ps[0]}_${ps[1]}`;
+        ik = `${ps[0]}_${ps[1]}_${ps[3] ? 1 : 0}`;
       onPass(i);
       if (!imgs[ik]) {
-        const pr = prepared(img, box, ps[0], ps[1]);
+        const pr = ps[3] ? flatView(img, box, ps[0], 8) : prepared(img, box, ps[0], ps[1]);
         imgs[ik] = pr.c;
         p0 = p0 || pr.p;
       }
@@ -1002,6 +1101,32 @@ export function readBox(img, box, onPass, stale, wi) {
     return step().then(() => {
       if (stale()) return null;
       return settle(runs, p0);
+    });
+  });
+}
+const WIDE_PASSES = 6; // second essai sur le cadre élargi : moins de lectures, pour ne pas faire attendre
+// Cadre élargi d'une ligne de texte au-dessus et au-dessous, et un peu sur les côtés (fractions de la photo)
+export function widen(box) {
+  const x = Math.max(0, box.x - box.w * 0.15),
+    y = Math.max(0, box.y - box.h),
+    x1 = Math.min(1, box.x + box.w * 1.15),
+    y1 = Math.min(1, box.y + box.h * 2);
+  return { x, y, w: x1 - x, h: y1 - y };
+}
+/**
+ * Lecture de la zone trouvée d'elle-même, en deux temps : le cadre box, puis, sans accord net entre les lectures
+ * (souvent : la recherche n'a cadré qu'une des deux lignes), le cadre élargi aux lignes voisines. Le second essai
+ * n'est retenu que s'il donne un accord net, ou une position là où le premier n'en donnait aucune.
+ * onWiden() : second essai lancé. Retour : comme readBox, avec box (le cadre retenu).
+ */
+export function readFound(img, box, onPass, stale, wi, onWiden) {
+  return readBox(img, box, onPass, stale, wi).then((res) => {
+    if (!res || res.sure) return res && Object.assign(res, { box });
+    const wide = widen(box);
+    if (onWiden) onWiden();
+    return readBox(img, wide, onPass, stale, wi, WIDE_PASSES).then((r2) => {
+      if (!r2) return r2;
+      return r2.sure || (res.none && !r2.none) ? Object.assign(r2, { box: wide }) : Object.assign(res, { box });
     });
   });
 }

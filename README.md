@@ -35,7 +35,7 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `js/exif.js` | Date de prise de vue dans les métadonnées JPEG (sans DOM, testé sous Node) |
 | `js/skew.js` | Mesure de l'inclinaison du texte (sans DOM, testé sous Node) |
 | `js/warp.js` | Perspective : bords de l'écran (Hough), homographie, redressement (sans DOM, testé sous Node) |
-| `js/enhance.js` | Contraste, netteté et mesure du flou (sans DOM, testé sous Node) |
+| `js/enhance.js` | Contraste, netteté, mesure du flou, fond égalisé (éclairage inégal effacé) et repérage de l'écran lumineux (sans DOM, testé sous Node) |
 | `js/zone.js` | Zone des coordonnées parmi les lignes lues sur toute la photo (sans DOM, testé sous Node) |
 | `js/trust.js` | Note de confiance et règle « rien de douteux n'est transmis » (sans DOM, testé sous Node) |
 | `js/track.js` | Suivi de plusieurs points : étapes, bilan, message (calcul sans DOM, testé sous Node) et tuile |
@@ -72,8 +72,10 @@ Saisie / collage ─────────────────────
                                                                        ▼
 Photo ─► auto.js : 1. redressement  warp.findQuad (bords de l'écran) ─► ocr.applyQuad ; skew.skewAngle ─► ocr.setAngle
                    2. contraste     enhance.autoParams (plage de gris, flou)
-                   3. zone          ocr.recognizeFull (Tesseract, toute la photo) ─► zone.coordZone ─► ocr.setSel
-                   4. lecture       ocr.readBox : jusqu'à 8 lectures du cadre ─► parse() sur chacune ─► vote (votes, firm)
+                   3. zone          ocr.findZone : vues successives de la photo (entière, fond égalisé, écran recadré)
+                                    lues par Tesseract ─► zone.coordZone ─► ocr.setSel
+                   4. lecture       ocr.readFound : jusqu'à 11 lectures du cadre (dont 3 au fond égalisé) ─► parse() sur
+                                    chacune ─► vote (votes, firm) ; rien de lu : second essai, cadre élargi aux lignes voisines
                    5. confiance     trust.confidence (concordance, confiance du moteur, avertissements)
                                                                        │
                                                                        ▼
