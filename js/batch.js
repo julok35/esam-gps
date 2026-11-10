@@ -5,6 +5,7 @@ import * as ocr from './ocr.js';
 import { setFilesHandler } from './auto.js';
 import { readPhoto, deg } from './pipeline.js';
 import { addPoints } from './track.js';
+import { focusPoints } from './map.js';
 
 const THUMB = 96; // vignette de la liste (pixels)
 // photos : [{ id, file, name, t, exif, moved, thumb, st : wait | run | ok | check | fail, msg, p, text }]
@@ -178,7 +179,10 @@ function runAll() {
     running = false;
     const sure = photos.filter((p) => p.st === 'ok'),
       doubt = photos.filter((p) => p.st === 'check' || p.st === 'fail');
-    const added = addPoints(sure.map((p) => ({ lat: p.p.best.lat, lon: p.p.best.lon, t: p.t, label: '' })));
+    const pts = sure.map((p) => ({ lat: p.p.best.lat, lon: p.p.best.lon, t: p.t, label: '' })),
+      added = addPoints(pts);
+    // carte centrée sur les points lus (plusieurs), ou sur le point lu et moi (un seul)
+    if (pts.length) focusPoints(pts);
     $('batchMsg').textContent = `${
       (sure.length
         ? `${added} point${added > 1 ? 's' : ''} ajouté${added > 1 ? 's' : ''} au suivi${
