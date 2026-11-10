@@ -6,12 +6,12 @@ import { $, state } from './util.js';
 import { bearing, distM } from './parser.js';
 import { reliefNow } from './place.js';
 
-var R = Math.PI / 180,
+const R = Math.PI / 180,
   SPAN = 120,
   VIEW = 50; // degrés sur la largeur du bandeau ; au-delà de VIEW, le repère sort du champ net
-var VR = 12; // écart en hauteur (degrés) qui amène le repère au bord du bandeau
-var LBL = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SO', 270: 'O', 315: 'NO' };
-var on = false,
+const VR = 12; // écart en hauteur (degrés) qui amène le repère au bord du bandeau
+const LBL = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SO', 270: 'O', 315: 'NO' };
+let on = false,
   granted = false,
   sx = null,
   sy = 0,
@@ -19,7 +19,7 @@ var on = false,
   pitch = null,
   raf = 0,
   said = 0;
-var asked = false,
+let asked = false,
   seen = 0,
   waitT = 0,
   tapAsk = false;
@@ -28,22 +28,22 @@ var asked = false,
 // de l'arrière du téléphone quand il est tenu debout : les deux se projettent dans la même direction au sol.
 // alpha, beta, gamma : angles W3C (repère Z-X'-Y'') ; screen : angle de rotation de l'écran (0, 90, 180, 270).
 export function headingOf(alpha, beta, gamma, screen) {
-  var ca = Math.cos(alpha * R),
+  const ca = Math.cos(alpha * R),
     sa = Math.sin(alpha * R),
     cb = Math.cos(beta * R),
     sb = Math.sin(beta * R),
     cg = Math.cos(gamma * R),
     sg = Math.sin(gamma * R);
   // axes du téléphone dans le repère terrestre (x est, y nord)
-  var Xx = ca * cg - sa * sb * sg,
+  const Xx = ca * cg - sa * sb * sg,
     Xy = sa * cg + ca * sb * sg;
-  var Yx = -sa * cb,
+  const Yx = -sa * cb,
     Yy = ca * cb;
-  var Zx = ca * sg + sa * sb * cg,
+  const Zx = ca * sg + sa * sb * cg,
     Zy = sa * sg - ca * sb * cg;
-  var cs = Math.cos((screen || 0) * R),
+  const cs = Math.cos((screen || 0) * R),
     ss = Math.sin((screen || 0) * R);
-  var vx = cs * Yx + ss * Xx - Zx,
+  const vx = cs * Yx + ss * Xx - Zx,
     vy = cs * Yy + ss * Xy - Zy; // haut de l'écran + arrière du téléphone
   return (Math.atan2(vx, vy) / R + 360) % 360;
 }
@@ -56,7 +56,7 @@ export function pitchOf(beta, gamma) {
 // Angle sous lequel on voit le point (degrés, positif au-dessus de l'horizon) : yeux à 1,5 m du sol,
 // rotondité de la Terre et réfraction comprises (sensibles au-delà de quelques kilomètres)
 export function sightAngle(d, zPoint, zMe) {
-  var dh = zPoint - (zMe + 1.5) - (0.87 * d * d) / (2 * 6371000);
+  const dh = zPoint - (zMe + 1.5) - (0.87 * d * d) / (2 * 6371000);
   return Math.atan2(dh, d) / R;
 }
 
@@ -71,7 +71,7 @@ export function turn(target, heading) {
 }
 
 function screenAngle() {
-  var o = screen.orientation;
+  const o = screen.orientation;
   return o && typeof o.angle === 'number'
     ? o.angle
     : typeof window.orientation === 'number'
@@ -85,11 +85,11 @@ function msg(t) {
 }
 
 function onOri(e) {
-  var h = null,
-    me = state.me;
+  let h = null;
+  const me = state.me;
   if (e.alpha !== null || typeof e.webkitCompassHeading === 'number') seen++; // Chrome envoie une mesure vide quand il n'y a pas de capteur
   if (e.beta !== null && e.gamma !== null && e.beta !== undefined) {
-    var p = pitchOf(e.beta, e.gamma);
+    const p = pitchOf(e.beta, e.gamma);
     pitch = pitch === null ? p : pitch + (p - pitch) * 0.25;
   }
   if (typeof e.webkitCompassHeading === 'number' && e.webkitCompassHeading >= 0)
@@ -99,7 +99,7 @@ function onOri(e) {
   if (h === null || isNaN(h)) return;
   if (me) h += declination(me.lon); // capteur : nord magnétique ; carte : nord géographique
   // lissage sur le cercle (pas de saut entre 359° et 0°)
-  var x = Math.cos(h * R),
+  const x = Math.cos(h * R),
     y = Math.sin(h * R);
   if (sx === null) {
     sx = x;
@@ -125,11 +125,11 @@ function canAsk() {
     typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'
   );
 }
-var IOS =
+const IOS =
   typeof navigator !== 'undefined' &&
   (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-var MOBILE = IOS || (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent));
-var BRAVE = typeof navigator !== 'undefined' && !!navigator.brave;
+const MOBILE = IOS || (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent));
+const BRAVE = typeof navigator !== 'undefined' && !!navigator.brave;
 
 // Où redonner l'accès aux capteurs, selon le téléphone et le navigateur
 function blockedMsg() {
@@ -147,18 +147,18 @@ function noHeadingMsg() {
 
 // Demande d'accès aux capteurs (iOS, Brave). Sans toucher, iOS refuse : on redemande alors au premier toucher sur la page.
 function ask(fromTap) {
-  var p;
+  let p;
   try {
     p = DeviceOrientationEvent.requestPermission();
   } catch (err) {
     p = Promise.reject(err);
   }
   return Promise.resolve(p).then(
-    function (r) {
+    (r) => {
       if (r !== 'granted') throw new Error('refus');
       granted = true;
     },
-    function (err) {
+    (err) => {
       // pas de toucher (iOS) : nouvel essai, sans rien afficher, au premier toucher sur la page
       if (!fromTap && !tapAsk) {
         tapAsk = true;
@@ -171,7 +171,7 @@ function ask(fromTap) {
 function onTap() {
   document.removeEventListener('click', onTap, true);
   tapAsk = false;
-  if (!granted && on) ask(true).catch(function () {});
+  if (!granted && on) ask(true).catch(() => {});
 }
 
 // Boussole active par défaut : écoute directe, accès demandé tout seul ; le bouton n'apparaît que si aucun cap n'arrive
@@ -182,11 +182,11 @@ function start() {
   // les deux : Android donne le cap dans « absolute », iOS dans l'autre ; onOri ignore les mesures sans nord
   window.addEventListener('deviceorientationabsolute', onOri);
   window.addEventListener('deviceorientation', onOri);
-  if (canAsk() && !granted) ask(false).catch(function () {});
+  if (canAsk() && !granted) ask(false).catch(() => {});
   clearTimeout(waitT);
   if (asked) msg('Boussole activée : bougez le téléphone…');
   waitT = setTimeout(
-    function () {
+    () => {
       waitT = 0;
       if (head !== null || !on) return;
       if (asked) msg(seen ? noHeadingMsg() : blockedMsg());
@@ -211,23 +211,23 @@ function stop() {
 }
 
 function canvas(cv) {
-  var dpr = window.devicePixelRatio || 1,
+  const dpr = window.devicePixelRatio || 1,
     w = cv.clientWidth,
     h = cv.clientHeight;
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
     cv.width = Math.round(w * dpr);
     cv.height = Math.round(h * dpr);
   }
-  var g = cv.getContext('2d');
+  const g = cv.getContext('2d');
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
   g.font = '600 11px "Roboto Condensed", "Arial Narrow", sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  return { g: g, w: w, h: h };
+  return { g, w, h };
 }
 function pill(g, x, y, text) {
-  var w = g.measureText(text).width + 14;
+  const w = g.measureText(text).width + 14;
   g.fillStyle = '#FFD400';
   g.strokeStyle = '#111111';
   g.lineWidth = 1.5;
@@ -242,10 +242,10 @@ function pill(g, x, y, text) {
 
 function draw() {
   raf = 0;
-  var c = state.current,
+  const c = state.current,
     me = state.me;
   if (!on || head === null || !c || !me) return;
-  var b = canvas($('cmpCv')),
+  const b = canvas($('cmpCv')),
     g = b.g,
     w = b.w,
     hh = b.h,
@@ -257,8 +257,8 @@ function draw() {
   g.fillStyle = g.strokeStyle = '#111111';
   g.lineWidth = 1;
   g.font = '600 10px "Roboto Condensed", "Arial Narrow", sans-serif';
-  for (var d = Math.ceil((head - SPAN / 2) / 15) * 15; d <= head + SPAN / 2; d += 15) {
-    var x = mid + (d - head) * k,
+  for (let d = Math.ceil((head - SPAN / 2) / 15) * 15; d <= head + SPAN / 2; d += 15) {
+    const x = mid + (d - head) * k,
       n = ((d % 360) + 360) % 360;
     if (LBL[n]) g.fillText(LBL[n], x, hh - 6);
     else {
@@ -271,11 +271,11 @@ function draw() {
   g.globalAlpha = 1;
   g.font = '600 11px "Roboto Condensed", "Arial Narrow", sans-serif';
   // écart en hauteur : seulement téléphone tenu debout (viser comme avec l'appareil photo) et altitudes connues
-  var t = turn(bearing(me, c), head),
-    z = reliefNow(),
-    e = null;
+  const t = turn(bearing(me, c), head);
+  const z = reliefNow();
+  let e = null;
   if (z && pitch !== null && Math.abs(pitch) <= 60) e = sightAngle(distM(me, c), z.point, z.me) - pitch;
-  var okH = Math.abs(t) <= 5,
+  const okH = Math.abs(t) <= 5,
     okV = e === null || Math.abs(e) <= 3,
     ok = okH && okV;
   // viseur : l'axe du téléphone
@@ -293,7 +293,7 @@ function draw() {
   g.stroke();
   if (Math.abs(t) <= VIEW) {
     // repère du point : à gauche / droite selon le cap, en haut / bas selon la hauteur ; flèche au bord s'il faut lever ou baisser beaucoup
-    var px = mid + t * k,
+    const px = mid + t * k,
       lim = vc - 6,
       py = e === null ? vc : vc - Math.max(-1, Math.min(1, e / VR)) * lim;
     g.fillStyle = '#FFD400';
@@ -301,7 +301,7 @@ function draw() {
     g.lineWidth = 1.5;
     g.beginPath();
     if (e !== null && Math.abs(e) > VR) {
-      var up = e > 0,
+      const up = e > 0,
         ty = up ? 2 : 2 * vc - 2;
       g.moveTo(px - 7, ty + (up ? 9 : -9));
       g.lineTo(px + 7, ty + (up ? 9 : -9));
@@ -317,9 +317,9 @@ function draw() {
   // texte pour les lecteurs d'écran, au plus toutes les 3 s
   if (Date.now() - said > 3000) {
     said = Date.now();
-    var s = ok
+    let s = ok
       ? 'Boussole : téléphone pointé vers le point'
-      : 'Boussole : ' + (okH ? 'dans la bonne direction' : 'tournez ' + (t > 0 ? 'à droite' : 'à gauche'));
+      : `Boussole : ${okH ? 'dans la bonne direction' : `tournez ${t > 0 ? 'à droite' : 'à gauche'}`}`;
     if (!ok && e !== null && !okV) s += e > 0 ? ', levez le téléphone' : ', baissez le téléphone';
     $('cmp').setAttribute('aria-label', s);
   }
@@ -336,7 +336,7 @@ export function updateCompass() {
 export function initCompass() {
   if (typeof DeviceOrientationEvent === 'undefined') return;
   // bouton de secours : appel direct dans le toucher, sans rien avant (sinon iOS refuse sans rien afficher)
-  $('cmpAsk').addEventListener('click', function () {
+  $('cmpAsk').addEventListener('click', () => {
     asked = true;
     if (!canAsk()) {
       msg(blockedMsg());
@@ -344,17 +344,17 @@ export function initCompass() {
     } // pas de fenêtre d'autorisation : dire où débloquer
     msg("Demande d'autorisation…");
     ask(true).then(
-      function () {
+      () => {
         $('cmpAsk').hidden = true;
         if (on) stop();
         updateCompass();
       },
-      function (err) {
+      (err) => {
         if (head !== null) {
           msg('');
           return;
         } // la boussole marche malgré la réponse
-        msg(err && err.message !== 'refus' ? 'Boussole indisponible : ' + err.message + '.' : blockedMsg());
+        msg(err && err.message !== 'refus' ? `Boussole indisponible : ${err.message}.` : blockedMsg());
       }
     );
   });

@@ -9,8 +9,8 @@
  * Retour : { pct, level : 'ok' (fiable) ou 'check' (douteux), why : explications courtes }.
  */
 export function confidence(info) {
-  var why = [],
-    pct;
+  const why = [];
+  let pct;
   if (info.manual || !info.agree) {
     pct = 100 - 20 * info.notes - 15 * info.alts;
     if (info.notes) why.push(info.notes + (info.notes > 1 ? ' avertissements' : ' avertissement'));
@@ -19,29 +19,22 @@ export function confidence(info) {
     // La concordance de lectures faites avec des préparations différentes de l'image est le signal principal :
     // trois lectures d'accord donnent 88, chaque lecture d'accord en plus ajoute 2 (95 au plus, 100 avec un moteur sûr).
     // La confiance du moteur sur les chiffres, souvent basse même quand il lit juste, ne fait que nuancer (−10 à +5).
-    var a = info.agree,
-      f = 1;
+    const a = info.agree;
+    let f = 1;
     if (info.firm) {
       pct = 88 + Math.min(7, 2 * Math.max(0, a.n - 3));
-      why.push(a.n + ' lectures sur ' + a.total + ' concordantes');
+      why.push(`${a.n} lectures sur ${a.total} concordantes`);
     } else {
       pct = a.total ? (75 * a.n) / a.total : 0;
       why.push(
         a.total
-          ? 'seulement ' +
-              a.n +
-              ' lecture' +
-              (a.n > 1 ? 's' : '') +
-              ' sur ' +
-              a.total +
-              ' concordante' +
-              (a.n > 1 ? 's' : '')
+          ? `seulement ${a.n} lecture${a.n > 1 ? 's' : ''} sur ${a.total} concordante${a.n > 1 ? 's' : ''}`
           : 'aucune lecture concordante'
       );
     }
     if (typeof info.tess === 'number') {
       pct += Math.max(-10, Math.min(5, (info.tess - 60) / 4));
-      if (info.tess < 60) why.push('moteur hésitant sur les chiffres (' + Math.round(info.tess) + ' %)');
+      if (info.tess < 60) why.push(`moteur hésitant sur les chiffres (${Math.round(info.tess)} %)`);
     }
     if (info.rival) {
       f *= 0.6;
@@ -58,8 +51,8 @@ export function confidence(info) {
     pct = Math.round(pct * f);
   }
   pct = Math.max(0, Math.min(100, pct));
-  var ok = !info.notes && !info.alts && (info.manual || !info.agree || (info.firm && !info.rival)) && pct >= 70;
-  return { pct: pct, level: ok ? 'ok' : 'check', why: why };
+  const ok = !info.notes && !info.alts && (info.manual || !info.agree || (info.firm && !info.rival)) && pct >= 70;
+  return { pct, level: ok ? 'ok' : 'check', why };
 }
 
 // Transmissible : lecture fiable, ou vérifiée à la main (molettes validées, ou bouton « J'ai vérifié »)

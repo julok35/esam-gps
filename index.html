@@ -6,10 +6,11 @@
 <title>GPS ESAM</title>
 <meta name="description" content="Convertisseur de coordonnées GPS de l'ESAM : photo, lecture du texte, carte, partage.">
 <meta name="theme-color" content="#AFC8E8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://data.geopf.fr https://*.tile.opentopomap.org https://tile.openstreetmap.org; connect-src 'self' https://cdn.jsdelivr.net https://geo.api.gouv.fr https://data.geopf.fr https://api.open-meteo.com https://overpass-api.de https://overpass.kumi.systems https://nominatim.openstreetmap.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://data.geopf.fr https://*.tile.opentopomap.org https://tile.openstreetmap.org; connect-src 'self' https://geo.api.gouv.fr https://data.geopf.fr https://api.open-meteo.com https://overpass-api.de https://overpass.kumi.systems https://nominatim.openstreetmap.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="GPS ESAM">
 <link rel="stylesheet" href="vendor/fonts/fonts.css">
@@ -34,11 +35,10 @@
     <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="tt">Lire les coordonnées</span></summary>
     <div class="tile-b">
       <div class="row2">
-        <label class="btn big" for="cam">Photographier</label>
-        <label class="btn big sec" for="gal">Choisir des photos</label>
+        <label class="btn big">Photographier<input class="sr-only" id="cam" type="file" accept="image/*" capture="environment"></label>
+        <label class="btn big sec">Choisir des photos<input class="sr-only" id="gal" type="file" accept="image/*" multiple></label>
       </div>
-    <input id="cam" type="file" accept="image/*" capture="environment" hidden>
-    <input id="gal" type="file" accept="image/*" multiple hidden>
+    <p class="hint flush" id="photoMsg" role="alert" hidden></p>
     <p class="hint flush">Photo ou capture d'écran : l'appli redresse, améliore, trouve les coordonnées, les lit et note sa confiance. Chaque étape se reprend à la main.</p>
     <ol class="steps" id="steps" hidden></ol>
     <button class="btn sec wide" type="button" id="stepsStop" hidden>Arrêter et cadrer à la main</button>
@@ -195,14 +195,14 @@
       <div class="grid2">
         <button class="btn" type="button" id="shareBtn">Partager</button>
         <button class="btn wa" type="button" id="waBtn">WhatsApp</button>
-        <button class="btn sec" type="button" id="qrBtn">QR code</button>
+        <button class="btn sec" type="button" id="qrBtn" aria-expanded="false" aria-controls="qrBox">QR code</button>
         <button class="btn sec" type="button" id="copyMsg">Copier message</button>
       </div>
     <div class="qr" id="qrBox" hidden>
-      <div class="seg3" role="tablist">
-        <button type="button" data-qr="app" class="on">Appli ESAM</button>
-        <button type="button" data-qr="maps">Google Maps</button>
-        <button type="button" data-qr="geo">geo:</button>
+      <div class="seg3" role="group" aria-label="Contenu du QR code">
+        <button type="button" data-qr="app" class="on" aria-pressed="true">Appli ESAM</button>
+        <button type="button" data-qr="maps" aria-pressed="false">Google Maps</button>
+        <button type="button" data-qr="geo" aria-pressed="false">geo:</button>
       </div>
       <div id="qrImg" class="qrimg"></div>
       <p class="hint" id="qrTxt"></p>

@@ -25,7 +25,7 @@ const pts = [
 test('étapes : distance, cap, durée, vitesse', () => {
   const L = legs(pts);
   assert.equal(L.length, 2);
-  assert.ok(Math.abs(L[0].d - 1555) < 30, 'distance ' + L[0].d);
+  assert.ok(Math.abs(L[0].d - 1555) < 30, `distance ${L[0].d}`);
   assert.ok(L[0].b > 40 && L[0].b < 50);
   assert.equal(L[0].dt, 9.5 * H);
   assert.ok(Math.abs(L[0].v - L[0].d / 9.5) < 1);
@@ -78,7 +78,7 @@ test('nom de l’animal dans le message', () => {
 test('lien de suivi : nom et points encodés puis relus, étiquettes avec accents et espaces', () => {
   const h = encodeTrack('Pirate', pts);
   assert.match(h, /^s=Pirate~45\.200000,6\.200000,28800,collier~/);
-  const tr = decodeTrack('#' + h);
+  const tr = decodeTrack(`#${h}`);
   assert.equal(tr.name, 'Pirate');
   assert.equal(tr.points.length, 3);
   assert.equal(tr.points[2].label, 'vu près du lac');
@@ -129,4 +129,23 @@ test('message de partage avec altitudes du terrain', () => {
   assert.match(t, /alt\. 1\s280 m/);
   assert.match(t, /dénivelé \+182 m, en 52 min/);
   assert.doesNotMatch(trackText(pts, '', [null, 1462]), /dénivelé/);
+});
+
+test('GPX : étiquette décodée une seule fois, points auto-fermants lus, positions hors du globe écartées', () => {
+  const tr = parseGPX(
+    '<gpx><wpt lat="45.1" lon="6.1"><name>1 · A &amp;lt; B &amp; C</name></wpt>' +
+      '<wpt lat="95" lon="6.1"><name>hors globe</name></wpt></gpx>'
+  );
+  assert.equal(tr.points.length, 1);
+  assert.equal(tr.points[0].label, 'A &lt; B & C');
+  const seg = parseGPX(
+    '<gpx><trk><trkseg><trkpt lat="45.1" lon="6.1"/><trkpt lat="45.2" lon="6.2" /></trkseg></trk></gpx>'
+  );
+  assert.deepEqual(
+    seg.points.map((p) => [p.lat, p.lon]),
+    [
+      [45.1, 6.1],
+      [45.2, 6.2]
+    ]
+  );
 });

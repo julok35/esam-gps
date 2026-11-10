@@ -50,7 +50,7 @@ textarea:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3p
 .row4 .btn { padding: 8px 2px; font-size: .78rem; }
 .row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .chip { font: 600 .82rem var(--f-label); letter-spacing: .03em; padding: 7px 12px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
-button:focus-visible, a:focus-visible, label.btn:focus-within { outline: 3px solid var(--jaune); outline-offset: 2px; }
+button:focus-visible, a:focus-visible, label.btn:has(:focus-visible) { outline: 3px solid var(--jaune); outline-offset: 2px; }
 .ex-note { font-size: .78rem; color: var(--muted); }
 .btn { display: inline-flex; align-items: center; justify-content: center; text-align: center; font: 700 .85rem/1.15 var(--f-label); letter-spacing: .05em; text-transform: uppercase; padding: 10px 14px; border-radius: 8px; border: 2px solid var(--noir); background: var(--jaune); color: var(--noir); cursor: pointer; min-height: 46px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; user-select: none; }
 /* boutons en rangée : texte resserré pour rester dans la tuile sur les petits écrans */

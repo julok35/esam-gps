@@ -3,7 +3,7 @@
    1 à 3 lignes consécutives dont le texte donne la meilleure position selon le parser, puis on cadre les mots de ces
    lignes qui portent des chiffres ou une lettre d'hémisphère. */
 
-var MAX_LINES = 3;
+const MAX_LINES = 3;
 
 function hasCoordChars(t) {
   return /\d/.test(t) || /^[NSEWO]$/i.test(t) || /[°'"]/.test(t);
@@ -15,35 +15,27 @@ function hasCoordChars(t) {
  * idx (indices des lignes retenues), words (mots cadrés) }.
  */
 export function coordZone(lines, parse) {
-  var L = (lines || [])
-    .filter(function (l) {
-      return l && l.text && l.text.trim() && l.bbox;
-    })
+  const L = (lines || [])
+    .filter((l) => l && l.text && l.text.trim() && l.bbox)
     .slice()
-    .sort(function (a, b) {
-      return a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0;
-    });
-  var best = null;
-  for (var i = 0; i < L.length; i++)
-    for (var k = 1; k <= MAX_LINES && i + k <= L.length; k++) {
-      var sub = L.slice(i, i + k),
-        txt = sub
-          .map(function (l) {
-            return l.text.trim();
-          })
-          .join('\n'),
+    .sort((a, b) => a.bbox.y0 - b.bbox.y0 || a.bbox.x0 - b.bbox.x0);
+  let best = null;
+  for (let i = 0; i < L.length; i++)
+    for (let k = 1; k <= MAX_LINES && i + k <= L.length; k++) {
+      const sub = L.slice(i, i + k),
+        txt = sub.map((l) => l.text.trim()).join('\n'),
         p = parse(txt);
       if (!p.ok) continue;
-      var score = p.best.score - 0.3 * (k - 1) - 0.5 * p.best.notes.length;
-      if (!best || score > best.score) best = { score: score, i: i, k: k, p: p, text: txt };
+      const score = p.best.score - 0.3 * (k - 1) - 0.5 * p.best.notes.length;
+      if (!best || score > best.score) best = { score, i, k, p, text: txt };
     }
   if (!best) return null;
-  var idx = [],
-    words = [],
-    all = [];
-  for (var j = best.i; j < best.i + best.k; j++) {
+  const idx = [];
+  let words = [];
+  const all = [];
+  for (let j = best.i; j < best.i + best.k; j++) {
     idx.push(j);
-    (L[j].words || []).forEach(function (wd) {
+    (L[j].words || []).forEach((wd) => {
       if (!wd.bbox || !wd.text) return;
       all.push(wd);
       if (hasCoordChars(wd.text)) words.push(wd);
@@ -52,31 +44,31 @@ export function coordZone(lines, parse) {
       words.push({ text: L[j].text, confidence: L[j].confidence, bbox: L[j].bbox });
   }
   if (!words.length) words = all;
-  var box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity },
-    cw = 0,
-    cn = 0;
-  words.forEach(function (wd) {
+  const box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+  let cw = 0;
+  let cn = 0;
+  words.forEach((wd) => {
     box.x0 = Math.min(box.x0, wd.bbox.x0);
     box.y0 = Math.min(box.y0, wd.bbox.y0);
     box.x1 = Math.max(box.x1, wd.bbox.x1);
     box.y1 = Math.max(box.y1, wd.bbox.y1);
-    var wgt = Math.max(1, (wd.text || '').replace(/\s/g, '').length);
+    const wgt = Math.max(1, (wd.text || '').replace(/\s/g, '').length);
     if (typeof wd.confidence === 'number') {
       cw += wd.confidence * wgt;
       cn += wgt;
     }
   });
   if (!isFinite(box.x0)) return null;
-  return { box: box, text: best.text, p: best.p, conf: cn ? Math.round(cw / cn) : null, idx: idx, words: words };
+  return { box, text: best.text, p: best.p, conf: cn ? Math.round(cw / cn) : null, idx, words };
 }
 
 // Confiance moyenne (0 à 100) des mots porteurs de coordonnées d'une lecture, pondérée par leur longueur
 export function wordsConf(words) {
-  var cw = 0,
+  let cw = 0,
     cn = 0;
-  (words || []).forEach(function (wd) {
+  (words || []).forEach((wd) => {
     if (!wd || typeof wd.confidence !== 'number' || !hasCoordChars(wd.text || '')) return;
-    var wgt = Math.max(1, wd.text.replace(/\s/g, '').length);
+    const wgt = Math.max(1, wd.text.replace(/\s/g, '').length);
     cw += wd.confidence * wgt;
     cn += wgt;
   });

@@ -10,7 +10,7 @@ function jpeg(orig, mod, bigEndian) {
   const u16 = (v) => (le ? [v & 255, v >> 8] : [v >> 8, v & 255]);
   const u32 = (v) =>
     le ? [v & 255, (v >> 8) & 255, (v >> 16) & 255, v >>> 24] : [v >>> 24, (v >> 16) & 255, (v >> 8) & 255, v & 255];
-  const str = (s) => Array.from(s + '\0').map((c) => c.charCodeAt(0));
+  const str = (s) => Array.from(`${s}\0`).map((c) => c.charCodeAt(0));
   // en-tête TIFF (8) + IFD0 : 2 entrées (26) + 4 (suivant) = 38 ; chaîne DateTime à 38 (20) ; sous-IFD Exif à 58 ; chaîne orig à 58 + 2 + 12 + 4 = 76
   tiff.push(...(le ? [0x49, 0x49] : [0x4d, 0x4d]), ...u16(42), ...u32(8));
   tiff.push(...u16(2));

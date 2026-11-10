@@ -43,7 +43,7 @@ test('écran Garmin : les deux lignes de la position sont trouvées, cadre sur l
     ['N', '45°16.277\u2019', 'E', '005°56.052\u2019']
   );
   assert.ok(z.box.y0 === 240 && z.box.y1 === 290 && z.box.x0 === 20);
-  assert.ok(z.conf >= 84 && z.conf <= 90, 'confiance ' + z.conf);
+  assert.ok(z.conf >= 84 && z.conf <= 90, `confiance ${z.conf}`);
 });
 
 test('lignes dans le désordre : triées par hauteur ; une seule ligne avec les deux axes suffit', () => {

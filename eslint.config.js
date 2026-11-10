@@ -9,7 +9,20 @@ export default [
     rules: {
       // catch (e) {} volontaire : presse-papier, stockage local ou capteurs indisponibles ne doivent rien bloquer
       'no-empty': ['error', { allowEmptyCatch: true }],
-      'no-unused-vars': ['error', { caughtErrors: 'none' }]
+      'no-unused-vars': ['error', { caughtErrors: 'none' }],
+      // JavaScript actuel : const / let (portée de bloc), fonctions fléchées pour les rappels, propriétés abrégées
+      'no-var': 'error',
+      'prefer-const': 'error',
+      'prefer-arrow-callback': 'error',
+      'object-shorthand': 'error',
+      'arrow-body-style': ['error', 'as-needed'],
+      // pièges classiques
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'prefer-template': 'error',
+      'no-duplicate-imports': 'error',
+      'no-throw-literal': 'error',
+      'no-implicit-coercion': ['error', { allow: ['!!', '+'] }],
+      'no-console': ['error', { allow: ['error', 'warn'] }]
     }
   },
   {

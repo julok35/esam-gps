@@ -1,0 +1,14 @@
+# Mises à jour proposées chaque mois : outils de développement (ESLint, Prettier) et actions de la CI
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      outils:
+        patterns: ['*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

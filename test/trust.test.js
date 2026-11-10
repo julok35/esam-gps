@@ -13,7 +13,7 @@ test('photo : lectures concordantes et moteur sûr : fiable', () => {
 test('photo Garmin réelle : 3 lectures sur 3 concordantes, moteur à 41 % sur les chiffres : fiable quand même', () => {
   const t = confidence({ tess: 41, agree: { n: 3, total: 3 }, firm: true, rival: false, notes: 0, alts: 0 });
   assert.equal(t.level, 'ok');
-  assert.ok(t.pct >= 80, 'pct ' + t.pct);
+  assert.ok(t.pct >= 80, `pct ${t.pct}`);
   assert.ok(t.why.some((w) => /hésitant/.test(w)));
   // plus de lectures d'accord : un peu mieux encore, 95 au plus
   assert.equal(
@@ -25,7 +25,7 @@ test('photo Garmin réelle : 3 lectures sur 3 concordantes, moteur à 41 % sur l
 test('photo : lectures discordantes, valeur concurrente : douteux, note basse', () => {
   const t = confidence({ tess: 90, agree: { n: 2, total: 8 }, firm: false, rival: true, notes: 1, alts: 1 });
   assert.equal(t.level, 'check');
-  assert.ok(t.pct < 30, 'pct ' + t.pct);
+  assert.ok(t.pct < 30, `pct ${t.pct}`);
   assert.ok(t.why.some((w) => /concurrent|autre valeur/.test(w)));
 });
 

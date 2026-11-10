@@ -1,8 +1,8 @@
 /* Service worker GPS ESAM : appli en cache, moteur de lecture gardé une fois téléchargé, tuiles de carte gardées une fois vues. */
-var V = 'esam-gps-v1.30',
-  TILES = 'esam-tiles',
-  LIBS = 'esam-libs';
-var SHELL = [
+const V = 'esam-gps-v1.31';
+const TILES = 'esam-tiles';
+const LIBS = 'esam-libs';
+const SHELL = [
   './',
   'index.html',
   'app.css',
@@ -48,129 +48,94 @@ var SHELL = [
   'vendor/fonts/roboto-condensed-latin.woff2',
   'vendor/fonts/roboto-condensed-latin-ext.woff2'
 ];
-var TILE_MAX = 3000;
-var NET_WAIT = 3000; // au-delà, sur un réseau qui traîne, l'appli est servie depuis le cache
+const TILE_MAX = 3000;
+const NET_WAIT = 3000; // au-delà, sur un réseau qui traîne, l'appli est servie depuis le cache
 function noop() {}
 
-self.addEventListener('install', function (e) {
+self.addEventListener('install', (e) => {
   e.waitUntil(
     caches
       .open(V)
-      .then(function (c) {
-        return Promise.all(
-          SHELL.map(function (u) {
-            return c.add(new Request(u, { cache: 'reload' })).catch(noop);
-          })
-        );
-      })
-      .then(function () {
-        return self.skipWaiting();
-      })
+      .then((c) => Promise.all(SHELL.map((u) => c.add(new Request(u, { cache: 'reload' })).catch(noop))))
+      .then(() => self.skipWaiting())
   );
 });
 
-// Bibliothèques que l'appli ne prend plus sur le CDN (désormais dans vendor/) : retirées du cache.
-// Le moteur et la langue de Tesseract restent, même en réponse opaque : une lecture peut être en cours, et une réponse
-// opaque est de toute façon remplacée dès qu'une requête CORS la demande (voir cacheFirst).
+// Moteur et langue de Tesseract autrefois pris sur un CDN (désormais dans vendor/) : retirés du cache
 function dropUnused(name) {
-  return caches.open(name).then(function (c) {
-    return c.keys().then(function (ks) {
-      return Promise.all(
-        ks
-          .filter(function (k) {
-            return !/tesseract\.js-core@|@tesseract\.js-data\//.test(k.url);
-          })
-          .map(function (k) {
-            return c.delete(k);
-          })
-      );
-    });
-  });
+  return caches
+    .open(name)
+    .then((c) => c.keys().then((ks) => Promise.all(ks.filter((k) => !isLib(k.url)).map((k) => c.delete(k)))));
 }
-self.addEventListener('activate', function (e) {
+self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then(function (ks) {
-        return Promise.all(
-          ks
-            .filter(function (k) {
-              return k !== V && k !== TILES && k !== LIBS;
-            })
-            .map(function (k) {
-              return caches.delete(k);
-            })
-        );
-      })
-      .then(function () {
-        return dropUnused(LIBS).catch(noop);
-      })
-      .then(function () {
-        return self.clients.claim();
-      })
+      .then((ks) => Promise.all(ks.filter((k) => k !== V && k !== TILES && k !== LIBS).map((k) => caches.delete(k))))
+      .then(() => dropUnused(LIBS).catch(noop))
+      .then(() => self.clients.claim())
   );
 });
 
 function isTile(u) {
   return /data\.geopf\.fr\/wmts|tile\.opentopomap\.org|tile\.openstreetmap\.org/.test(u);
 }
+// Moteur et langue de Tesseract (7 Mo, fichiers qui ne changent pas) : hors du cache de l'appli, pour ne pas être
+// téléchargés à nouveau à chaque version
 function isLib(u) {
-  return /^https:\/\/cdn\.jsdelivr\.net\/npm\//.test(u);
+  return (
+    u.startsWith(`${self.registration.scope}vendor/tesseract/core/`) ||
+    u.startsWith(`${self.registration.scope}vendor/tesseract/lang/`)
+  );
 }
 
 function trim(cache) {
-  return cache.keys().then(function (ks) {
-    var extra = ks.length - TILE_MAX;
-    return Promise.all(
-      ks.slice(0, Math.max(0, extra)).map(function (k) {
-        return cache.delete(k);
-      })
-    );
+  return cache.keys().then((ks) => {
+    const extra = ks.length - TILE_MAX;
+    return Promise.all(ks.slice(0, Math.max(0, extra)).map((k) => cache.delete(k)));
   });
 }
 
 // Ressource externe en cache d'abord ; à défaut, téléchargée en CORS (réponse lisible, taille réelle dans le quota)
 // et gardée ; si le serveur refuse le CORS, requête d'origine servie telle quelle, sans la garder.
 function cacheFirst(e, name, onStore) {
-  var req = e.request;
-  return caches.open(name).then(function (c) {
-    return c.match(req, { ignoreVary: true }).then(function (hit) {
+  const req = e.request;
+  return caches.open(name).then((c) =>
+    c.match(req, { ignoreVary: true }).then((hit) => {
       if (hit && !(hit.type === 'opaque' && req.mode === 'cors')) return hit;
       return fetch(req.url, { mode: 'cors', credentials: 'omit' }).then(
-        function (r) {
+        (r) => {
           if (r.ok) e.waitUntil(c.put(req.url, r.clone()).then(onStore).catch(noop));
           return r;
         },
-        function (err) {
+        (err) => {
           if (req.mode === 'cors') throw err;
           return fetch(req);
         }
       );
-    });
-  });
+    })
+  );
 }
 
 // Fichiers de l'appli : réseau d'abord pour avoir la dernière version, cache si le réseau échoue ou traîne.
 // Quand la page vient du cache, ses fichiers suivent aussitôt (pas d'attente en chaîne, versions cohérentes).
-var cacheUntil = 0;
+let cacheUntil = 0;
 function networkFirst(e) {
-  var req = e.request,
+  const req = e.request,
     nav = req.mode === 'navigate';
-  var fromCache = function () {
-    return caches.match(req, { ignoreSearch: true }).then(function (hit) {
-      return hit || (nav ? caches.match('index.html') : undefined);
-    });
+  const fromCache = function () {
+    return caches
+      .match(req, { ignoreSearch: true })
+      .then((hit) => hit || (nav ? caches.match('index.html') : undefined));
   };
-  var net = function () {
-    return fetch(req).then(function (r) {
+  const net = function () {
+    return fetch(req).then((r) => {
       if (r.ok) {
-        var cl = r.clone();
+        const cl = r.clone();
         e.waitUntil(
           caches
             .open(V)
-            .then(function (c) {
-              return c.put(req, cl);
-            })
+            .then((c) => c.put(req, cl))
             .catch(noop)
         );
       }
@@ -178,36 +143,33 @@ function networkFirst(e) {
     });
   };
   if (nav) cacheUntil = 0;
-  else if (Date.now() < cacheUntil)
-    return fromCache().then(function (hit) {
-      return hit || net();
-    });
-  var p = net();
+  else if (Date.now() < cacheUntil) return fromCache().then((hit) => hit || net());
+  const p = net();
   e.waitUntil(p.catch(noop));
-  var slow = new Promise(function (res) {
+  const slow = new Promise((res) => {
     setTimeout(res, NET_WAIT);
   })
     .then(fromCache)
-    .then(function (hit) {
+    .then((hit) => {
       if (!hit) return p;
       if (nav) cacheUntil = Date.now() + 30000;
       return hit;
     });
-  return Promise.race([p, slow]).catch(function () {
-    return fromCache().then(function (hit) {
+  return Promise.race([p, slow]).catch(() =>
+    fromCache().then((hit) => {
       if (hit && nav) cacheUntil = Date.now() + 30000;
       return hit || Response.error();
-    });
-  });
+    })
+  );
 }
 
-self.addEventListener('fetch', function (e) {
-  var req = e.request;
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
   if (req.method !== 'GET') return;
-  var u = req.url;
+  const u = req.url;
   if (isTile(u)) {
     e.respondWith(
-      cacheFirst(e, TILES, function () {
+      cacheFirst(e, TILES, () => {
         if (Math.random() < 0.05) return caches.open(TILES).then(trim);
       })
     );

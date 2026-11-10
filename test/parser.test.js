@@ -43,7 +43,7 @@ for (const [name, text, fmt, reliable] of CASES) {
     const r = parse(text);
     near(r, REF);
     assert.equal(r.best.fmt, fmt);
-    assert.equal(r.conf === 'ok', reliable, 'notes : ' + r.best.notes.map((n) => n.t).join(' | '));
+    assert.equal(r.conf === 'ok', reliable, `notes : ${r.best.notes.map((n) => n.t).join(' | ')}`);
   });
 }
 
@@ -102,7 +102,7 @@ test('point en Suisse (Grisons) accepté sans alerte de zone', () => {
 });
 
 test('texte long traité rapidement', () => {
-  const big = 'Distance du trajet: 2.4 km Surface 271.04 m² '.repeat(300) + " N 45°16.277' E 005°56.052'";
+  const big = `${'Distance du trajet: 2.4 km Surface 271.04 m² '.repeat(300)} N 45°16.277' E 005°56.052'`;
   const t = Date.now();
   near(parse(big), REF);
   assert.ok(Date.now() - t < 2000);
