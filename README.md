@@ -115,3 +115,7 @@ Les tests n'ont besoin d'aucune dépendance. Ils tournent aussi à chaque push e
 ## Mise en ligne
 
 Après une modification des fichiers de l'appli, changer la version `V` en tête de `sw.js` (et la liste `SHELL` si un fichier est ajouté) pour que les téléphones récupèrent la nouvelle version, et la même version dans `VERSION` de `js/util.js` (affichée dans le bandeau). Les tests vérifient que les deux concordent, que chaque module de `js/` et chaque fichier appelé par `index.html` est dans `SHELL`, et que chaque fichier de `SHELL` existe.
+
+## Licence
+
+Code de l'appli sous licence MIT (fichier `LICENSE`). Les bibliothèques et polices de `vendor/` gardent leurs propres licences, jointes dans leurs dossiers.

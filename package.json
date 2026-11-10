@@ -2,6 +2,7 @@
   "name": "esam-gps",
   "private": true,
   "description": "Convertisseur de coordonnées GPS de l'ESAM (site statique, sans build).",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=20.19"
