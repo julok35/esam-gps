@@ -31,3 +31,14 @@ test('chaque fichier local appelé par index.html est dans le cache hors ligne',
   assert.ok(refs.length > 5);
   for (const f of refs) assert.ok(shell.includes(f), f);
 });
+
+test('moteur Tesseract : même dossier dans ocr.js et sw.js, trois variantes présentes, sorties par blocs demandées', () => {
+  const ocr = readFileSync(new URL('js/ocr.js', root), 'utf8');
+  const dir = ocr.match(/core: '(vendor\/tesseract\/core-\d+)'/)[1];
+  assert.ok(sw.includes(`${dir}/`), dir);
+  for (const v of ['', 'simd-', 'relaxedsimd-'])
+    assert.ok(existsSync(new URL(`${dir}/tesseract-core-${v}lstm.wasm.js`, root)), v);
+  // depuis tesseract.js 6, sans cette demande, plus de mots ni de boîtes : la zone des coordonnées ne serait plus trouvée
+  assert.equal(ocr.match(/\.recognize\([^)]*, \{\}, OUT\)/g).length, 2);
+  assert.match(ocr, /const OUT = \{ text: true, blocks: true \}/);
+});

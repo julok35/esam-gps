@@ -13,9 +13,12 @@ import { exifDate } from './exif.js';
 const TESS = {
   lib: 'vendor/tesseract/tesseract.min.js',
   worker: 'vendor/tesseract/worker.min.js',
-  core: 'vendor/tesseract/core',
+  core: 'vendor/tesseract/core-7', // dossier au numéro de version : un moteur d'une autre version déjà en cache ne sert plus
   lang: 'vendor/tesseract/lang'
 };
+// Sorties demandées au moteur : le texte et les blocs (lignes, mots, boîtes, confiances), désactivés par défaut depuis
+// tesseract.js 6
+const OUT = { text: true, blocks: true };
 // Adresse complète : le worker résout les chemins relatifs depuis son propre dossier, pas depuis la page
 function abs(path) {
   return new URL(path, document.baseURI).href;
@@ -920,7 +923,7 @@ export function recognizeFull(img, stale, wi) {
     if (stale()) return null;
     return w
       .setParameters({ tessedit_pageseg_mode: '11' })
-      .then(() => w.recognize(pr.c))
+      .then(() => w.recognize(pr.c, {}, OUT))
       .then((r) => {
         const lines = [];
         (r.data.blocks || []).forEach((bl) => {
@@ -978,7 +981,7 @@ export function readBox(img, box, onPass, stale, wi) {
       }
       return w
         .setParameters({ tessedit_pageseg_mode: ps[2] })
-        .then(() => w.recognize(imgs[ik]))
+        .then(() => w.recognize(imgs[ik], {}, OUT))
         .then((r) => {
           const txt = (r.data.text || '').trim();
           let words = [];
@@ -1109,17 +1112,19 @@ function prepareOffline() {
   const b = $('prepOff');
   b.disabled = true;
   $('prepMsg').textContent = 'Téléchargement du moteur de lecture (environ 7 Mo)...';
-  const simd =
-    typeof WebAssembly === 'object' &&
-    WebAssembly.validate(
-      new Uint8Array([
-        0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11
-      ])
-    );
+  // même choix que le worker de Tesseract : moteur le plus rapide que le téléphone sait exécuter
+  const can = (bytes) => typeof WebAssembly === 'object' && WebAssembly.validate(new Uint8Array(bytes));
+  const relaxed = can([
+    0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 15, 1, 13, 0, 65, 1, 253, 15, 65, 2, 253, 15,
+    253, 128, 2, 11
+  ]);
+  const simd = can([
+    0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11
+  ]);
   const urls = [
     TESS.lib,
     TESS.worker,
-    `${TESS.core}/tesseract-core-${simd ? 'simd-' : ''}lstm.wasm.js`,
+    `${TESS.core}/tesseract-core-${relaxed ? 'relaxedsimd-' : simd ? 'simd-' : ''}lstm.wasm.js`,
     `${TESS.lang}/eng.traineddata.gz`
   ];
   Promise.all(

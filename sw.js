@@ -1,5 +1,5 @@
 /* Service worker GPS ESAM : appli en cache, moteur de lecture gardé une fois téléchargé, tuiles de carte gardées une fois vues. */
-const V = 'esam-gps-v1.31';
+const V = 'esam-gps-v1.32';
 const TILES = 'esam-tiles';
 const LIBS = 'esam-libs';
 const SHELL = [
@@ -84,7 +84,7 @@ function isTile(u) {
 // téléchargés à nouveau à chaque version
 function isLib(u) {
   return (
-    u.startsWith(`${self.registration.scope}vendor/tesseract/core/`) ||
+    u.startsWith(`${self.registration.scope}vendor/tesseract/core-7/`) ||
     u.startsWith(`${self.registration.scope}vendor/tesseract/lang/`)
   );
 }
