@@ -18,7 +18,7 @@ export function loadHist() {
 
 function save(c, text) {
   let h = loadHist();
-  const key = f6(c.lat) + ', ' + f6(c.lon);
+  const key = `${f6(c.lat)}, ${f6(c.lon)}`;
   h = h.filter((x) => x.k !== key);
   h.unshift({ k: key, src: text.slice(0, 400), t: Date.now() });
   try {
@@ -49,13 +49,9 @@ export function drawHist() {
   $('hist').innerHTML = h
     .map(
       (x, i) =>
-        '<li><button type="button" data-hist="' +
-        i +
-        '"><span>' +
-        esc(x.k) +
-        '</span><small>' +
-        esc(fmtWhen(x.t)) +
-        '</small></button></li>'
+        `<li><button type="button" data-hist="${i}"><span>${esc(x.k)}</span><small>${esc(
+          fmtWhen(x.t)
+        )}</small></button></li>`
     )
     .join('');
 }

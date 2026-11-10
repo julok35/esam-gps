@@ -63,7 +63,7 @@ test('netteté : contours francs près de 1, flou nettement en dessous ; la phot
   assert.ok(sharpness(soft.g, soft.w, soft.h) < 0.4);
   const { g, w, h } = garmin();
   const s = sharpness(g, w, h);
-  assert.ok(s > 0.2 && s < 0.5, 'Garmin : ' + s);
+  assert.ok(s > 0.2 && s < 0.5, `Garmin : ${s}`);
 });
 
 test('réglages automatiques : renforcement seulement si flou, et le masque flou rend le trait plus franc', () => {

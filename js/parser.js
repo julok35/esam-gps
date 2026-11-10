@@ -209,7 +209,7 @@ function interpretGroup(nums, max) {
     // un seul nombre : DD (45.123456), NMEA (4507.4074) ou DMM dont le ° est lu comme un 0 (45007.4074 pour 45°07.4074)
     const raw = nums[0].raw,
       ip = raw.split('.')[0],
-      fr = raw.indexOf('.') >= 0 ? '.' + raw.split('.')[1] : '';
+      fr = raw.indexOf('.') >= 0 ? `.${raw.split('.')[1]}` : '';
     if (Math.abs(v[0]) <= max && syms[0] !== "'" && syms[0] !== '"') {
       const dec = fr.length - 1;
       if (dec >= 3) c.push({ val: v[0], fmt: 'DD', pen: 0 });
@@ -218,7 +218,7 @@ function interpretGroup(nums, max) {
           val: v[0],
           fmt: 'DD',
           pen: PEN.ddShort,
-          fix: 'seulement ' + dec + ' décimale(s), position imprécise'
+          fix: `seulement ${dec} décimale(s), position imprécise`
         });
       else
         c.push({
@@ -256,7 +256,7 @@ function interpretGroup(nums, max) {
         pn += PEN.dmmFix;
       }
       if (md < 3) {
-        fixes.push('minutes à ' + md + ' décimale(s) seulement, chiffre manquant ?');
+        fixes.push(`minutes à ${md} décimale(s) seulement, chiffre manquant ?`);
         pn += PEN.dmmFix;
       }
       c.push({ val: v[0] + v[1] / 60, fmt: 'DMM', pen: pn, fix: fixes.join(', ') || undefined });
@@ -372,13 +372,13 @@ function build(lat, lon, la, lo, hemi, swapped, win) {
     score -= SCORE.swapped;
     notes.push({ lvl: 'warn', t: "Latitude et longitude saisies dans l'ordre inverse : remises dans l'ordre." });
   }
-  if (la.fix) notes.push({ lvl: 'warn', t: 'Latitude : ' + la.fix + ' (vérifier sur la photo).' });
-  if (lo.fix) notes.push({ lvl: 'warn', t: 'Longitude : ' + lo.fix + ' (vérifier sur la photo).' });
+  if (la.fix) notes.push({ lvl: 'warn', t: `Latitude : ${la.fix} (vérifier sur la photo).` });
+  if (lo.fix) notes.push({ lvl: 'warn', t: `Longitude : ${lo.fix} (vérifier sur la photo).` });
   if (lon < 0 && hemi)
     notes.push({ lvl: 'warn', t: "Longitude Ouest : inhabituel dans les Alpes. Un « O » lu à la place d'un 0 ?" });
   if (la.fmt !== lo.fmt)
     notes.push({ lvl: 'warn', t: 'Latitude et longitude lues dans deux formats différents : vérifier sur la photo.' });
-  const fmt = la.fmt === lo.fmt ? la.fmt : la.fmt + ' / ' + lo.fmt;
+  const fmt = la.fmt === lo.fmt ? la.fmt : `${la.fmt} / ${lo.fmt}`;
   return {
     lat,
     lon,
@@ -452,7 +452,7 @@ function parseUTM(t) {
     out.push({
       lat: ll.lat,
       lon: ll.lon,
-      fmt: 'UTM ' + zone + m[2].toUpperCase(),
+      fmt: `UTM ${zone}${m[2].toUpperCase()}`,
       score,
       notes,
       s: m.index + off,
@@ -536,7 +536,7 @@ export function bearing(a, b) {
 }
 function pad(n, w) {
   let s = String(n);
-  while (s.length < w) s = '0' + s;
+  while (s.length < w) s = `0${s}`;
   return s;
 }
 // ---------- Sortie dans les autres formats ----------
@@ -551,7 +551,7 @@ export function toDMM(v, isLat) {
     d += 1;
     m = 0;
   }
-  return h + ' ' + pad(d, isLat ? 2 : 3) + '°' + pad(m.toFixed(3), 6) + "'";
+  return `${h} ${pad(d, isLat ? 2 : 3)}°${pad(m.toFixed(3), 6)}'`;
 }
 /** « N 45°12'20.7" » @param {number} v @param {boolean} isLat @returns {string} */
 export function toDMS(v, isLat) {
@@ -569,7 +569,7 @@ export function toDMS(v, isLat) {
     m = 0;
     d += 1;
   }
-  return h + ' ' + pad(d, isLat ? 2 : 3) + '°' + pad(m, 2) + "'" + pad(s.toFixed(1), 4) + '"';
+  return `${h} ${pad(d, isLat ? 2 : 3)}°${pad(m, 2)}'${pad(s.toFixed(1), 4)}"`;
 }
 /**
  * « 32T 274729 5009234 » : zone et bande, est et nord en mètres (zones standard, sans les exceptions Norvège / Svalbard).
@@ -614,5 +614,5 @@ export function toUTM(lat, lon) {
   if (lat < 0) Nn += 10000000;
   const bands = 'CDEFGHJKLMNPQRSTUVWX',
     band = bands.charAt(Math.min(19, Math.max(0, Math.floor((lat + 80) / 8))));
-  return zone + band + ' ' + Math.round(E) + ' ' + Math.round(Nn);
+  return `${zone + band} ${Math.round(E)} ${Math.round(Nn)}`;
 }

@@ -58,9 +58,9 @@ test('cadre de l’écran retrouvé à 2 px près sur une photo en perspective, 
   const q = findQuad(img, W, H);
   assert.ok(q, 'aucun cadre');
   q.quad.forEach((p, i) => {
-    assert.ok(Math.hypot(p[0] - photo[i][0], p[1] - photo[i][1]) < 2, 'coin ' + i + ' : ' + p);
+    assert.ok(Math.hypot(p[0] - photo[i][0], p[1] - photo[i][1]) < 2, `coin ${i} : ${p}`);
   });
-  assert.ok(q.gain >= 3, 'gain ' + q.gain);
+  assert.ok(q.gain >= 3, `gain ${q.gain}`);
   assert.ok(q.tilt > 3);
   assert.ok(q.cover > 0.4 && q.cover < 0.6);
 });
@@ -86,7 +86,7 @@ test('redressement : l’écran redevient un rectangle de texte droit', () => {
   };
   let best = 0;
   for (let y = 0; y < r.h; y++) best = Math.max(best, row(y));
-  assert.ok(best > 0.55, 'ligne de texte la plus sombre : ' + best);
+  assert.ok(best > 0.55, `ligne de texte la plus sombre : ${best}`);
   assert.ok(Math.abs(r.w / r.h - 280 / 220) < 0.12);
 });
 
@@ -96,7 +96,7 @@ test('capture d’écran droite : pas de cadre incliné ; photo Garmin coupée :
   assert.ok(!q || q.tilt < 0.4);
   const garmin = new Uint8Array(gunzipSync(readFileSync(new URL('./garmin-ecran-560x525.gray.gz', import.meta.url))));
   const q2 = findQuad(garmin, 560, 525);
-  assert.ok(!q2 || q2.gain < 3, 'gain ' + (q2 && q2.gain));
+  assert.ok(!q2 || q2.gain < 3, `gain ${q2 && q2.gain}`);
 });
 
 test('outils : inclinaison et surface d’un quadrilatère', () => {

@@ -6,28 +6,16 @@ import { placeText } from './place.js';
 let qrMode = 'app';
 
 function appUrl(c) {
-  return location.origin + location.pathname + '#' + f6(c.lat) + ',' + f6(c.lon);
+  return `${location.origin + location.pathname}#${f6(c.lat)},${f6(c.lon)}`;
 }
 function mapsUrl(c) {
-  return 'https://www.google.com/maps/search/?api=1&query=' + f6(c.lat) + ',' + f6(c.lon);
+  return `https://www.google.com/maps/search/?api=1&query=${f6(c.lat)},${f6(c.lon)}`;
 }
 function message(c) {
   const p = placeText(c);
-  return (
-    'Point ESAM\n' +
-    f6(c.lat) +
-    ', ' +
-    f6(c.lon) +
-    '\nDMM : ' +
-    toDMM(c.lat, true) +
-    ' ' +
-    toDMM(c.lon, false) +
-    (p ? '\n' + p : '') +
-    '\nCarte : ' +
-    mapsUrl(c) +
-    '\nAppli GPS ESAM : ' +
-    appUrl(c)
-  );
+  return `Point ESAM\n${f6(c.lat)}, ${f6(c.lon)}\nDMM : ${toDMM(c.lat, true)} ${toDMM(c.lon, false)}${
+    p ? `\n${p}` : ''
+  }\nCarte : ${mapsUrl(c)}\nAppli GPS ESAM : ${appUrl(c)}`;
 }
 
 export function drawQR() {
@@ -38,7 +26,7 @@ export function drawQR() {
       ? appUrl(current)
       : qrMode === 'maps'
         ? mapsUrl(current)
-        : 'geo:' + f6(current.lat) + ',' + f6(current.lon);
+        : `geo:${f6(current.lat)},${f6(current.lon)}`;
   if (typeof qrcode === 'undefined') {
     $('qrImg').innerHTML = '<p class="hint">QR indisponible (bibliothèque non chargée).</p>';
     return;
@@ -46,7 +34,7 @@ export function drawQR() {
   const q = qrcode(0, 'M');
   q.addData(data);
   q.make();
-  $('qrImg').innerHTML = '<img alt="QR code du point" src="' + q.createDataURL(8, 0) + '">';
+  $('qrImg').innerHTML = `<img alt="QR code du point" src="${q.createDataURL(8, 0)}">`;
   $('qrTxt').textContent =
     (qrMode === 'app'
       ? 'Ouvre cette appli sur le point. '
@@ -91,7 +79,7 @@ export function initShare(onUse) {
   $('waBtn').addEventListener('click', () => {
     if (!state.current) return;
     onUse();
-    window.open('https://wa.me/?text=' + encodeURIComponent(message(state.current)), '_blank', 'noopener');
+    window.open(`https://wa.me/?text=${encodeURIComponent(message(state.current))}`, '_blank', 'noopener');
   });
   $('copyMsg').addEventListener('click', () => {
     if (state.current) {

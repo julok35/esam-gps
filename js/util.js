@@ -16,7 +16,7 @@ export function f6(v) {
   return v.toFixed(6);
 }
 export function fmtDist(d) {
-  return Math.round(d) < 1000 ? Math.round(d) + ' m' : (d / 1000).toFixed(d < 10000 ? 2 : 1).replace('.', ',') + ' km';
+  return Math.round(d) < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(d < 10000 ? 2 : 1).replace('.', ',')} km`;
 }
 export const CARD = [
   'N',
@@ -48,11 +48,10 @@ export const state = { current: null, me: null };
 // Date et heure courtes : « 02/11 08:12 »
 export function fmtWhen(t) {
   const d = new Date(t);
-  return (
-    d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) +
-    ' ' +
-    d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-  );
+  return `${d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} ${d.toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })}`;
 }
 
 // Message bref à la place du contenu d'un bouton (« Copié »), 1,2 s. Un second message pendant le premier le

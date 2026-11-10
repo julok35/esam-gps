@@ -319,7 +319,7 @@ function draw() {
     said = Date.now();
     let s = ok
       ? 'Boussole : téléphone pointé vers le point'
-      : 'Boussole : ' + (okH ? 'dans la bonne direction' : 'tournez ' + (t > 0 ? 'à droite' : 'à gauche'));
+      : `Boussole : ${okH ? 'dans la bonne direction' : `tournez ${t > 0 ? 'à droite' : 'à gauche'}`}`;
     if (!ok && e !== null && !okV) s += e > 0 ? ', levez le téléphone' : ', baissez le téléphone';
     $('cmp').setAttribute('aria-label', s);
   }
@@ -354,7 +354,7 @@ export function initCompass() {
           msg('');
           return;
         } // la boussole marche malgré la réponse
-        msg(err && err.message !== 'refus' ? 'Boussole indisponible : ' + err.message + '.' : blockedMsg());
+        msg(err && err.message !== 'refus' ? `Boussole indisponible : ${err.message}.` : blockedMsg());
       }
     );
   });

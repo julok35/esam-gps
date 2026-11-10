@@ -23,25 +23,18 @@ export function confidence(info) {
     let f = 1;
     if (info.firm) {
       pct = 88 + Math.min(7, 2 * Math.max(0, a.n - 3));
-      why.push(a.n + ' lectures sur ' + a.total + ' concordantes');
+      why.push(`${a.n} lectures sur ${a.total} concordantes`);
     } else {
       pct = a.total ? (75 * a.n) / a.total : 0;
       why.push(
         a.total
-          ? 'seulement ' +
-              a.n +
-              ' lecture' +
-              (a.n > 1 ? 's' : '') +
-              ' sur ' +
-              a.total +
-              ' concordante' +
-              (a.n > 1 ? 's' : '')
+          ? `seulement ${a.n} lecture${a.n > 1 ? 's' : ''} sur ${a.total} concordante${a.n > 1 ? 's' : ''}`
           : 'aucune lecture concordante'
       );
     }
     if (typeof info.tess === 'number') {
       pct += Math.max(-10, Math.min(5, (info.tess - 60) / 4));
-      if (info.tess < 60) why.push('moteur hésitant sur les chiffres (' + Math.round(info.tess) + ' %)');
+      if (info.tess < 60) why.push(`moteur hésitant sur les chiffres (${Math.round(info.tess)} %)`);
     }
     if (info.rival) {
       f *= 0.6;

@@ -36,18 +36,18 @@ export function checkPoint(lat, lon) {
 
 // Texte à coller dans la recherche AirOps : « lat, lon », 6 décimales, point décimal
 export function ddText(lat, lon) {
-  return n6(lat) + ', ' + n6(lon);
+  return `${n6(lat)}, ${n6(lon)}`;
 }
 // Carte AirOps centrée sur le point (sans repère : AirOps n'en pose pas par lien)
 export function airopsUrl(lat, lon) {
-  return 'https://airops-supuav.fr/map/#14/' + n6(lat) + '/' + n6(lon);
+  return `https://airops-supuav.fr/map/#14/${n6(lat)}/${n6(lon)}`;
 }
 // Itinéraire en voiture, sans départ : Google Maps part de la position actuelle du téléphone
 export function routeUrl(lat, lon) {
-  return 'https://www.google.com/maps/dir/?api=1&destination=' + n6(lat) + ',' + n6(lon) + '&travelmode=driving';
+  return `https://www.google.com/maps/dir/?api=1&destination=${n6(lat)},${n6(lon)}&travelmode=driving`;
 }
 // Lien geo: (Android) : propose OsmAnd, Waze, Organic Maps... avec un repère nommé
 export function geoUrl(lat, lon) {
-  const p = n6(lat) + ',' + n6(lon);
-  return 'geo:' + p + '?q=' + p + '(Intervention%20ESAM)';
+  const p = `${n6(lat)},${n6(lon)}`;
+  return `geo:${p}?q=${p}(Intervention%20ESAM)`;
 }

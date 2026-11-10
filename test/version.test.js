@@ -11,13 +11,13 @@ const shell = [...sw.slice(sw.indexOf('SHELL = ['), sw.indexOf('];')).matchAll(/
 test('version du bandeau = version du cache sw.js', () => {
   const util = readFileSync(new URL('js/util.js', root), 'utf8');
   const v = util.match(/export const VERSION = '([^']+)'/)[1];
-  assert.match(sw, new RegExp("const V = 'esam-gps-v" + v.replace(/\./g, '\\.') + "'"));
+  assert.match(sw, new RegExp(`const V = 'esam-gps-v${v.replace(/\./g, '\\.')}'`));
 });
 
 test('chaque module de js/ est dans le cache hors ligne', () => {
   const modules = readdirSync(new URL('js/', root)).filter((f) => f.endsWith('.js'));
   assert.ok(modules.length > 10);
-  for (const f of modules) assert.ok(shell.includes('js/' + f), f);
+  for (const f of modules) assert.ok(shell.includes(`js/${f}`), f);
 });
 
 test('chaque fichier du cache hors ligne existe', () => {

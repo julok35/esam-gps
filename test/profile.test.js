@@ -38,7 +38,7 @@ test('altitudes des points, montées et descentes entre points', () => {
 test('profil SVG : points numérotés, null sans altitudes', () => {
   const s = samplePath(pts, 20),
     zs = s.map((q) => 1280 + q.d * 0.18);
-  const p = profileSvg(s, zs, (d) => Math.round(d) + ' m');
+  const p = profileSvg(s, zs, (d) => `${Math.round(d)} m`);
   assert.match(p.svg, /^<svg class="pf"/);
   // points 2 et 3 à 6 m : une seule pastille « 2-3 »
   assert.equal((p.svg.match(/class="pf-p"/g) || []).length, 2);

@@ -49,9 +49,9 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `sw.js` | Service worker : appli hors ligne, moteur de lecture et tuiles en cache |
 | `test/` | Tests Node (`node --test`), dont une vraie photo d'écran Garmin en niveaux de gris |
 | `eslint.config.js`, `.prettierrc.json`, `.editorconfig` | Règles de qualité et de mise en forme |
-| `vendor/` | Leaflet 1.9.4, qrcode-generator 1.4.4, tesseract.js 5.1.1 (bibliothèque et worker), polices (licence OFL) |
+| `vendor/` | Leaflet 1.9.4, qrcode-generator 1.4.4, tesseract.js 5.1.1 (bibliothèque, worker, moteur WebAssembly et langue), polices (licence OFL) |
 
-Le moteur WebAssembly de Tesseract et la langue (environ 7 Mo) restent sur jsDelivr, en versions figées, et sont gardés par le service worker après le premier usage ou le bouton « Préparer la lecture de photo sans réseau ».
+Le moteur WebAssembly de Tesseract (`vendor/tesseract/core`, tesseract.js-core 5.1.1) et la langue (`vendor/tesseract/lang`, @tesseract.js-data/eng 1.0.0, modèle `4.0.0_best_int`) sont hébergés avec l'appli : aucun code ni donnée ne vient d'un autre site. Ces 7 Mo ne sont téléchargés qu'au premier usage ou par le bouton « Préparer la lecture de photo sans réseau », puis gardés par le service worker d'une version de l'appli à l'autre.
 
 ## Développer
 

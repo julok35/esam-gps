@@ -32,7 +32,7 @@ function say(t) {
 }
 function setHash(h) {
   try {
-    history.replaceState(null, '', h ? '#' + h : location.pathname + location.search);
+    history.replaceState(null, '', h ? `#${h}` : location.pathname + location.search);
   } catch (e) {}
 }
 
@@ -59,8 +59,10 @@ function render() {
     out.innerHTML =
       r && r.empty
         ? '<div class="status"><span class="pill none">En attente de coordonnées</span></div>'
-        : '<div class="status"><span class="pill check">Aucune coordonnée trouvée</span></div><p class="flush">Corrigez le texte ou recadrez sur les coordonnées.</p>' +
-          goBlock(null, 'Pas de coordonnées valides : AirOps et Itinéraire désactivés.');
+        : `<div class="status"><span class="pill check">Aucune coordonnée trouvée</span></div><p class="flush">Corrigez le texte ou recadrez sur les coordonnées.</p>${goBlock(
+            null,
+            'Pas de coordonnées valides : AirOps et Itinéraire désactivés.'
+          )}`;
     $('resSum').textContent = r && r.empty ? '' : 'aucune coordonnée';
     $('eqCard').hidden = true;
     $('shareCard').hidden = true;
@@ -79,67 +81,47 @@ function render() {
     warn = c.notes.length || r.alts.length;
   const la = f6(c.lat),
     lo = f6(c.lon);
-  let h =
-    '<div class="status"><span class="pill ' +
-    (r.verified ? 'ok">Vérifié à la main' : ok ? 'ok">Lecture fiable' : 'check">À vérifier') +
-    '</span><span class="pill fmt">' +
-    esc(c.fmt) +
-    '</span>' +
-    (r.trust && (r.ocr || !ok)
-      ? '<span class="pill conf ' + (ok ? 'c-ok' : 'c-no') + '">Confiance ' + r.trust.pct + ' %</span>'
-      : '') +
-    (r.agree && chosen === 0 ? '<span class="pill fmt">' + r.agree.n + '/' + r.agree.total + ' lectures</span>' : '') +
-    '<button class="chip fixbtn" type="button" data-fix="1">Corriger</button></div>';
+  let h = `<div class="status"><span class="pill ${
+    r.verified ? 'ok">Vérifié à la main' : ok ? 'ok">Lecture fiable' : 'check">À vérifier'
+  }</span><span class="pill fmt">${esc(c.fmt)}</span>${
+    r.trust && (r.ocr || !ok) ? `<span class="pill conf ${ok ? 'c-ok' : 'c-no'}">Confiance ${r.trust.pct} %</span>` : ''
+  }${
+    r.agree && chosen === 0 ? `<span class="pill fmt">${r.agree.n}/${r.agree.total} lectures</span>` : ''
+  }<button class="chip fixbtn" type="button" data-fix="1">Corriger</button></div>`;
   // coordonnées : un toucher les copie (seulement une fois le point sûr)
   h += ok
-    ? '<button class="big1" type="button" data-copy="' +
-      la +
-      ', ' +
-      lo +
-      '">' +
-      la +
-      ', ' +
-      lo +
-      '<small>Toucher pour copier</small></button>'
-    : '<div class="big1 held">' + la + ', ' + lo + '<small>Douteux : à vérifier sur la photo</small></div>';
-  h += '<div class="seg1">Lu : ' + esc(c.seg) + '</div>';
+    ? `<button class="big1" type="button" data-copy="${la}, ${lo}">${la}, ${
+        lo
+      }<small>Toucher pour copier</small></button>`
+    : `<div class="big1 held">${la}, ${lo}<small>Douteux : à vérifier sur la photo</small></div>`;
+  h += `<div class="seg1">Lu : ${esc(c.seg)}</div>`;
   h += '<div class="place" id="place"></div>';
   if (ok) h += goBlock(c);
   const notes = c.notes.slice();
   if (r.alts.length) notes.push({ t: 'Plusieurs lectures possibles : comparez avec la photo.' });
   if (!ok && r.trust && r.trust.why.length && r.ocr)
-    notes.push({ t: 'Confiance ' + r.trust.pct + ' % : ' + r.trust.why.join(', ') + '.' });
-  if (notes.length) h += '<ul class="notes">' + notes.map((n) => '<li>' + esc(n.t) + '</li>').join('') + '</ul>';
+    notes.push({ t: `Confiance ${r.trust.pct} % : ${r.trust.why.join(', ')}.` });
+  if (notes.length) h += `<ul class="notes">${notes.map((n) => `<li>${esc(n.t)}</li>`).join('')}</ul>`;
   if (r.alts.length) {
     h += '<div class="alts">';
     all.forEach((a, i) => {
       if (a !== c)
-        h +=
-          '<button type="button" data-alt="' +
-          i +
-          '">' +
-          f6(a.lat) +
-          ', ' +
-          f6(a.lon) +
-          ' <small>(' +
-          esc(a.seg) +
-          ')</small></button>';
+        h += `<button type="button" data-alt="${i}">${f6(a.lat)}, ${f6(a.lon)} <small>(${esc(a.seg)})</small></button>`;
     });
     h += '</div>';
   }
   if (!ok)
     h +=
-      '<div class="hold"><p class="flush"><b>Coordonnées douteuses : rien n\u2019est transmis.</b> Comparez chiffre par chiffre avec la photo. Corrigez-les avec les molettes, ou confirmez-les si elles sont justes.</p>' +
-      '<div class="row2"><button class="btn" type="button" data-fix="1">Corriger</button><button class="btn sec" type="button" data-verify="1">Justes : confirmer</button></div></div>' +
-      goBlock(
+      `<div class="hold"><p class="flush"><b>Coordonnées douteuses : rien n\u2019est transmis.</b> Comparez chiffre par chiffre avec la photo. Corrigez-les avec les molettes, ou confirmez-les si elles sont justes.</p>` +
+      `<div class="row2"><button class="btn" type="button" data-fix="1">Corriger</button><button class="btn sec" type="button" data-verify="1">Justes : confirmer</button></div></div>${goBlock(
         null,
         'Coordonnées à vérifier : AirOps et Itinéraire s\u2019activent une fois le point corrigé ou confirmé.'
-      );
+      )}`;
   else h += '<div class="trk" id="trk"></div>';
   $('resCard').classList.remove('empty');
   out.innerHTML = h;
   if (ok) trackButton();
-  $('resSum').textContent = (ok ? '' : 'à vérifier · ') + f6(c.lat).slice(0, -1) + ', ' + f6(c.lon).slice(0, -1);
+  $('resSum').textContent = `${(ok ? '' : 'à vérifier · ') + f6(c.lat).slice(0, -1)}, ${f6(c.lon).slice(0, -1)}`;
   if (!ok) {
     // rien n'est proposé au partage, au drone ni aux autres cartes tant que le point n'est pas sûr
     $('pilotCard').hidden = true;
@@ -148,7 +130,7 @@ function render() {
     showPlace();
     updateMap(true);
     cancelHist();
-    say('À vérifier : ' + la + ', ' + lo);
+    say(`À vérifier : ${la}, ${lo}`);
     setHash('');
     return;
   }
@@ -157,50 +139,35 @@ function render() {
   const PL = pilotDM(c.lon),
     PA = pilotDM(c.lat);
   const cell = function (v, u) {
-    return '<button class="pv" type="button" data-copy="' + v + '"><b>' + v + '</b><i>' + u + '</i></button>';
+    return `<button class="pv" type="button" data-copy="${v}"><b>${v}</b><i>${u}</i></button>`;
   };
   const line = function (n, P) {
-    return (
-      '<div class="prow"><div class="pl">' +
-      n +
-      '</div><div class="pr">' +
-      cell(P.d, '°') +
-      cell(P.m, "'") +
-      '</div></div>'
-    );
+    return `<div class="prow"><div class="pl">${n}</div><div class="pr">${cell(P.d, '°')}${cell(P.m, "'")}</div></div>`;
   };
   // 3e ligne : altitude du terrain au point, remplie par place.js dès qu'elle est connue
   $('pilot').innerHTML =
-    line('1 · Longitude', PL) +
-    line('2 · Latitude', PA) +
-    '<div class="prow"><div class="pl">3 · Altitude <span class="asl">ASL</span></div><div class="pr" id="pilotAlt"></div>' +
-    '<p class="hint flush">Choisir <b>ASL</b>, pas ALT : repère posé au sol (ALT part du point de décollage).</p></div>';
+    `${
+      line('1 · Longitude', PL) + line('2 · Latitude', PA)
+    }<div class="prow"><div class="pl">3 · Altitude <span class="asl">ASL</span></div><div class="pr" id="pilotAlt"></div>` +
+    `<p class="hint flush">Choisir <b>ASL</b>, pas ALT : repère posé au sol (ALT part du point de décollage).</p></div>`;
   $('pilotCard').hidden = false;
 
   // ouvrir le point dans d'autres cartes
   $('links').innerHTML =
-    '<a target="_blank" rel="noopener" href="https://cartes.gouv.fr/explorer-les-cartes/?c=' +
-    lo +
-    ',' +
-    la +
-    '&z=16&permalink=yes">cartes.gouv.fr</a>' +
-    '<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' +
-    la +
-    ',' +
-    lo +
-    '">Google Maps</a>';
+    `<a target="_blank" rel="noopener" href="https://cartes.gouv.fr/explorer-les-cartes/?c=${lo},${
+      la
+    }&z=16&permalink=yes">cartes.gouv.fr</a>` +
+    `<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${la},${
+      lo
+    }">Google Maps</a>`;
 
   // autres formats : chaque ligne se copie d'un toucher, le tout se partage
   $('eq').innerHTML = eqRows(c)
     .map(
       (x) =>
-        '<button class="eqr" type="button" data-copy="' +
-        esc(x[1].join(' ')) +
-        '"><span class="eqk">' +
-        x[0] +
-        '</span><span class="eqv">' +
-        x[1].map(esc).join('<br>') +
-        '</span></button>'
+        `<button class="eqr" type="button" data-copy="${esc(x[1].join(' '))}"><span class="eqk">${
+          x[0]
+        }</span><span class="eqv">${x[1].map(esc).join('<br>')}</span></button>`
     )
     .join('');
   $('eqCard').hidden = false;
@@ -211,8 +178,8 @@ function render() {
   // historique : pas pendant la frappe (valeurs partielles), seulement une fois le champ quitté
   if (document.activeElement !== src) scheduleHist(c, src.value);
   else cancelHist();
-  say((warn ? 'Vérifié : ' : 'Lecture fiable : ') + la + ', ' + lo);
-  setHash(la + ',' + lo);
+  say(`${(warn ? 'Vérifié : ' : 'Lecture fiable : ') + la}, ${lo}`);
+  setHash(`${la},${lo}`);
 }
 // AirOps et Itinéraire, sous le point. c : point sûr (contrôlé ici), ou null avec why : boutons désactivés
 function goBlock(c, why) {
@@ -229,37 +196,27 @@ function goBlock(c, why) {
     '<button class="go-q" type="button" data-gohelp="1" aria-expanded="false" aria-controls="goHelp" aria-label="Aide AirOps et Itinéraire">?</button>';
   if (!chk.ok)
     return (
-      '<div class="go off"><div class="go-row">' +
-      '<button class="btn big" type="button" disabled>AirOps</button>' +
-      qm +
-      '<button class="btn big" type="button" disabled>Itinéraire</button></div>' +
-      '<p class="go-why flush">' +
-      esc(chk.msg) +
-      '</p>' +
-      (chk.swap
-        ? '<button class="btn sec wide" type="button" data-swap="1">Inverser : ' + ddText(c.lon, c.lat) + '</button>'
-        : '') +
-      help +
-      '</div>'
+      `<div class="go off"><div class="go-row">` +
+      `<button class="btn big" type="button" disabled>AirOps</button>${
+        qm
+      }<button class="btn big" type="button" disabled>Itinéraire</button></div>` +
+      `<p class="go-why flush">${esc(chk.msg)}</p>${
+        chk.swap
+          ? `<button class="btn sec wide" type="button" data-swap="1">Inverser : ${ddText(c.lon, c.lat)}</button>`
+          : ''
+      }${help}</div>`
     );
   return (
-    '<div class="go"><div class="go-row">' +
-    '<a class="btn big" target="_blank" rel="noopener" data-airops="' +
-    ddText(c.lat, c.lon) +
-    '" href="' +
-    airopsUrl(c.lat, c.lon) +
-    '">AirOps</a>' +
-    qm +
-    '<a class="btn big" target="_blank" rel="noopener" data-go="1" href="' +
-    esc(routeUrl(c.lat, c.lon)) +
-    '">Itinéraire</a></div>' +
-    '<a class="go-alt" data-go="1" href="' +
-    geoUrl(c.lat, c.lon) +
-    '">Autre appli GPS</a>' +
-    '<p class="go-msg flush" id="goMsg" role="status" hidden></p>' +
-    '<div class="go-manual" id="goManual" hidden></div>' +
-    help +
-    '</div>'
+    `<div class="go"><div class="go-row">` +
+    `<a class="btn big" target="_blank" rel="noopener" data-airops="${ddText(c.lat, c.lon)}" href="${airopsUrl(
+      c.lat,
+      c.lon
+    )}">AirOps</a>${qm}<a class="btn big" target="_blank" rel="noopener" data-go="1" href="${esc(
+      routeUrl(c.lat, c.lon)
+    )}">Itinéraire</a></div>` +
+    `<a class="go-alt" data-go="1" href="${geoUrl(c.lat, c.lon)}">Autre appli GPS</a>` +
+    `<p class="go-msg flush" id="goMsg" role="status" hidden></p>` +
+    `<div class="go-manual" id="goManual" hidden></div>${help}</div>`
   );
 }
 // Message AirOps : reste affiché 15 s une fois l'appli revenue au premier plan (AirOps s'ouvre dans un autre onglet)
@@ -296,12 +253,8 @@ function airopsGo(a) {
     // copie refusée : coordonnées en gros, copie à la main
     const g = $('goManual');
     g.innerHTML =
-      '<p class="flush">Copie automatique impossible. Copiez ces coordonnées, puis collez-les dans la recherche AirOps :</p>' +
-      '<div class="go-big">' +
-      esc(t) +
-      '</div><button class="btn wide" type="button" data-copy="' +
-      esc(t) +
-      '">Copier</button>';
+      `<p class="flush">Copie automatique impossible. Copiez ces coordonnées, puis collez-les dans la recherche AirOps :</p>` +
+      `<div class="go-big">${esc(t)}</div><button class="btn wide" type="button" data-copy="${esc(t)}">Copier</button>`;
     g.hidden = false;
     $('goMsg').hidden = true;
   });
@@ -318,14 +271,14 @@ function trackButton() {
     ti = trackInfo(c);
   el.innerHTML =
     (i >= 0
-      ? '<div class="btn ok wide" role="status">Point ' + (i + 1) + ' du suivi' + (n ? ' · ' + esc(n) : '') + '</div>'
-      : '<button class="btn wide" type="button" data-track="1">Ajouter au suivi' +
-        (n ? ' · ' + esc(n) : ' des points') +
-        '</button>') + (ti && i < 0 ? '<p class="flush">' + esc(ti) + '</p>' : '');
+      ? `<div class="btn ok wide" role="status">Point ${i + 1} du suivi${n ? ` · ${esc(n)}` : ''}</div>`
+      : `<button class="btn wide" type="button" data-track="1">Ajouter au suivi${
+          n ? ` · ${esc(n)}` : ' des points'
+        }</button>`) + (ti && i < 0 ? `<p class="flush">${esc(ti)}</p>` : '');
 }
 function eqRows(c) {
   return [
-    ['DD', [f6(c.lat) + ', ' + f6(c.lon)]],
+    ['DD', [`${f6(c.lat)}, ${f6(c.lon)}`]],
     ['Lat', [f6(c.lat)]],
     ['Lon', [f6(c.lon)]],
     ['DMM', [toDMM(c.lat, true), toDMM(c.lon, false)]],
@@ -335,14 +288,10 @@ function eqRows(c) {
 }
 function eqText(c) {
   const p = placeText(c);
-  return (
-    'Point ESAM\n' +
-    eqRows(c)
-      .filter((x) => x[0] !== 'Lat' && x[0] !== 'Lon')
-      .map((x) => x[0] + ' : ' + x[1].join(' '))
-      .join('\n') +
-    (p ? '\n' + p : '')
-  );
+  return `Point ESAM\n${eqRows(c)
+    .filter((x) => x[0] !== 'Lat' && x[0] !== 'Lon')
+    .map((x) => `${x[0]} : ${x[1].join(' ')}`)
+    .join('\n')}${p ? `\n${p}` : ''}`;
 }
 // verified : texte vérifié à la main (molettes validées) : transmissible même avec un avertissement
 function update(verified) {
@@ -480,7 +429,7 @@ document.addEventListener('click', (e) => {
   // ligne d'autres formats : seule la valeur affiche « Copié », la ligne garde sa hauteur
   if (t.dataset.copy) {
     const v = t.querySelector('.eqv');
-    if (v) v.style.minHeight = v.offsetHeight + 'px';
+    if (v) v.style.minHeight = `${v.offsetHeight}px`;
     copy(t.dataset.copy, v || t);
     useCurrent();
   } else if (t.dataset.fix) openFix(state.current);
@@ -494,7 +443,7 @@ document.addEventListener('click', (e) => {
     const n = addPoint(state.current, '', fromPhoto ? photoTime() : null);
     batchChecked(photoFile(), state.current);
     trackButton();
-    say('Point ' + n + ' ajouté au suivi');
+    say(`Point ${n} ajouté au suivi`);
   } else if (t.dataset.alt) {
     chosen = +t.dataset.alt;
     if (lastParse) lastParse.verified = false;
@@ -525,7 +474,7 @@ initFix((t) => {
 initTrack(trackButton);
 initPlace();
 initCompass();
-$('ver').textContent = 'v' + VERSION;
+$('ver').textContent = `v${VERSION}`;
 drawHist();
 let h0 = (location.hash || '').slice(1);
 try {

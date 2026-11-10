@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { headingOf, turn, declination, pitchOf, sightAngle } from '../js/compass.js';
 
-const near = (a, b, tol = 0.5) => assert.ok(Math.abs(turn(a, b)) <= tol, a + ' ≈ ' + b);
+const near = (a, b, tol = 0.5) => assert.ok(Math.abs(turn(a, b)) <= tol, `${a} ≈ ${b}`);
 
 test("téléphone à plat : cap du haut de l'écran", () => {
   near(headingOf(0, 0, 0, 0), 0);

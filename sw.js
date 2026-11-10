@@ -61,21 +61,11 @@ self.addEventListener('install', (e) => {
   );
 });
 
-// Bibliothèques que l'appli ne prend plus sur le CDN (désormais dans vendor/) : retirées du cache.
-// Le moteur et la langue de Tesseract restent, même en réponse opaque : une lecture peut être en cours, et une réponse
-// opaque est de toute façon remplacée dès qu'une requête CORS la demande (voir cacheFirst).
+// Moteur et langue de Tesseract autrefois pris sur un CDN (désormais dans vendor/) : retirés du cache
 function dropUnused(name) {
   return caches
     .open(name)
-    .then((c) =>
-      c
-        .keys()
-        .then((ks) =>
-          Promise.all(
-            ks.filter((k) => !/tesseract\.js-core@|@tesseract\.js-data\//.test(k.url)).map((k) => c.delete(k))
-          )
-        )
-    );
+    .then((c) => c.keys().then((ks) => Promise.all(ks.filter((k) => !isLib(k.url)).map((k) => c.delete(k)))));
 }
 self.addEventListener('activate', (e) => {
   e.waitUntil(
@@ -90,8 +80,13 @@ self.addEventListener('activate', (e) => {
 function isTile(u) {
   return /data\.geopf\.fr\/wmts|tile\.opentopomap\.org|tile\.openstreetmap\.org/.test(u);
 }
+// Moteur et langue de Tesseract (7 Mo, fichiers qui ne changent pas) : hors du cache de l'appli, pour ne pas être
+// téléchargés à nouveau à chaque version
 function isLib(u) {
-  return /^https:\/\/cdn\.jsdelivr\.net\/npm\//.test(u);
+  return (
+    u.startsWith(`${self.registration.scope}vendor/tesseract/core/`) ||
+    u.startsWith(`${self.registration.scope}vendor/tesseract/lang/`)
+  );
 }
 
 function trim(cache) {

@@ -7,14 +7,19 @@ import { toGray, stretchBounds, enhance, autoParams } from './enhance.js';
 import { findQuad, homography, invert, warp, rectFor, grow } from './warp.js';
 import { exifDate } from './exif.js';
 
-// Bibliothèque et worker hébergés avec l'appli (worker de même origine : contrôlé par le service worker, donc utilisable hors ligne).
-// Moteur WebAssembly et langue sur le CDN (versions figées), gardés en cache par le service worker.
+// Tout Tesseract est hébergé avec l'appli (vendor/tesseract) : aucun code ni donnée ne vient d'un autre site.
+// Bibliothèque et worker sont dans le cache de l'appli ; le moteur WebAssembly et la langue (7 Mo) ne sont téléchargés
+// qu'au premier usage ou par « Préparer la lecture de photo sans réseau », puis gardés par le service worker.
 const TESS = {
   lib: 'vendor/tesseract/tesseract.min.js',
   worker: 'vendor/tesseract/worker.min.js',
-  core: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
-  lang: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int'
+  core: 'vendor/tesseract/core',
+  lang: 'vendor/tesseract/lang'
 };
+// Adresse complète : le worker résout les chemins relatifs depuis son propre dossier, pas depuis la page
+function abs(path) {
+  return new URL(path, document.baseURI).href;
+}
 // Lectures successives : [largeur visée, marge blanche, mode de segmentation]. Toutes lisent exactement le cadre
 // affiché, avec la photo telle que redressée à l'écran : rien n'est élargi ni tourné en coulisse.
 const PASSES = [
@@ -188,7 +193,7 @@ export function rotateCanvas(img, deg, s) {
   const g = c.getContext('2d');
   if (deg) {
     const m = meanColor(img);
-    g.fillStyle = 'rgb(' + m[0] + ',' + m[1] + ',' + m[2] + ')';
+    g.fillStyle = `rgb(${m[0]},${m[1]},${m[2]})`;
     g.fillRect(0, 0, c.width, c.height);
   }
   g.imageSmoothingQuality = 'high';
@@ -238,7 +243,7 @@ function applyView() {
   view.z = clamp(view.z, 1, ZMAX);
   view.tx = clamp(view.tx, d.W - d.W * view.z, 0);
   view.ty = clamp(view.ty, d.H - d.H * view.z, 0);
-  cv.style.transform = 'translate(' + view.tx + 'px,' + view.ty + 'px) scale(' + view.z + ')';
+  cv.style.transform = `translate(${view.tx}px,${view.ty}px) scale(${view.z})`;
   $('zOut').disabled = view.z <= 1;
   $('zIn').disabled = view.z >= ZMAX;
   drawSel();
@@ -249,10 +254,10 @@ function drawSel() {
   const d = dims(),
     kx = d.W * view.z,
     ky = d.H * view.z;
-  selEl.style.left = view.tx + sel.x * kx + 'px';
-  selEl.style.top = view.ty + sel.y * ky + 'px';
-  selEl.style.width = sel.w * kx + 'px';
-  selEl.style.height = sel.h * ky + 'px';
+  selEl.style.left = `${view.tx + sel.x * kx}px`;
+  selEl.style.top = `${view.ty + sel.y * ky}px`;
+  selEl.style.width = `${sel.w * kx}px`;
+  selEl.style.height = `${sel.h * ky}px`;
 }
 function local(e) {
   const r = stage.getBoundingClientRect();
@@ -312,7 +317,7 @@ export function getAngle() {
 }
 function showAngle() {
   $('tilt').value = angle;
-  $('tVal').textContent = (angle > 0 ? '+' : angle < 0 ? '−' : '') + String(Math.abs(angle)).replace('.', ',') + '°';
+  $('tVal').textContent = `${(angle > 0 ? '+' : angle < 0 ? '−' : '') + String(Math.abs(angle)).replace('.', ',')}°`;
 }
 // lignes horizontales sur la photo pendant le réglage, pour aligner le texte à l'œil
 let guideT;
@@ -405,13 +410,13 @@ function drawQuad() {
     ky = (d.H * view.z) / base.height,
     pts = quad.map((p) => [view.tx + p[0] * kx, view.ty + p[1] * ky]);
   svg.removeAttribute('hidden');
-  svg.setAttribute('viewBox', '0 0 ' + d.W + ' ' + d.H);
-  $('quadPoly').setAttribute('points', pts.map((p) => p[0] + ',' + p[1]).join(' '));
+  svg.setAttribute('viewBox', `0 0 ${d.W} ${d.H}`);
+  $('quadPoly').setAttribute('points', pts.map((p) => `${p[0]},${p[1]}`).join(' '));
   stage.querySelectorAll('.qh').forEach((h) => {
     const p = pts[+h.dataset.q];
     h.hidden = false;
-    h.style.left = p[0] + 'px';
-    h.style.top = p[1] + 'px';
+    h.style.left = `${p[0]}px`;
+    h.style.top = `${p[1]}px`;
   });
 }
 // Cadre de l'écran trouvé dans la photo : { quad, gain, tilt, cover } ou null
@@ -816,8 +821,8 @@ export function getWorker(i) {
         Tesseract.createWorker('eng', 1, {
           workerPath: TESS.worker,
           workerBlobURL: false,
-          corePath: TESS.core,
-          langPath: TESS.lang,
+          corePath: abs(TESS.core),
+          langPath: abs(TESS.lang),
           logger(m) {
             kick(reject);
             if (!i) progCb(m);
@@ -851,7 +856,7 @@ const LBL = {
 export function setProgress(onProg, label) {
   progCb = function (m) {
     onProg(
-      (LBL[m.status] || 'Préparation') + (m.status === 'recognizing text' && label ? ' · ' + label : '') + '...',
+      `${(LBL[m.status] || 'Préparation') + (m.status === 'recognizing text' && label ? ` · ${label}` : '')}...`,
       m.progress
     );
   };
@@ -964,7 +969,7 @@ export function readBox(img, box, onPass, stale, wi) {
     const step = function () {
       if (i >= PASSES.length || done() || stale()) return;
       const ps = PASSES[i++],
-        ik = ps[0] + '_' + ps[1];
+        ik = `${ps[0]}_${ps[1]}`;
       onPass(i);
       if (!imgs[ik]) {
         const pr = prepared(img, box, ps[0], ps[1]);
@@ -1028,7 +1033,7 @@ export function settle(runs, enhUsed) {
     text = runs[chosen].txt;
     lastParse = runs[chosen].p;
   } else {
-    text = LA.v.toFixed(6) + ', ' + LO.v.toFixed(6);
+    text = `${LA.v.toFixed(6)}, ${LO.v.toFixed(6)}`;
     lastParse = parse(text);
     if (lastParse.ok)
       lastParse.best.notes.push({ lvl: 'warn', t: 'Latitude et longitude prises dans deux lectures différentes.' });
@@ -1057,17 +1062,9 @@ export function settle(runs, enhUsed) {
       lastParse.alts = alts.concat(lastParse.alts).slice(0, 3);
       lastParse.best.notes.push({
         lvl: 'warn',
-        t:
-          'Lectures concordantes : latitude ' +
-          LA.n +
-          '/' +
-          total +
-          ', longitude ' +
-          LO.n +
-          '/' +
-          total +
-          (out.rival ? ', avec des lectures concurrentes' : '') +
-          '. Comparez avec la photo.'
+        t: `Lectures concordantes : latitude ${LA.n}/${total}, longitude ${LO.n}/${total}${
+          out.rival ? ', avec des lectures concurrentes' : ''
+        }. Comparez avec la photo.`
       });
     }
     lastParse.agree = { n: Math.min(LA.n, LO.n), total };
@@ -1122,13 +1119,13 @@ function prepareOffline() {
   const urls = [
     TESS.lib,
     TESS.worker,
-    TESS.core + '/tesseract-core-' + (simd ? 'simd-' : '') + 'lstm.wasm.js',
-    TESS.lang + '/eng.traineddata.gz'
+    `${TESS.core}/tesseract-core-${simd ? 'simd-' : ''}lstm.wasm.js`,
+    `${TESS.lang}/eng.traineddata.gz`
   ];
   Promise.all(
     urls.map((u) =>
-      fetch(u, { mode: 'cors' }).then((r) => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
+      fetch(u).then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.blob();
       })
     )

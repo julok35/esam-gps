@@ -12,11 +12,11 @@ let rows = [],
 
 function pad(s, w) {
   s = String(s);
-  while (s.length < w) s = '0' + s;
+  while (s.length < w) s = `0${s}`;
   return s;
 }
 function hemiDD(v, isLat) {
-  return (isLat ? (v < 0 ? 'S' : 'N') : v < 0 ? 'O' : 'E') + ' ' + pad(Math.abs(v).toFixed(6), isLat ? 9 : 10);
+  return `${isLat ? (v < 0 ? 'S' : 'N') : v < 0 ? 'O' : 'E'} ${pad(Math.abs(v).toFixed(6), isLat ? 9 : 10)}`;
 }
 
 // Lignes à corriger, dans le format lu sur la photo (degrés sur 2 / 3 chiffres pour pouvoir tout changer)
@@ -57,16 +57,11 @@ function text() {
 }
 
 function wheelHtml(c, ri, ci) {
-  if (!c.opts) return '<span class="wst' + (c.ch === ' ' ? ' sp' : '') + '">' + esc(c.ch) + '</span>';
+  if (!c.opts) return `<span class="wst${c.ch === ' ' ? ' sp' : ''}">${esc(c.ch)}</span>`;
   return (
-    '<span class="wh" role="spinbutton" tabindex="0" aria-label="' +
-    (c.opts === DIGITS ? 'Chiffre' : 'Hémisphère') +
-    '" data-r="' +
-    ri +
-    '" data-c="' +
-    ci +
-    '">' +
-    '<span class="wh-strip"><i></i><b></b><i></i></span></span>'
+    `<span class="wh" role="spinbutton" tabindex="0" aria-label="${
+      c.opts === DIGITS ? 'Chiffre' : 'Hémisphère'
+    }" data-r="${ri}" data-c="${ci}">` + `<span class="wh-strip"><i></i><b></b><i></i></span></span>`
   );
 }
 function paint(el) {
@@ -102,27 +97,20 @@ function preview() {
   }
   const d = distM(from, r.best);
   out.className = 'fix-out';
-  out.innerHTML =
-    '<b>' +
-    f6(r.best.lat) +
-    ', ' +
-    f6(r.best.lon) +
-    '</b> <small>' +
-    (d < 1
+  out.innerHTML = `<b>${f6(r.best.lat)}, ${f6(r.best.lon)}</b> <small>${
+    d < 1
       ? 'inchangé'
-      : 'déplacé de ' + (d < 1000 ? Math.round(d) + ' m' : (d / 1000).toFixed(1).replace('.', ',') + ' km')) +
-    '</small>';
+      : `déplacé de ${d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1).replace('.', ',')} km`}`
+  }</small>`;
 }
 
 function build() {
   $('fixRows').innerHTML = rows
     .map(
       (r, ri) =>
-        '<div class="fix-row"><span class="fix-k">' +
-        esc(r.k) +
-        '</span><div class="whs">' +
-        r.cells.map((c, ci) => wheelHtml(c, ri, ci)).join('') +
-        '</div></div>'
+        `<div class="fix-row"><span class="fix-k">${esc(r.k)}</span><div class="whs">${r.cells
+          .map((c, ci) => wheelHtml(c, ri, ci))
+          .join('')}</div></div>`
     )
     .join('');
   $('fixRows').querySelectorAll('.wh').forEach(paint);
@@ -179,7 +167,7 @@ function initWheels() {
       turn(g.el, steps - g.done);
       g.done = steps;
     }
-    g.el.firstChild.style.transform = 'translateY(' + (dy + g.done * STEP) + 'px)';
+    g.el.firstChild.style.transform = `translateY(${dy + g.done * STEP}px)`;
   });
   const end = function (e) {
     if (!g || e.pointerId !== g.id) return;

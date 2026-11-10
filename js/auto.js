@@ -45,19 +45,9 @@ function paint() {
     if (s[0] === 'read') adj = '<button class="chip" type="button" data-adj="read">Relire</button>';
     if (s[0] === 'trust' && x.st === 'warn')
       adj = '<button class="chip" type="button" data-adj="trust">Vérifier</button>';
-    return (
-      '<li class="st-' +
-      x.st +
-      '"><span class="st-ic" aria-hidden="true">' +
-      ICON[x.st] +
-      '</span><div class="st-t"><b>' +
-      s[1] +
-      '</b><span class="st-msg">' +
-      esc(x.msg) +
-      '</span></div>' +
-      (ocr.hasPhoto() ? adj : '') +
-      '</li>'
-    );
+    return `<li class="st-${x.st}"><span class="st-ic" aria-hidden="true">${ICON[x.st]}</span><div class="st-t"><b>${
+      s[1]
+    }</b><span class="st-msg">${esc(x.msg)}</span></div>${ocr.hasPhoto() ? adj : ''}</li>`;
   }).join('');
   const running = STEPS.some((s) => state[s[0]] && state[s[0]].st === 'run');
   $('stepsStop').hidden = !running;
@@ -72,7 +62,7 @@ function reset() {
   });
 }
 function deg(v) {
-  return (v > 0 ? '+' : v < 0 ? '−' : '') + String(Math.abs(Math.round(v * 10) / 10)).replace('.', ',') + '°';
+  return `${(v > 0 ? '+' : v < 0 ? '−' : '') + String(Math.abs(Math.round(v * 10) / 10)).replace('.', ',')}°`;
 }
 
 // ---------- Étapes ----------
@@ -81,13 +71,13 @@ function stepLevel() {
   let st = 'ok';
   const q = ocr.detectQuad();
   if (q && q.gain >= ocr.QUAD_GAIN && q.cover < 0.97 && q.tilt >= 0.4) {
-    if (ocr.applyQuad(q.quad)) parts.push('perspective corrigée (bords nets, ' + deg(q.tilt) + ')');
+    if (ocr.applyQuad(q.quad)) parts.push(`perspective corrigée (bords nets, ${deg(q.tilt)})`);
   } else if (q && q.gain >= ocr.QUAD_GAIN) parts.push('écran déjà droit');
   else parts.push('pas de bord d’écran net : perspective laissée');
   const r = ocr.leanIn(ocr.getWork(), { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }, 45);
   if (r.gain >= ocr.AUTO_GAIN && Math.abs(r.deg) >= 0.3) {
     ocr.setAngle(-r.deg);
-    parts.push('inclinaison ' + deg(-r.deg));
+    parts.push(`inclinaison ${deg(-r.deg)}`);
   } else if (r.gain >= ocr.AUTO_GAIN) parts.push('texte droit');
   else {
     parts.push('inclinaison non mesurable (texte peu net)');
@@ -99,17 +89,17 @@ function stepEnh() {
   const G = ocr.grayOf(ocr.getWork(), null, 800);
   const p = autoParams(G.g, G.w, G.h);
   const e = ocr.getEnh();
-  let msg = 'contraste étiré (' + p.lo + '-' + p.hi + ' → 0-255)';
-  if (e.sharp === null) msg += p.sharp ? ', netteté renforcée ×' + String(p.sharp).replace('.', ',') : ', photo nette';
-  else msg += ', netteté ×' + String(e.sharp).replace('.', ',') + ' (réglée à la main)';
-  if (e.contrast !== 1) msg += ', contraste ×' + String(e.contrast).replace('.', ',');
+  let msg = `contraste étiré (${p.lo}-${p.hi} → 0-255)`;
+  if (e.sharp === null) msg += p.sharp ? `, netteté renforcée ×${String(p.sharp).replace('.', ',')}` : ', photo nette';
+  else msg += `, netteté ×${String(e.sharp).replace('.', ',')} (réglée à la main)`;
+  if (e.contrast !== 1) msg += `, contraste ×${String(e.contrast).replace('.', ',')}`;
   set('enh', 'ok', msg);
 }
 // Zone : lecture pleine image, puis cadre autour des mots des coordonnées, inclinaison affinée dans le cadre
 function stepZone(stale) {
   set('zone', 'run', 'lecture de la photo entière…');
   ocr.setProgress((t, f) => {
-    if (state.zone.st === 'run') set('zone', 'run', t + (f ? ' ' + Math.round(f * 100) + ' %' : ''));
+    if (state.zone.st === 'run') set('zone', 'run', t + (f ? ` ${Math.round(f * 100)} %` : ''));
   }, 'photo entière');
   const img = ocr.getWork();
   return ocr.recognizeFull(img, stale).then((full) => {
@@ -132,16 +122,14 @@ function stepZone(stale) {
     let more = '';
     if (r.gain >= ocr.AUTO_GAIN && Math.abs(r.deg) >= 0.4) {
       ocr.setAngle(ocr.getAngle() - r.deg);
-      more = ', inclinaison affinée ' + deg(-r.deg);
+      more = `, inclinaison affinée ${deg(-r.deg)}`;
     }
     set(
       'zone',
       'ok',
-      'trouvée : « ' +
-        z.text.replace(/\s+/g, ' ').slice(0, 40) +
-        ' »' +
-        (z.conf !== null ? ', moteur sûr à ' + z.conf + ' %' : '') +
-        more
+      `trouvée : « ${z.text.replace(/\s+/g, ' ').slice(0, 40)} »${
+        z.conf !== null ? `, moteur sûr à ${z.conf} %` : ''
+      }${more}`
     );
     return true;
   });
@@ -158,7 +146,7 @@ function stepRead(stale, manual) {
       img,
       box,
       (i) => {
-        set('read', 'run', 'lecture ' + i + '…');
+        set('read', 'run', `lecture ${i}…`);
       },
       stale
     )
@@ -167,7 +155,7 @@ function stepRead(stale, manual) {
       lastRead = { img, box };
       ocr.showZoneOf(img, box);
       if (res.none) {
-        set('read', 'fail', 'aucune coordonnée lue dans le cadre' + (manual ? '' : ' : recadrez à la main'));
+        set('read', 'fail', `aucune coordonnée lue dans le cadre${manual ? '' : ' : recadrez à la main'}`);
         set('trust', 'fail', 'rien à transmettre');
         return res;
       }
@@ -175,15 +163,9 @@ function stepRead(stale, manual) {
       set(
         'read',
         res.sure ? 'ok' : 'warn',
-        a.n +
-          ' lecture' +
-          (a.n > 1 ? 's' : '') +
-          ' sur ' +
-          a.total +
-          ' concordante' +
-          (a.n > 1 ? 's' : '') +
-          (res.rival ? ', valeurs concurrentes' : '') +
-          (manual ? ' (cadre manuel)' : '')
+        `${a.n} lecture${a.n > 1 ? 's' : ''} sur ${a.total} concordante${a.n > 1 ? 's' : ''}${
+          res.rival ? ', valeurs concurrentes' : ''
+        }${manual ? ' (cadre manuel)' : ''}`
       );
       return res;
     });
@@ -205,12 +187,9 @@ function stepTrust(res) {
   set(
     'trust',
     t.level === 'ok' ? 'ok' : 'warn',
-    t.pct +
-      ' % · ' +
-      (t.level === 'ok' ? 'fiable' : 'douteux : vérifiez sur la photo avant de transmettre') +
-      ' (' +
-      t.why.join(', ') +
-      ')'
+    `${t.pct} % · ${t.level === 'ok' ? 'fiable' : 'douteux : vérifiez sur la photo avant de transmettre'} (${t.why.join(
+      ', '
+    )})`
   );
 }
 
@@ -234,7 +213,7 @@ function runAll() {
   let isStale = stale(myJob, g);
   const s = ocr.photoSize();
   reset();
-  set('photo', 'ok', s.w + ' × ' + s.h + ' px');
+  set('photo', 'ok', `${s.w} × ${s.h} px`);
   $('cropBox').hidden = true;
   openTile('steps');
   $('steps').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -324,7 +303,7 @@ function stop() {
 // ---------- Réglages à la main ----------
 function slider(id, v) {
   $(id).value = v;
-  $(id + 'V').textContent = '×' + String(v).replace('.', ',');
+  $(`${id}V`).textContent = `×${String(v).replace('.', ',')}`;
 }
 function openEnh() {
   const e = ocr.getEnh();

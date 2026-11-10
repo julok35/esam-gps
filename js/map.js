@@ -16,12 +16,9 @@ let map = null,
   watchId = null;
 
 function wmts(layer, fmt) {
-  return (
-    'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=' +
-    layer +
-    '&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=' +
-    fmt
-  );
+  return `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${
+    layer
+  }&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=${fmt}`;
 }
 
 export function initMap() {
@@ -89,7 +86,7 @@ export function updateMap(recentre) {
     const onTrack = current && markCurrent(current);
     if (current && !onTrack) {
       tMark.setLatLng([current.lat, current.lon]).addTo(map);
-      tMark.bindPopup('<b>' + f6(current.lat) + ', ' + f6(current.lon) + '</b>');
+      tMark.bindPopup(`<b>${f6(current.lat)}, ${f6(current.lon)}</b>`);
     } else map.removeLayer(tMark);
     if (me) {
       meMark.setLatLng([me.lat, me.lon]).addTo(map);
@@ -109,14 +106,14 @@ export function updateMap(recentre) {
     const d = distM(me, current),
       b = bearing(me, current);
     $('dD').textContent = fmtDist(d);
-    $('dB').textContent = Math.round(b) + '° ' + CARD[Math.round(b / 22.5) % 16];
-    $('mapSum').textContent = fmtDist(d) + ' · ' + CARD[Math.round(b / 22.5) % 16];
+    $('dB').textContent = `${Math.round(b)}° ${CARD[Math.round(b / 22.5) % 16]}`;
+    $('mapSum').textContent = `${fmtDist(d)} · ${CARD[Math.round(b / 22.5) % 16]}`;
   } else {
     $('dD').textContent = '-';
     $('dB').textContent = '-';
     $('mapSum').textContent = '';
   }
-  $('dA').textContent = me ? '± ' + Math.round(me.acc) + ' m' : '-';
+  $('dA').textContent = me ? `± ${Math.round(me.acc)} m` : '-';
   updateRelief();
   updateCompass();
 }
@@ -150,7 +147,7 @@ export function pinLabel(ids) {
   const n = ids.map((i) => i + 1);
   if (n.length === 1) return String(n[0]);
   const seq = n.every((v, k) => !k || v === n[k - 1] + 1);
-  return seq ? n[0] + '-' + n[n.length - 1] : n.join(',');
+  return seq ? `${n[0]}-${n[n.length - 1]}` : n.join(',');
 }
 let pinLayer = null;
 function drawPins() {
@@ -165,25 +162,17 @@ function drawPins() {
       pop = g.ids
         .map((i) => {
           const p = trackPts[i];
-          return (
-            '<b>Point ' +
-            (i + 1) +
-            '</b> ' +
-            (p.t ? fmtWhen(p.t) : '') +
-            '<br>' +
-            f6(p.lat) +
-            ', ' +
-            f6(p.lon) +
-            (knownAlt(p) !== undefined ? ' · ' + fmtAlt(knownAlt(p)) : '') +
-            (p.label ? '<br>' + esc(p.label) : '') +
-            (i > g.ids[0] ? '<br><small>à ' + fmtDist(distM(trackPts[i - 1], p)) + ' du point ' + i + '</small>' : '')
-          );
+          return `<b>Point ${i + 1}</b> ${p.t ? fmtWhen(p.t) : ''}<br>${f6(p.lat)}, ${f6(p.lon)}${
+            knownAlt(p) !== undefined ? ` · ${fmtAlt(knownAlt(p))}` : ''
+          }${
+            p.label ? `<br>${esc(p.label)}` : ''
+          }${i > g.ids[0] ? `<br><small>à ${fmtDist(distM(trackPts[i - 1], p))} du point ${i}</small>` : ''}`;
         })
         .join('<hr>');
     const m = L.marker([p0.lat, p0.lon], {
       icon: L.divIcon({
         className: '',
-        html: '<div class="pin-n' + (g.ids.length > 1 ? ' multi' : '') + '">' + lab + '</div>',
+        html: `<div class="pin-n${g.ids.length > 1 ? ' multi' : ''}">${lab}</div>`,
         iconSize: [w, 24],
         iconAnchor: [w / 2, 12]
       })

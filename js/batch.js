@@ -60,56 +60,34 @@ function paint() {
   }
   const ok = photos.filter((p) => p.st === 'ok').length;
   $('batchSum').textContent =
-    photos.length + ' photo' + (photos.length > 1 ? 's' : '') + (ok ? ' · ' + ok + ' lue' + (ok > 1 ? 's' : '') : '');
+    `${photos.length} photo${photos.length > 1 ? 's' : ''}${ok ? ` · ${ok} lue${ok > 1 ? 's' : ''}` : ''}`;
   $('batchList').innerHTML = photos
     .map((p, i) => {
       const st = p.st,
         line =
           st === 'ok' || st === 'check'
-            ? f6(p.p.best.lat) + ', ' + f6(p.p.best.lon) + ' · ' + p.msg
+            ? `${f6(p.p.best.lat)}, ${f6(p.p.best.lon)} · ${p.msg}`
             : st === 'run'
               ? p.msg || 'lecture…'
               : st === 'fail'
                 ? p.msg
                 : 'en attente';
       return (
-        '<li class="bp st-' +
-        st +
-        '" data-i="' +
-        i +
-        '">' +
-        '<span class="bh" data-h="' +
-        i +
-        '" aria-label="Glisser pour déplacer la photo ' +
-        (i + 1) +
-        '">⋮⋮</span>' +
-        (p.thumb ? '<img class="bt" alt="" src="' + p.thumb + '">' : '<span class="bt"></span>') +
-        '<div class="bb"><div class="bn"><b>' +
-        (i + 1) +
-        '</b> ' +
-        esc(fmtWhen(p.t)) +
-        ' <small>' +
-        (p.moved ? 'date déplacée' : p.exif ? 'photo' : 'fichier') +
-        '</small></div>' +
-        '<div class="bm">' +
-        esc(line) +
-        '</div></div>' +
-        '<div class="ba">' +
-        (st === 'check' || st === 'fail'
-          ? '<button class="chip" type="button" data-chk="' + i + '">Vérifier</button>'
-          : '<button class="bx" type="button" data-up="' +
-            i +
-            '" aria-label="Monter"' +
-            (i ? '' : ' disabled') +
-            '>▲</button>' +
-            '<button class="bx" type="button" data-dn="' +
-            i +
-            '" aria-label="Descendre"' +
-            (i < photos.length - 1 ? '' : ' disabled') +
-            '>▼</button>') +
-        '<button class="bx" type="button" data-del="' +
-        i +
-        '" aria-label="Retirer">✕</button></div></li>'
+        `<li class="bp st-${st}" data-i="${i}">` +
+        `<span class="bh" data-h="${i}" aria-label="Glisser pour déplacer la photo ${i + 1}">⋮⋮</span>${
+          p.thumb ? `<img class="bt" alt="" src="${p.thumb}">` : '<span class="bt"></span>'
+        }<div class="bb"><div class="bn"><b>${i + 1}</b> ${esc(fmtWhen(p.t))} <small>${
+          p.moved ? 'date déplacée' : p.exif ? 'photo' : 'fichier'
+        }</small></div>` +
+        `<div class="bm">${esc(line)}</div></div>` +
+        `<div class="ba">${
+          st === 'check' || st === 'fail'
+            ? `<button class="chip" type="button" data-chk="${i}">Vérifier</button>`
+            : `<button class="bx" type="button" data-up="${i}" aria-label="Monter"${i ? '' : ' disabled'}>▲</button>` +
+              `<button class="bx" type="button" data-dn="${i}" aria-label="Descendre"${
+                i < photos.length - 1 ? '' : ' disabled'
+              }>▼</button>`
+        }<button class="bx" type="button" data-del="${i}" aria-label="Retirer">✕</button></div></li>`
       );
     })
     .join('');
@@ -157,7 +135,7 @@ function readOne(ph, wi) {
     const r = ocr.leanIn(img, { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }, 45);
     if (r.gain >= ocr.AUTO_GAIN && Math.abs(r.deg) >= 0.3) {
       img = ocr.rotateCanvas(img, -r.deg);
-      parts.push('redressée ' + String(Math.round(-r.deg * 10) / 10).replace('.', ',') + '°');
+      parts.push(`redressée ${String(Math.round(-r.deg * 10) / 10).replace('.', ',')}°`);
     }
     ph.msg = 'recherche des coordonnées…';
     paint();
@@ -182,7 +160,7 @@ function readOne(ph, wi) {
           img,
           box,
           (i) => {
-            ph.msg = 'lecture ' + i + '…';
+            ph.msg = `lecture ${i}…`;
             paint();
           },
           never,
@@ -209,11 +187,9 @@ function readOne(ph, wi) {
           ph.p = p;
           ph.text = res.text;
           ph.st = t.level === 'ok' ? 'ok' : 'check';
-          ph.msg =
-            (t.level === 'ok' ? 'fiable ' : 'douteux ') +
-            t.pct +
-            ' %' +
-            (parts.length ? ' (' + parts.join(', ') + ')' : '');
+          ph.msg = `${(t.level === 'ok' ? 'fiable ' : 'douteux ') + t.pct} %${
+            parts.length ? ` (${parts.join(', ')})` : ''
+          }`;
         });
     });
   });
@@ -226,7 +202,7 @@ function runAll() {
   running = true;
   paint();
   $('batchMsg').hidden = false;
-  $('batchMsg').textContent = 'Lecture de ' + queue.length + ' photo' + (queue.length > 1 ? 's' : '') + '…';
+  $('batchMsg').textContent = `Lecture de ${queue.length} photo${queue.length > 1 ? 's' : ''}…`;
   const n = Math.min(ocr.workerCount(), queue.length),
     runner = function (wi) {
       const ph = queue.shift();
@@ -249,26 +225,18 @@ function runAll() {
     const sure = photos.filter((p) => p.st === 'ok'),
       doubt = photos.filter((p) => p.st === 'check' || p.st === 'fail');
     const added = addPoints(sure.map((p) => ({ lat: p.p.best.lat, lon: p.p.best.lon, t: p.t, label: '' })));
-    $('batchMsg').textContent =
+    $('batchMsg').textContent = `${
       (sure.length
-        ? added +
-          ' point' +
-          (added > 1 ? 's' : '') +
-          ' ajouté' +
-          (added > 1 ? 's' : '') +
-          ' au suivi' +
-          (added < sure.length
-            ? ' (' + (sure.length - added) + ' déjà présent' + (sure.length - added > 1 ? 's' : '') + ')'
-            : '')
+        ? `${added} point${added > 1 ? 's' : ''} ajouté${added > 1 ? 's' : ''} au suivi${
+            added < sure.length ? ` (${sure.length - added} déjà présent${sure.length - added > 1 ? 's' : ''})` : ''
+          }`
         : 'Aucun point sûr') +
       (doubt.length
-        ? ' · ' +
-          doubt.length +
-          ' photo' +
-          (doubt.length > 1 ? 's' : '') +
-          ' à vérifier (bouton Vérifier : la photo s’ouvre pour la reprendre à la main)'
-        : '') +
-      '.';
+        ? ` · ${doubt.length} photo${
+            doubt.length > 1 ? 's' : ''
+          } à vérifier (bouton Vérifier : la photo s’ouvre pour la reprendre à la main)`
+        : '')
+    }.`;
     paint();
   });
 }
@@ -291,7 +259,7 @@ function initDrag() {
   list.addEventListener('pointermove', (e) => {
     if (!g || e.pointerId !== g.id) return;
     const dy = e.clientY - g.y0;
-    g.li.style.transform = 'translateY(' + dy + 'px)';
+    g.li.style.transform = `translateY(${dy}px)`;
     // cible : la ligne dont le milieu est dépassé
     const items = Array.from(list.children);
     let to = g.from;
@@ -333,7 +301,7 @@ export function batchChecked(file, c) {
   const left = photos.filter((p) => p.st === 'check' || p.st === 'fail').length;
   $('batchMsg').hidden = false;
   $('batchMsg').textContent = left
-    ? 'Encore ' + left + ' photo' + (left > 1 ? 's' : '') + ' à vérifier.'
+    ? `Encore ${left} photo${left > 1 ? 's' : ''} à vérifier.`
     : 'Toutes les photos du lot sont au suivi.';
   paint();
 }

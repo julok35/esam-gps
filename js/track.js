@@ -56,15 +56,15 @@ export function fmtDur(ms) {
   const m = Math.round(ms / 60000),
     h = Math.floor(m / 60),
     d = Math.floor(h / 24);
-  if (d) return d + ' j ' + (h % 24) + ' h';
-  if (h) return h + ' h ' + (m % 60 < 10 ? '0' : '') + (m % 60);
-  return m + ' min';
+  if (d) return `${d} j ${h % 24} h`;
+  if (h) return `${h} h ${m % 60 < 10 ? '0' : ''}${m % 60}`;
+  return `${m} min`;
 }
 
 // Vitesse lisible en m/h ou km/h
 export function fmtSpeed(v) {
   if (v === null || !isFinite(v)) return '';
-  return v < 1000 ? Math.round(v) + ' m/h' : (v / 1000).toFixed(1).replace('.', ',') + ' km/h';
+  return v < 1000 ? `${Math.round(v)} m/h` : `${(v / 1000).toFixed(1).replace('.', ',')} km/h`;
 }
 
 // Message de partage du suivi : chaque point, puis chaque étape, puis le bilan.
@@ -77,54 +77,29 @@ export function trackText(points, name, alts) {
     },
     L = legs(points),
     s = stats(points),
-    out = [
-      'Suivi ESAM' + (name ? ' · ' + name : '') + ' : ' + points.length + ' point' + (points.length > 1 ? 's' : '')
-    ];
+    out = [`Suivi ESAM${name ? ` · ${name}` : ''} : ${points.length} point${points.length > 1 ? 's' : ''}`];
   points.forEach((p, i) => {
     out.push(
-      i +
-        1 +
-        '. ' +
-        fmtWhen(p.t) +
-        (p.label ? ' ' + p.label : '') +
-        ' : ' +
-        f6(p.lat) +
-        ', ' +
-        f6(p.lon) +
-        (za(i) ? ', alt. ' + fmtAlt(A[i]) : '')
+      `${i + 1}. ${fmtWhen(p.t)}${p.label ? ` ${p.label}` : ''} : ${f6(p.lat)}, ${f6(
+        p.lon
+      )}${za(i) ? `, alt. ${fmtAlt(A[i])}` : ''}`
     );
     if (i) {
       const l = L[i - 1];
       out.push(
-        '   ' +
-          fmtDist(l.d) +
-          ' depuis le point ' +
-          i +
-          ', cap ' +
-          Math.round(l.b) +
-          '° ' +
-          card(l.b) +
-          (za(i) && za(i - 1) ? ', dénivelé ' + fmtDelta(A[i] - A[i - 1]) : '') +
-          ', en ' +
-          fmtDur(l.dt) +
-          (l.v !== null ? ' (' + fmtSpeed(l.v) + ')' : '')
+        `   ${fmtDist(l.d)} depuis le point ${i}, cap ${Math.round(l.b)}° ${card(l.b)}${
+          za(i) && za(i - 1) ? `, dénivelé ${fmtDelta(A[i] - A[i - 1])}` : ''
+        }, en ${fmtDur(l.dt)}${l.v !== null ? ` (${fmtSpeed(l.v)})` : ''}`
       );
     }
   });
   if (points.length > 1)
     out.push(
-      'Total : ' +
-        fmtDist(s.total) +
-        ' en ' +
-        fmtDur(s.dt) +
-        (s.v !== null ? ' (' + fmtSpeed(s.v) + ')' : '') +
-        ', ' +
-        fmtDist(s.direct) +
-        ' à vol d’oiseau du premier au dernier point, cap ' +
-        Math.round(s.bearing) +
-        '° ' +
-        card(s.bearing) +
-        (za(0) && za(points.length - 1) ? ', dénivelé ' + fmtDelta(A[points.length - 1] - A[0]) : '')
+      `Total : ${fmtDist(s.total)} en ${fmtDur(s.dt)}${s.v !== null ? ` (${fmtSpeed(s.v)})` : ''}, ${fmtDist(
+        s.direct
+      )} à vol d’oiseau du premier au dernier point, cap ${Math.round(s.bearing)}° ${card(
+        s.bearing
+      )}${za(0) && za(points.length - 1) ? `, dénivelé ${fmtDelta(A[points.length - 1] - A[0])}` : ''}`
     );
   return out.join('\n');
 }
@@ -133,16 +108,9 @@ export function trackText(points, name, alts) {
 // Lien : fragment « s= » de l'adresse de l'appli, nom puis points « lat,lon,secondes,étiquette » séparés par ~
 // (nom et étiquettes encodés pour l'adresse). Décodage tolérant : un point mal formé est ignoré.
 export function encodeTrack(name, points) {
-  return (
-    's=' +
-    encodeURIComponent(name || '') +
-    points
-      .map(
-        (p) =>
-          '~' + f6(p.lat) + ',' + f6(p.lon) + ',' + Math.round(p.t / 1000) + ',' + encodeURIComponent(p.label || '')
-      )
-      .join('')
-  );
+  return `s=${encodeURIComponent(name || '')}${points
+    .map((p) => `~${f6(p.lat)},${f6(p.lon)},${Math.round(p.t / 1000)},${encodeURIComponent(p.label || '')}`)
+    .join('')}`;
 }
 function validPos(lat, lon) {
   return isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
@@ -178,38 +146,18 @@ export function toGPX(name, points) {
   const n = name || 'Suivi ESAM',
     w = points.map(
       (p, i) =>
-        '  <wpt lat="' +
-        f6(p.lat) +
-        '" lon="' +
-        f6(p.lon) +
-        '"><time>' +
-        new Date(p.t).toISOString() +
-        '</time><name>' +
-        xml(i + 1 + (p.label ? ' · ' + p.label : '')) +
-        '</name></wpt>'
+        `  <wpt lat="${f6(p.lat)}" lon="${f6(p.lon)}"><time>${new Date(p.t).toISOString()}</time><name>${xml(
+          i + 1 + (p.label ? ` · ${p.label}` : '')
+        )}</name></wpt>`
     ),
     tp = points.map(
-      (p) =>
-        '      <trkpt lat="' +
-        f6(p.lat) +
-        '" lon="' +
-        f6(p.lon) +
-        '"><time>' +
-        new Date(p.t).toISOString() +
-        '</time></trkpt>'
+      (p) => `      <trkpt lat="${f6(p.lat)}" lon="${f6(p.lon)}"><time>${new Date(p.t).toISOString()}</time></trkpt>`
     );
   return (
-    '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="GPS ESAM" xmlns="http://www.topografix.com/GPX/1/1">\n' +
-    '  <metadata><name>' +
-    xml(n) +
-    '</name></metadata>\n' +
-    w.join('\n') +
-    (w.length ? '\n' : '') +
-    '  <trk><name>' +
-    xml(n) +
-    '</name><trkseg>\n' +
-    tp.join('\n') +
-    '\n    </trkseg></trk>\n</gpx>\n'
+    `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="GPS ESAM" xmlns="http://www.topografix.com/GPX/1/1">\n` +
+    `  <metadata><name>${xml(n)}</name></metadata>\n${w.join('\n')}${w.length ? '\n' : ''}  <trk><name>${xml(
+      n
+    )}</name><trkseg>\n${tp.join('\n')}\n    </trkseg></trk>\n</gpx>\n`
   );
 }
 export function parseGPX(text) {
@@ -302,36 +250,21 @@ export function importTrack(tr) {
     save(merged);
     if (tr.name && !curName) setName(tr.name);
     msg = cur.length
-      ? added +
-        ' point' +
-        (added > 1 ? 's' : '') +
-        ' ajouté' +
-        (added > 1 ? 's' : '') +
-        ' au suivi' +
-        (curName ? ' « ' + curName + ' »' : '')
-      : 'Suivi' +
-        (tr.name ? ' « ' + tr.name + ' »' : '') +
-        ' repris : ' +
-        tr.points.length +
-        ' point' +
-        (tr.points.length > 1 ? 's' : '');
+      ? `${added} point${added > 1 ? 's' : ''} ajouté${added > 1 ? 's' : ''} au suivi${
+          curName ? ` « ${curName} »` : ''
+        }`
+      : `Suivi${tr.name ? ` « ${tr.name} »` : ''} repris : ${tr.points.length} point${tr.points.length > 1 ? 's' : ''}`;
   } else if (
     confirm(
-      'Un suivi « ' +
-        curName +
-        ' » (' +
-        cur.length +
-        ' points) est déjà sur ce téléphone. Le remplacer par « ' +
-        tr.name +
-        ' » (' +
-        tr.points.length +
-        ' points) ? Annuler le garde tel quel.'
+      `Un suivi « ${curName} » (${cur.length} points) est déjà sur ce téléphone. Le remplacer par « ${tr.name} » (${
+        tr.points.length
+      } points) ? Annuler le garde tel quel.`
     )
   ) {
     save(mergeTracks([], tr.points));
     setName(tr.name);
-    msg = 'Suivi « ' + tr.name + ' » repris : ' + tr.points.length + ' point' + (tr.points.length > 1 ? 's' : '');
-  } else return 'Suivi « ' + curName + ' » gardé, rien n\u2019a été importé.';
+    msg = `Suivi « ${tr.name} » repris : ${tr.points.length} point${tr.points.length > 1 ? 's' : ''}`;
+  } else return `Suivi « ${curName} » gardé, rien n\u2019a été importé.`;
   drawTrack();
   openTrack();
   return msg;
@@ -389,9 +322,7 @@ function localVal(t) {
     p = function (n) {
       return (n < 10 ? '0' : '') + n;
     };
-  return (
-    d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes())
-  );
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 // Pour le point affiché : sa position par rapport au dernier point du suivi (texte court, ou '')
 export function trackInfo(c) {
@@ -399,30 +330,18 @@ export function trackInfo(c) {
   if (!c || !pts.length) return '';
   const last = pts[pts.length - 1],
     d = distM(last, c);
-  if (d < 1) return 'Même position que le point ' + pts.length + ' du suivi.';
+  if (d < 1) return `Même position que le point ${pts.length} du suivi.`;
   const b = bearing(last, c);
-  return (
-    'À ' +
-    fmtDist(d) +
-    ' du point ' +
-    pts.length +
-    ' du suivi (' +
-    fmtWhen(last.t) +
-    '), cap ' +
-    Math.round(b) +
-    '° ' +
-    card(b) +
-    ', il y a ' +
-    fmtDur(Date.now() - last.t) +
-    '.'
-  );
+  return `À ${fmtDist(d)} du point ${pts.length} du suivi (${fmtWhen(last.t)}), cap ${Math.round(b)}° ${card(
+    b
+  )}, il y a ${fmtDur(Date.now() - last.t)}.`;
 }
 // ---------- Relief : altitudes du terrain le long du suivi (réseau), gardées tant que les points ne changent pas ----------
 let relief = { id: '', samples: [], zs: null, alts: [], wait: false },
   prof = null;
 function reliefOf(pts) {
   const samples = samplePath(pts, 100),
-    id = samples.map((q) => q.lat.toFixed(5) + ',' + q.lon.toFixed(5)).join(';');
+    id = samples.map((q) => `${q.lat.toFixed(5)},${q.lon.toFixed(5)}`).join(';');
   if (id !== relief.id) {
     relief = {
       id,
@@ -459,16 +378,15 @@ function drawProfile() {
   const R = relief;
   prof = R.zs && relief.samples.length > 1 ? profileSvg(R.samples, R.zs, fmtDist) : null;
   if (prof) {
-    box.innerHTML =
-      '<div class="pf-h"><span class="lbl flush">Relief</span><small id="pfRead">Touchez le profil pour lire l’altitude</small></div>' +
-      prof.svg +
-      '<p class="hint flush">Terrain en ligne droite d’un point au suivant : le trajet réel de l’animal peut contourner.</p>';
+    box.innerHTML = `<div class="pf-h"><span class="lbl flush">Relief</span><small id="pfRead">Touchez le profil pour lire l’altitude</small></div>${
+      prof.svg
+    }<p class="hint flush">Terrain en ligne droite d’un point au suivant : le trajet réel de l’animal peut contourner.</p>`;
   } else
     box.innerHTML =
       relief.samples.length > 1
-        ? '<p class="hint flush">' +
-          (R.wait ? 'Relief du parcours : chargement…' : 'Relief du parcours : réseau nécessaire.') +
-          '</p>'
+        ? `<p class="hint flush">${
+            R.wait ? 'Relief du parcours : chargement…' : 'Relief du parcours : réseau nécessaire.'
+          }</p>`
         : '';
 }
 // Lecture du profil au doigt : altitude et distance sous le doigt, repère sur la carte
@@ -494,7 +412,7 @@ function readProfile(e) {
   cur.setAttribute('x2', prof.x(q.d));
   cur.setAttribute('visibility', 'visible');
   $('pfRead').textContent =
-    fmtAlt(relief.zs[best]) + ' · à ' + fmtDist(q.d) + ' du point 1' + (q.k >= 0 ? ' (point ' + (q.k + 1) + ')' : '');
+    `${fmtAlt(relief.zs[best])} · à ${fmtDist(q.d)} du point 1${q.k >= 0 ? ` (point ${q.k + 1})` : ''}`;
   probe(q);
 }
 
@@ -516,91 +434,57 @@ export function drawTrack() {
     return;
   }
   $('trackSum').textContent =
-    (trackName() ? trackName() + ' · ' : '') + pts.length + ' pt' + (pts.length > 1 ? 's · ' + fmtDist(s.total) : '');
+    `${(trackName() ? `${trackName()} · ` : '') + pts.length} pt${pts.length > 1 ? `s · ${fmtDist(s.total)}` : ''}`;
   $('trackList').innerHTML = pts
     .map((p, i) => {
       const leg = i ? L[i - 1] : null;
       return (
-        '<li class="tp"><div class="tp-h"><span class="tp-n">' +
-        (i + 1) +
-        '</span><button class="tp-c" type="button" data-copy="' +
-        f6(p.lat) +
-        ', ' +
-        f6(p.lon) +
-        '">' +
-        f6(p.lat) +
-        ', ' +
-        f6(p.lon) +
-        '</button><button class="tp-x" type="button" data-tdel="' +
-        i +
-        '" aria-label="Retirer le point ' +
-        (i + 1) +
-        '">✕</button></div>' +
-        '<div class="tp-e"><input type="datetime-local" data-tt="' +
-        i +
-        '" value="' +
-        localVal(p.t) +
-        '" aria-label="Date et heure du point ' +
-        (i + 1) +
-        '"><input type="text" data-tl="' +
-        i +
-        '" value="' +
-        esc(p.label || '') +
-        '" placeholder="Étiquette (ex. collier 8 h)" aria-label="Étiquette du point ' +
-        (i + 1) +
-        '"></div>' +
-        (A[i] !== null
-          ? '<div class="tp-z"><b>' +
-            fmtAlt(A[i]) +
-            '</b>' +
-            (leg && A[i - 1] !== null ? zTag(A[i] - A[i - 1], leg.d) : '') +
-            '</div>'
-          : '') +
-        (leg
-          ? '<div class="tp-l">' +
-            fmtDist(leg.d) +
-            ' depuis le point ' +
-            i +
-            ' · cap ' +
-            Math.round(leg.b) +
-            '° ' +
-            card(leg.b) +
-            ' · ' +
-            (leg.v !== null
-              ? 'en ' + fmtDur(leg.dt) + ' (' + fmtSpeed(leg.v) + ')'
-              : leg.dt > 0
-                ? 'en ' + fmtDur(leg.dt) + ' (vérifiez les dates)'
-                : 'dates à corriger') +
-            '</div>'
-          : '') +
-        '</li>'
+        `<li class="tp"><div class="tp-h"><span class="tp-n">${
+          i + 1
+        }</span><button class="tp-c" type="button" data-copy="${f6(p.lat)}, ${f6(p.lon)}">${f6(p.lat)}, ${f6(
+          p.lon
+        )}</button><button class="tp-x" type="button" data-tdel="${i}" aria-label="Retirer le point ${
+          i + 1
+        }">✕</button></div>` +
+        `<div class="tp-e"><input type="datetime-local" data-tt="${i}" value="${localVal(
+          p.t
+        )}" aria-label="Date et heure du point ${i + 1}"><input type="text" data-tl="${i}" value="${esc(
+          p.label || ''
+        )}" placeholder="Étiquette (ex. collier 8 h)" aria-label="Étiquette du point ${i + 1}"></div>${
+          A[i] !== null
+            ? `<div class="tp-z"><b>${fmtAlt(A[i])}</b>${
+                leg && A[i - 1] !== null ? zTag(A[i] - A[i - 1], leg.d) : ''
+              }</div>`
+            : ''
+        }${
+          leg
+            ? `<div class="tp-l">${fmtDist(leg.d)} depuis le point ${i} · cap ${Math.round(leg.b)}° ${card(leg.b)} · ${
+                leg.v !== null
+                  ? `en ${fmtDur(leg.dt)} (${fmtSpeed(leg.v)})`
+                  : leg.dt > 0
+                    ? `en ${fmtDur(leg.dt)} (vérifiez les dates)`
+                    : 'dates à corriger'
+              }</div>`
+            : ''
+        }</li>`
       );
     })
     .join('');
   $('trackStats').innerHTML =
     pts.length > 1
-      ? '<div><span>Parcouru</span><b>' +
-        fmtDist(s.total) +
-        '</b></div><div><span>Durée</span><b>' +
-        fmtDur(s.dt) +
-        '</b></div><div><span>Vitesse</span><b>' +
-        (s.v !== null ? fmtSpeed(s.v) : '-') +
-        '</b></div><div><span>Vol d’oiseau</span><b>' +
-        fmtDist(s.direct) +
-        '</b><small>cap ' +
-        Math.round(s.bearing) +
-        '° ' +
-        card(s.bearing) +
-        '</small></div>' +
-        (A[0] !== null && A[A.length - 1] !== null
-          ? '<div><span>Dénivelé</span><b>' +
-            fmtDelta(A[A.length - 1] - A[0]) +
-            '</b><small>' +
-            fmtDelta(cl.up) +
-            ' / ' +
-            fmtDelta(-cl.down) +
-            ' entre points</small></div>'
-          : '')
+      ? `<div><span>Parcouru</span><b>${fmtDist(s.total)}</b></div><div><span>Durée</span><b>${fmtDur(
+          s.dt
+        )}</b></div><div><span>Vitesse</span><b>${
+          s.v !== null ? fmtSpeed(s.v) : '-'
+        }</b></div><div><span>Vol d’oiseau</span><b>${fmtDist(s.direct)}</b><small>cap ${Math.round(s.bearing)}° ${card(
+          s.bearing
+        )}</small></div>${
+          A[0] !== null && A[A.length - 1] !== null
+            ? `<div><span>Dénivelé</span><b>${fmtDelta(A[A.length - 1] - A[0])}</b><small>${fmtDelta(
+                cl.up
+              )} / ${fmtDelta(-cl.down)} entre points</small></div>`
+            : ''
+        }`
       : '<p class="hint flush">Un point. Ajoutez le prochain signalement pour mesurer la distance parcourue.</p>';
   drawProfile();
 }
@@ -608,16 +492,9 @@ export function drawTrack() {
 function zTag(dz, d) {
   const sl = slope(dz, d),
     cls = Math.abs(dz) < 5 ? 'flat' : dz > 0 ? 'up' : 'down';
-  return (
-    ' <span class="zt ' +
-    cls +
-    '">' +
-    (cls === 'flat' ? '→' : cls === 'up' ? '↗' : '↘') +
-    ' ' +
-    fmtDelta(dz) +
-    (sl !== null && cls !== 'flat' ? ' · pente ' + Math.round(Math.abs(sl)) + ' %' : '') +
-    '</span>'
-  );
+  return ` <span class="zt ${cls}">${cls === 'flat' ? '→' : cls === 'up' ? '↗' : '↘'} ${fmtDelta(dz)}${
+    sl !== null && cls !== 'flat' ? ` · pente ${Math.round(Math.abs(sl))} %` : ''
+  }</span>`;
 }
 let onName = function () {};
 // onChange : appelé quand le nom ou les points changent par la tuile (le bouton d'ajout du point affiché se met à jour)
@@ -659,31 +536,28 @@ export function initTrack(onChange) {
   });
   // reprendre ailleurs : lien (ouvert sur un autre téléphone, le suivi s'y installe), fichier GPX, import
   $('trackLink').addEventListener('click', () => {
-    const u = appUrl() + '#' + encodeTrack(trackName(), loadTrack());
+    const u = `${appUrl()}#${encodeTrack(trackName(), loadTrack())}`;
     shareText(
-      'Suivi ESAM' +
-        (trackName() ? ' · ' + trackName() : '') +
-        ' : ouvrir ce lien dans GPS ESAM pour le poursuivre\n' +
-        u,
+      `Suivi ESAM${trackName() ? ` · ${trackName()}` : ''} : ouvrir ce lien dans GPS ESAM pour le poursuivre\n${u}`,
       $('trackLink')
     );
   });
   $('trackLinkCopy').addEventListener('click', () => {
-    copy(appUrl() + '#' + encodeTrack(trackName(), loadTrack()), $('trackLinkCopy'));
+    copy(`${appUrl()}#${encodeTrack(trackName(), loadTrack())}`, $('trackLinkCopy'));
   });
   $('trackGpx').addEventListener('click', () => {
     const n = (trackName() || 'suivi').replace(/[^\w\u00C0-\u017F-]+/g, '_');
     const blob = new Blob([toGPX(trackName(), loadTrack())], { type: 'application/gpx+xml' });
     let file;
     try {
-      file = new File([blob], 'suivi-' + n + '.gpx', { type: 'application/gpx+xml' });
+      file = new File([blob], `suivi-${n}.gpx`, { type: 'application/gpx+xml' });
     } catch (e) {}
     if (file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] }))
       navigator.share({ title: 'Suivi ESAM', files: [file] }).catch(() => {});
     else {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'suivi-' + n + '.gpx';
+      a.download = `suivi-${n}.gpx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

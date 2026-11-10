@@ -18,6 +18,7 @@ export default [
       'arrow-body-style': ['error', 'as-needed'],
       // pièges classiques
       eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'prefer-template': 'error',
       'no-duplicate-imports': 'error',
       'no-throw-literal': 'error',
       'no-implicit-coercion': ['error', { allow: ['!!', '+'] }],

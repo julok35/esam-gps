@@ -103,50 +103,19 @@ export function profileSvg(samples, zs, fmtDist) {
   let s = '';
   // graduations d'altitude
   for (let z = y0; z <= y1 + 0.1; z += st)
-    s +=
-      '<line class="pf-g" x1="' +
-      PAD.l +
-      '" x2="' +
-      (PW - PAD.r) +
-      '" y1="' +
-      r1(y(z)) +
-      '" y2="' +
-      r1(y(z)) +
-      '"/><text class="pf-t" x="' +
-      (PAD.l - 6) +
-      '" y="' +
-      r1(y(z) + 4) +
-      '" text-anchor="end">' +
-      Math.round(z).toLocaleString('fr-FR') +
-      '</text>';
-  const line = ok.map((p) => r1(x(p.d)) + ',' + r1(y(zs[samples.indexOf(p)]))).join(' ');
-  s +=
-    '<polygon class="pf-a" points="' +
-    r1(x(ok[0].d)) +
-    ',' +
-    (PH - PAD.b) +
-    ' ' +
-    line +
-    ' ' +
-    r1(x(ok[ok.length - 1].d)) +
-    ',' +
-    (PH - PAD.b) +
-    '"/><polyline class="pf-l" points="' +
-    line +
-    '"/>';
+    s += `<line class="pf-g" x1="${PAD.l}" x2="${PW - PAD.r}" y1="${r1(y(z))}" y2="${r1(
+      y(z)
+    )}"/><text class="pf-t" x="${PAD.l - 6}" y="${r1(y(z) + 4)}" text-anchor="end">${Math.round(z).toLocaleString(
+      'fr-FR'
+    )}</text>`;
+  const line = ok.map((p) => `${r1(x(p.d))},${r1(y(zs[samples.indexOf(p)]))}`).join(' ');
+  s += `<polygon class="pf-a" points="${r1(x(ok[0].d))},${PH - PAD.b} ${line} ${r1(x(ok[ok.length - 1].d))},${
+    PH - PAD.b
+  }"/><polyline class="pf-l" points="${line}"/>`;
   // distances : début et fin
-  s +=
-    '<text class="pf-t" x="' +
-    PAD.l +
-    '" y="' +
-    (PH - 6) +
-    '">0</text><text class="pf-t" x="' +
-    (PW - PAD.r) +
-    '" y="' +
-    (PH - 6) +
-    '" text-anchor="end">' +
-    fmtDist(dmax) +
-    '</text>';
+  s += `<text class="pf-t" x="${PAD.l}" y="${PH - 6}">0</text><text class="pf-t" x="${PW - PAD.r}" y="${
+    PH - 6
+  }" text-anchor="end">${fmtDist(dmax)}</text>`;
   // points du suivi : pastille numérotée ; points trop proches réunis en une pastille « 2-3 » ;
   // altitude écrite au-dessus si elle ne chevauche pas la précédente
   const groups = [];
@@ -162,51 +131,30 @@ export function profileSvg(samples, zs, fmtDist) {
   let lastX = -99;
   groups.forEach((g) => {
     const n = g.ks.length,
-      lab = n === 1 ? String(g.ks[0] + 1) : g.ks[0] + 1 + '-' + (g.ks[n - 1] + 1),
+      lab = n === 1 ? String(g.ks[0] + 1) : `${g.ks[0] + 1}-${g.ks[n - 1] + 1}`,
       w = Math.max(18, 8 + lab.length * 8),
       px = r1(Math.min(Math.max(g.px, PAD.l + w / 2 - 9), PW - PAD.r + 9 - w / 2)),
       py = r1(g.py),
       lo = Math.min.apply(null, g.zs),
       hi = Math.max.apply(null, g.zs),
-      zt = Math.round(lo).toLocaleString('fr-FR') + (hi - lo >= 5 ? '-' + Math.round(hi).toLocaleString('fr-FR') : ''),
+      zt = Math.round(lo).toLocaleString('fr-FR') + (hi - lo >= 5 ? `-${Math.round(hi).toLocaleString('fr-FR')}` : ''),
       show = px - lastX >= 30 + zt.length * 4;
-    s +=
-      '<rect class="pf-p" x="' +
-      r1(px - w / 2) +
-      '" y="' +
-      r1(py - 9) +
-      '" width="' +
-      w +
-      '" height="18" rx="9"/><text class="pf-n" x="' +
-      px +
-      '" y="' +
-      r1(py + 4) +
-      '" text-anchor="middle">' +
-      lab +
-      '</text>' +
-      (show
-        ? '<text class="pf-z" x="' +
-          px +
-          '" y="' +
-          r1(py - 14) +
-          '" text-anchor="' +
-          (px > PW - PAD.r - 30 ? 'end' : px < PAD.l + 30 ? 'start' : 'middle') +
-          '">' +
-          zt +
-          '</text>'
-        : '');
+    s += `<rect class="pf-p" x="${r1(px - w / 2)}" y="${r1(py - 9)}" width="${
+      w
+    }" height="18" rx="9"/><text class="pf-n" x="${px}" y="${r1(py + 4)}" text-anchor="middle">${lab}</text>${
+      show
+        ? `<text class="pf-z" x="${px}" y="${r1(py - 14)}" text-anchor="${
+            px > PW - PAD.r - 30 ? 'end' : px < PAD.l + 30 ? 'start' : 'middle'
+          }">${zt}</text>`
+        : ''
+    }`;
     if (show) lastX = px;
   });
-  s += '<line class="pf-c" id="pfCur" x1="0" x2="0" y1="' + PAD.t + '" y2="' + (PH - PAD.b) + '" visibility="hidden"/>';
+  s += `<line class="pf-c" id="pfCur" x1="0" x2="0" y1="${PAD.t}" y2="${PH - PAD.b}" visibility="hidden"/>`;
   return {
-    svg:
-      '<svg class="pf" viewBox="0 0 ' +
-      PW +
-      ' ' +
-      PH +
-      '" role="img" aria-label="Profil du terrain le long du suivi">' +
-      s +
-      '</svg>',
+    svg: `<svg class="pf" viewBox="0 0 ${PW} ${PH}" role="img" aria-label="Profil du terrain le long du suivi">${
+      s
+    }</svg>`,
     x,
     y,
     dmax
