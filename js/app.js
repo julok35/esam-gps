@@ -466,7 +466,15 @@ initTiles();
 initMap();
 initShare(useCurrent);
 initAuto(show);
-initBatch();
+// lot de photos : point d'une photo lue (lecture complète), ou coordonnées vérifiées à la main (lecture null)
+initBatch((text, p) => {
+  if (p) show(text, p);
+  else {
+    src.value = text;
+    fromPhoto = false;
+    update(true);
+  }
+});
 initFix((t) => {
   src.value = t;
   update(true);

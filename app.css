@@ -316,6 +316,9 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .bn small { color: var(--muted); font: 600 .68rem var(--f-label); letter-spacing: .06em; text-transform: uppercase; }
 .bm { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
 .bp.st-ok .bm { color: var(--ok); font-weight: 600; }
+.bp.st-ok .bb[data-show] { cursor: pointer; border-radius: 6px; }
+.bp.st-ok .bb[data-show]:focus-visible { outline: 2px solid var(--jaune); outline-offset: 2px; }
+.bp.on { border-color: var(--jaune); box-shadow: inset 3px 0 0 var(--jaune); }
 .bp.st-check .bm, .bp.st-fail .bm { color: var(--rouge); font-weight: 600; }
 .bp.st-run .bm { color: var(--fg); }
 .ba { display: grid; gap: 4px; justify-items: end; }
