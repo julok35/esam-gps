@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from '../js/parser.js';
-import { votes, firm } from '../js/ocr.js';
+import { votes, firm, widen, turnBox } from '../js/ocr.js';
 
 const run = (txt) => ({ txt, p: parse(txt) });
 
@@ -54,4 +54,24 @@ test('lecture hors zone ignorée, point suisse accepté', () => {
 test('lecture sans coordonnée ignorée', () => {
   const v = votes([run('bonjour'), run('')]);
   assert.equal(v.lat.best, null);
+});
+
+test('cadre élargi : une ligne au-dessus et au-dessous, sans sortir de la photo', () => {
+  const b = widen({ x: 0.5, y: 0.4, w: 0.3, h: 0.05 });
+  assert.ok(Math.abs(b.y - 0.35) < 1e-9 && Math.abs(b.h - 0.15) < 1e-9, JSON.stringify(b));
+  assert.ok(Math.abs(b.x - 0.455) < 1e-9 && Math.abs(b.w - 0.39) < 1e-9, JSON.stringify(b));
+  const edge = widen({ x: 0.8, y: 0.01, w: 0.2, h: 0.05 });
+  assert.equal(edge.y, 0);
+  assert.ok(edge.x + edge.w <= 1 + 1e-9);
+});
+
+test('cadre suivi dans la photo tournée : même endroit, même taille en pixels', () => {
+  // quart de tour : une image 200 × 100 devient 100 × 200
+  const img = { width: 200, height: 100 },
+    turned = { width: 100, height: 200 },
+    b = turnBox({ x: 0.7, y: 0.4, w: 0.2, h: 0.2 }, img, turned, 90);
+  // centre (160, 50) -> à 60 px à droite du centre -> après +90° : 60 px sous le centre
+  assert.ok(Math.abs(b.x + b.w / 2 - 0.5) < 1e-9 && Math.abs(b.y + b.h / 2 - 0.8) < 1e-9, JSON.stringify(b));
+  const same = turnBox({ x: 0.1, y: 0.2, w: 0.3, h: 0.1 }, img, img, 0);
+  assert.ok(Math.abs(same.x - 0.1) < 1e-9 && Math.abs(same.w - 0.3) < 1e-9);
 });

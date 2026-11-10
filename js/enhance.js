@@ -118,3 +118,90 @@ export function enhance(gray, w, h, p, R) {
   const g = stretch(gray, p.lo, p.hi, p.contrast);
   return p.sharp ? unsharp(g, w, h, p.sharp, R || Math.max(2, Math.round(w / 300))) : g;
 }
+
+/**
+ * Fond égalisé : chaque pixel est comparé à la moyenne de son voisinage (rayon R), l'écart est amplifié (gain) autour
+ * d'un gris moyen. Efface un éclairage inégal (écran lumineux photographié dans le noir, reflet, ombre d'un doigt) :
+ * il ne reste que les traits du texte, clairs ou sombres, que le moteur sépare alors du fond.
+ */
+export function flatten(gray, w, h, R, gain) {
+  const bg = boxBlur(gray, w, h, R),
+    out = new Uint8ClampedArray(w * h),
+    k = gain || 3;
+  for (let i = 0; i < out.length; i++) out[i] = 128 + (gray[i] - bg[i]) * k;
+  return out;
+}
+
+// Seuil d'Otsu : le niveau de gris qui sépare le mieux les pixels sombres des pixels clairs
+export function otsu(gray) {
+  const hist = histogram(gray),
+    n = gray.length;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let nb = 0,
+    sb = 0,
+    best = 0,
+    t = 127;
+  for (let i = 0; i < 256; i++) {
+    nb += hist[i];
+    if (!nb) continue;
+    if (nb === n) break;
+    sb += i * hist[i];
+    const d = sb / nb - (sum - sb) / (n - nb),
+      v = nb * (n - nb) * d * d;
+    if (v > best) {
+      best = v;
+      t = i;
+    }
+  }
+  return t;
+}
+
+/**
+ * Écran dans la photo : la plus grande zone claire d'un seul tenant (un écran allumé dans un boîtier sombre).
+ * Retour : cadre { x, y, w, h } en fractions de l'image, avec une petite marge, ou null si la zone claire est trop
+ * petite pour être un écran ou couvre presque toute l'image (capture d'écran : rien à recadrer).
+ */
+export function screenBox(gray, w, h) {
+  const t = otsu(gray),
+    seen = new Uint8Array(w * h),
+    stack = new Int32Array(w * h);
+  let best = null;
+  for (let s = 0; s < w * h; s++) {
+    if (seen[s] || gray[s] <= t) continue;
+    let top = 0,
+      n = 0,
+      x0 = w,
+      y0 = h,
+      x1 = 0,
+      y1 = 0;
+    stack[top++] = s;
+    seen[s] = 1;
+    while (top) {
+      const p = stack[--top],
+        x = p % w,
+        y = (p - x) / w;
+      n++;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      for (const q of [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1])
+        if (q >= 0 && !seen[q] && gray[q] > t) {
+          seen[q] = 1;
+          stack[top++] = q;
+        }
+    }
+    if (!best || n > best.n) best = { n, x0, y0, x1, y1 };
+  }
+  if (!best) return null;
+  const bw = best.x1 - best.x0 + 1,
+    bh = best.y1 - best.y0 + 1,
+    cover = (bw * bh) / (w * h);
+  // un écran est une zone pleine : la zone claire remplit l'essentiel de son cadre
+  if (cover < 0.05 || cover > 0.8 || best.n < 0.6 * bw * bh) return null;
+  const m = 0.03,
+    x = Math.max(0, best.x0 / w - m * (bw / w)),
+    y = Math.max(0, best.y0 / h - m * (bh / h));
+  return { x, y, w: Math.min(1 - x, (bw / w) * (1 + 2 * m)), h: Math.min(1 - y, (bh / h) * (1 + 2 * m)) };
+}
