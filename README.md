@@ -118,4 +118,4 @@ Après une modification des fichiers de l'appli, changer la version `V` en tête
 
 ## Licence
 
-Code de l'appli sous licence MIT (fichier `LICENSE`). Les bibliothèques et polices de `vendor/` gardent leurs propres licences, jointes dans leurs dossiers.
+Code de l'appli sous licence MIT (fichier `LICENSE`). Les bibliothèques et polices de `vendor/` gardent leurs propres licences : Leaflet (BSD 2 clauses) et Tesseract (Apache 2.0) dans leurs dossiers, qrcode-generator (MIT) en tête de son fichier, polices sous SIL OFL 1.1.
