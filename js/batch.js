@@ -3,12 +3,10 @@
 import { $, esc, f6, fmtWhen, openTile } from './util.js';
 import * as ocr from './ocr.js';
 import { setFilesHandler } from './auto.js';
-import { confidence } from './trust.js';
+import { readPhoto, deg } from './pipeline.js';
 import { addPoints } from './track.js';
 
-const MAX_SIDE = 1600, // photos du lot réduites (mémoire : plusieurs en cours à la fois)
-  ZONE_PAD = 0.35,
-  THUMB = 96;
+const THUMB = 96; // vignette de la liste (pixels)
 // photos : [{ id, file, name, t, exif, moved, thumb, st : wait | run | ok | check | fail, msg, p, text }]
 let photos = [],
   seq = 0,
@@ -115,82 +113,40 @@ function moveTo(from, to) {
 const never = function () {
   return false;
 };
-// Cadre de lecture autour de la zone z (pixels de img), avec sa marge, en fractions de img
-function zoneBox(z, img) {
-  const pad = (z.box.y1 - z.box.y0) * ZONE_PAD,
-    x = Math.max(0, (z.box.x0 - pad) / img.width),
-    y = Math.max(0, (z.box.y0 - pad) / img.height);
-  return {
-    x,
-    y,
-    w: Math.min(1 - x, (z.box.x1 - z.box.x0 + 2 * pad) / img.width),
-    h: Math.min(1 - y, (z.box.y1 - z.box.y0 + 2 * pad) / img.height)
-  };
-}
-const fmtDeg = (d) => `${String(Math.round(d * 10) / 10).replace('.', ',')}°`;
-// Même enchaînement que pour une photo seule (auto.js) : perspective, inclinaison, zone, inclinaison affinée sur la
-// zone, lecture, confiance
+// Une photo du lot : exactement la chaîne d'une photo seule (pipeline.js), à la même définition, sans l'afficher
 async function readOne(ph, wi) {
-  const parts = [],
-    say = function (msg) {
-      ph.msg = msg;
-      paint();
-    };
   ph.st = 'run';
-  say('redressement…');
-  let img = await ocr.loadCanvas(ph.file, MAX_SIDE);
-  const q = ocr.detectQuadIn(img);
-  if (q && q.gain >= ocr.QUAD_GAIN && q.cover < 0.97 && q.tilt >= 0.4) {
-    const w = ocr.warpCanvas(img, q, MAX_SIDE);
-    if (w) {
-      img = w;
-      parts.push('perspective');
-    }
-  }
-  const r = ocr.leanIn(img, { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }, 45);
-  if (r.gain >= ocr.AUTO_GAIN && Math.abs(r.deg) >= 0.3) {
-    img = ocr.rotateCanvas(img, -r.deg);
-    parts.push(`redressée ${fmtDeg(-r.deg)}`);
-  }
-  say('recherche des coordonnées…');
-  const z = await ocr.findZone(img, never, wi);
-  if (!z) {
+  ph.msg = 'redressement…';
+  paint();
+  const orig = await ocr.loadCanvas(ph.file),
+    out = await readPhoto(orig, {
+      stale: never,
+      wi,
+      onStep(k, st, msg) {
+        if (st !== 'run') return;
+        ph.msg = msg;
+        paint();
+      }
+    });
+  if (!out.found) {
     ph.st = 'fail';
     ph.msg = 'coordonnées non trouvées : à cadrer à la main';
     return;
   }
-  let box = zoneBox(z, img);
-  // inclinaison affinée sur la zone elle-même : la photo est tournée, le cadre suit
-  const r2 = ocr.leanIn(img, box, 10);
-  if (r2.gain >= ocr.AUTO_GAIN && Math.abs(r2.deg) >= 0.4) {
-    const turned = ocr.rotateCanvas(img, -r2.deg);
-    box = ocr.turnBox(box, img, turned, -r2.deg);
-    img = turned;
-    parts.push(`affinée ${fmtDeg(-r2.deg)}`);
-  }
-  say('lecture…');
-  const res = await ocr.readFound(img, box, (i) => say(`lecture ${i}…`), never, wi);
-  if (!res || res.none) {
+  if (out.res.none || !out.trust) {
     ph.st = 'fail';
     ph.msg = 'aucune coordonnée lue : à cadrer à la main';
     return;
   }
-  const p = res.p,
-    t = confidence({
-      tess: res.tess,
-      agree: p.agree,
-      firm: res.sure,
-      rival: res.rival,
-      notes: p.best.notes.length,
-      alts: p.alts.length,
-      manual: false
-    });
-  p.trust = t;
-  p.ocr = true;
-  ph.p = p;
-  ph.text = res.text;
-  ph.st = t.level === 'ok' ? 'ok' : 'check';
-  ph.msg = `${(t.level === 'ok' ? 'fiable ' : 'douteux ') + t.pct} %${parts.length ? ` (${parts.join(', ')})` : ''}`;
+  const parts = [];
+  if (out.quad) parts.push('perspective');
+  if (out.angle) parts.push(`redressée ${deg(out.angle)}`);
+  ph.p = out.res.p;
+  ph.text = out.res.text;
+  ph.st = out.trust.level === 'ok' ? 'ok' : 'check';
+  ph.msg = `${(out.trust.level === 'ok' ? 'fiable ' : 'douteux ') + out.trust.pct} %${
+    parts.length ? ` (${parts.join(', ')})` : ''
+  }`;
 }
 // Toutes les photos en attente, réparties entre les moteurs
 function runAll() {

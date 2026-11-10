@@ -29,9 +29,10 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `index.html`, `app.css` | Page et styles |
 | `js/app.js` | Point d'entrée : résultat, liens, événements |
 | `js/parser.js` | Détection et conversion des coordonnées (sans DOM, testé sous Node) |
-| `js/auto.js` | Enchaînement automatique après une photo : étapes affichées, reprise à la main de chacune |
+| `js/pipeline.js` | Chaîne de lecture d'une photo, de la perspective à la confiance : la même pour une photo seule et pour un lot |
+| `js/auto.js` | Photo seule : étapes de la chaîne affichées, reprise à la main de chacune |
 | `js/ocr.js` | Photo, zoom, cadre et coins de perspective, lecture Tesseract (pleine photo puis cadre, plusieurs moteurs) et vote entre lectures |
-| `js/batch.js` | Lot de photos : ordre, glisser-déposer, lecture de chaque photo sans écran, points versés au suivi |
+| `js/batch.js` | Lot de photos : ordre, glisser-déposer, chaque photo lue par la même chaîne (plusieurs moteurs en parallèle), points versés au suivi |
 | `js/exif.js` | Date de prise de vue dans les métadonnées JPEG (sans DOM, testé sous Node) |
 | `js/skew.js` | Mesure de l'inclinaison du texte (sans DOM, testé sous Node) |
 | `js/warp.js` | Perspective : bords de l'écran (Hough), homographie, redressement (sans DOM, testé sous Node) |
@@ -70,12 +71,13 @@ puis http://localhost:8000. Le service worker garde les fichiers en cache : en c
 ```
 Saisie / collage ──────────────────────────────────────────────────────┐
                                                                        ▼
-Photo ─► auto.js : 1. redressement  warp.findQuad (bords de l'écran) ─► ocr.applyQuad ; skew.skewAngle ─► ocr.setAngle
+Photo(s) ─► pipeline.js, la même chaîne pour une photo seule (auto.js l'affiche étape par étape) et pour un lot (batch.js) :
+                   1. redressement  warp.findQuad (bords de l'écran) ─► ocr.warpCanvas ; skew.skewAngle ─► ocr.rotateCanvas
                    2. contraste     enhance.autoParams (plage de gris, flou)
                    3. zone          ocr.findZone : vues successives de la photo (entière, fond égalisé, écran recadré)
-                                    lues par Tesseract ─► zone.coordZone ─► ocr.setSel
+                                    lues par Tesseract ─► zone.coordZone ; zone mal lue : cadre élargi aux lignes voisines
                    4. lecture       ocr.readFound : jusqu'à 11 lectures du cadre (dont 3 au fond égalisé) ─► parse() sur
-                                    chacune ─► vote (votes, firm) ; rien de lu : second essai, cadre élargi aux lignes voisines
+                                    chacune ─► vote (votes, firm) ; sans accord net : second essai, cadre élargi
                    5. confiance     trust.confidence (concordance, confiance du moteur, avertissements)
                                                                        │
                                                                        ▼

@@ -2,8 +2,8 @@
    coordonnées, lecture, confiance. Chaque étape s'affiche avec son résultat et peut être reprise à la main. */
 import { $, esc, openTile } from './util.js';
 import * as ocr from './ocr.js';
-import { confidence } from './trust.js';
 import { autoParams } from './enhance.js';
+import { readPhoto, zone, read, trust, enhInfo } from './pipeline.js';
 
 // onFiles(fichiers) : plusieurs photos choisies ; vrai si le lot les prend (batch.js)
 let onFiles = function () {
@@ -21,7 +21,6 @@ const STEPS = [
   ['trust', 'Confiance']
 ];
 const ICON = { wait: '·', run: '…', ok: '✓', warn: '!', fail: '✕', info: '-' };
-const ZONE_PAD = 0.35; // marge autour des mots trouvés (fraction de la hauteur de la zone)
 let state = {},
   job = 0,
   showCb = function () {},
@@ -59,147 +58,7 @@ function reset() {
     state[s[0]] = { st: 'wait', msg: '' };
   });
 }
-function deg(v) {
-  return `${(v > 0 ? '+' : v < 0 ? '−' : '') + String(Math.abs(Math.round(v * 10) / 10)).replace('.', ',')}°`;
-}
-
-// ---------- Étapes ----------
-function stepLevel() {
-  const parts = [];
-  let st = 'ok';
-  const q = ocr.detectQuad();
-  if (q && q.gain >= ocr.QUAD_GAIN && q.cover < 0.97 && q.tilt >= 0.4) {
-    if (ocr.applyQuad(q.quad)) parts.push(`perspective corrigée (bords nets, ${deg(q.tilt)})`);
-  } else if (q && q.gain >= ocr.QUAD_GAIN) parts.push('écran déjà droit');
-  else parts.push('pas de bord d’écran net : perspective laissée');
-  const r = ocr.leanIn(ocr.getWork(), { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }, 45);
-  if (r.gain >= ocr.AUTO_GAIN && Math.abs(r.deg) >= 0.3) {
-    ocr.setAngle(-r.deg);
-    parts.push(`inclinaison ${deg(-r.deg)}`);
-  } else if (r.gain >= ocr.AUTO_GAIN) parts.push('texte droit');
-  else {
-    parts.push('inclinaison non mesurable (texte peu net)');
-    st = 'info';
-  }
-  set('level', st, parts.join(' · '));
-}
-function stepEnh() {
-  const G = ocr.grayOf(ocr.getWork(), null, 800);
-  const p = autoParams(G.g, G.w, G.h);
-  const e = ocr.getEnh();
-  let msg = `contraste étiré (${p.lo}-${p.hi} → 0-255)`;
-  if (e.sharp === null) msg += p.sharp ? `, netteté renforcée ×${String(p.sharp).replace('.', ',')}` : ', photo nette';
-  else msg += `, netteté ×${String(e.sharp).replace('.', ',')} (réglée à la main)`;
-  if (e.contrast !== 1) msg += `, contraste ×${String(e.contrast).replace('.', ',')}`;
-  set('enh', 'ok', msg);
-}
-// Zone : lecture pleine image, puis cadre autour des mots des coordonnées, inclinaison affinée dans le cadre
-function stepZone(stale) {
-  set('zone', 'run', 'lecture de la photo entière…');
-  ocr.setProgress((t, f) => {
-    if (state.zone.st === 'run') set('zone', 'run', t + (f ? ` ${Math.round(f * 100)} %` : ''));
-  }, 'photo entière');
-  const img = ocr.getWork();
-  const onView = function (name, i) {
-    // au-delà de la première vue, l'étape dit ce qu'elle essaie
-    if (i > 1 && state.zone.st === 'run') set('zone', 'run', `nouvel essai : ${name}…`);
-  };
-  return ocr.findZone(img, stale, 0, onView).then((z) => {
-    if (z === undefined || stale()) return false;
-    if (!z) {
-      set('zone', 'warn', 'coordonnées non trouvées : cadrez-les à la main');
-      return false;
-    }
-    const pad = (z.box.y1 - z.box.y0) * ZONE_PAD,
-      box = {
-        x: (z.box.x0 - pad) / img.width,
-        y: (z.box.y0 - pad) / img.height,
-        w: (z.box.x1 - z.box.x0 + 2 * pad) / img.width,
-        h: (z.box.y1 - z.box.y0 + 2 * pad) / img.height
-      };
-    ocr.setSel(box);
-    // inclinaison affinée sur la zone elle-même
-    const r = ocr.leanIn(img, ocr.getSel(), 10);
-    let more = '';
-    if (r.gain >= ocr.AUTO_GAIN && Math.abs(r.deg) >= 0.4) {
-      ocr.setAngle(ocr.getAngle() - r.deg);
-      more = `, inclinaison affinée ${deg(-r.deg)}`;
-    }
-    set(
-      'zone',
-      'ok',
-      `trouvée : « ${z.text.replace(/\s+/g, ' ').slice(0, 40)} »${
-        z.conf !== null ? `, moteur sûr à ${z.conf} %` : ''
-      }${z.view !== 'photo entière' ? ` (${z.view})` : ''}${more}`
-    );
-    return true;
-  });
-}
-function stepRead(stale, manual) {
-  set('read', 'run', 'lecture 1…');
-  ocr.setProgress((t) => {
-    if (state.read.st === 'run' && /moteur|langue|Initialisation/.test(t)) set('read', 'run', t);
-  });
-  const img = ocr.getWork(),
-    box0 = ocr.getSel(),
-    onPass = function (i) {
-      set('read', 'run', `lecture ${i}…`);
-    };
-  let wider = false;
-  // zone trouvée d'elle-même : si rien ne s'y lit, second essai sur le cadre élargi aux lignes voisines
-  return (
-    manual
-      ? ocr.readBox(img, box0, onPass, stale)
-      : ocr.readFound(img, box0, onPass, stale, 0, () => {
-          wider = true;
-          set('read', 'run', 'pas d’accord net : nouvel essai, cadre élargi aux lignes voisines…');
-        })
-  ).then((res) => {
-    if (!res || stale()) return null;
-    const box = res.box || box0;
-    if (wider && box !== box0) ocr.setSel(box);
-    lastRead = { img, box };
-    ocr.showZoneOf(img, box);
-    if (res.none) {
-      set('read', 'fail', `aucune coordonnée lue dans le cadre${manual ? '' : ' : recadrez à la main'}`);
-      set('trust', 'fail', 'rien à transmettre');
-      return res;
-    }
-    const a = res.p.agree || { n: 0, total: res.total };
-    set(
-      'read',
-      res.sure ? 'ok' : 'warn',
-      `${a.n} lecture${a.n > 1 ? 's' : ''} sur ${a.total} concordante${a.n > 1 ? 's' : ''}${
-        res.rival ? ', valeurs concurrentes' : ''
-      }${manual ? ' (cadre manuel)' : ''}`
-    );
-    return res;
-  });
-}
-function stepTrust(res) {
-  const p = res.p;
-  if (!p.ok) return;
-  const t = confidence({
-    tess: res.tess,
-    agree: p.agree,
-    firm: res.sure,
-    rival: res.rival,
-    notes: p.best.notes.length,
-    alts: p.alts.length,
-    manual: false
-  });
-  p.trust = t;
-  p.ocr = true;
-  set(
-    'trust',
-    t.level === 'ok' ? 'ok' : 'warn',
-    `${t.pct} % · ${t.level === 'ok' ? 'fiable' : 'douteux : vérifiez sur la photo avant de transmettre'} (${t.why.join(
-      ', '
-    )})`
-  );
-}
-
-// ---------- Enchaînements ----------
+// ---------- Enchaînements : la chaîne de lecture est dans pipeline.js, la même que pour un lot de photos ----------
 function stale(myJob, myGen) {
   return function () {
     return job !== myJob || ocr.photoGen() !== myGen;
@@ -212,91 +71,118 @@ function fail(err) {
       set(s[0], 'fail', 'lecture impossible : vérifiez le réseau au premier usage, ou tapez le texte');
   });
 }
-// Après une photo : tout, de la perspective à la confiance
-function runAll() {
+// Chargement du moteur au premier usage : affiché sur l'étape en cours
+function engineProgress() {
+  ocr.setProgress((t, f) => {
+    const run = STEPS.find((s) => state[s[0]].st === 'run');
+    if (run && /moteur|langue|Initialisation/.test(t)) set(run[0], 'run', t + (f ? ` ${Math.round(f * 100)} %` : ''));
+  });
+}
+function begin() {
   const myJob = ++job;
-  const g = ocr.photoGen();
-  let isStale = stale(myJob, g);
-  const s = ocr.photoSize();
+  $('cropBox').hidden = true;
+  engineProgress();
+  return stale(myJob, ocr.photoGen());
+}
+// Lecture terminée : zone lue affichée, résultat transmis à l'appli
+function finish(img, box, res, manual) {
+  lastRead = { img, box };
+  ocr.showZoneOf(img, box);
+  showCb(res.text, res.p);
+  if (res.none) {
+    if (!manual) ocr.openStage('frame');
+    return;
+  }
+  openTile('result');
+  $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function waitFrame() {
+  set('read', 'wait', 'en attente du cadre');
+  set('trust', 'wait', '');
+  ocr.openStage('frame');
+}
+// Après une photo : tout, de la perspective à la confiance
+async function runAll() {
+  const isStale = begin(),
+    s = ocr.photoSize();
   reset();
   set('photo', 'ok', `${s.w} × ${s.h} px`);
-  $('cropBox').hidden = true;
   openTile('steps');
   $('steps').scrollIntoView({ behavior: 'smooth', block: 'start' });
   try {
-    stepLevel();
-    stepEnh();
+    const out = await readPhoto(ocr.getOrig(), { stale: isStale, wi: 0, onStep: set });
+    if (!out || isStale()) return;
+    // redressement, inclinaison et cadre repris à l'écran : chaque étape se reprend à la main
+    ocr.adopt(out);
+    $('cropBox').hidden = true;
+    if (!out.found) waitFrame();
+    else finish(out.img, out.box, out.res, false);
   } catch (err) {
-    console.error('Redressement :', err);
-    set('level', 'info', 'redressement automatique impossible : réglez à la main');
+    if (!isStale()) fail(err);
   }
-  const myGen = ocr.photoGen();
-  isStale = stale(myJob, myGen);
-  $('cropBox').hidden = true;
-  stepZone(isStale)
-    .then((found) => {
-      if (isStale()) return;
-      if (!found) {
-        set('read', 'wait', 'en attente du cadre');
-        set('trust', 'wait', '');
-        ocr.openStage('frame');
-        return;
-      }
-      return readThenTrust(isStale, false);
-    })
-    .catch((err) => {
-      if (!isStale()) fail(err);
-    });
 }
-function readThenTrust(isStale, manual) {
-  return stepRead(isStale, manual).then((res) => {
-    if (!res) return;
-    if (res.none) {
-      showCb(res.text, res.p);
-      if (!manual) ocr.openStage('frame');
-      return;
-    }
-    stepTrust(res);
-    showCb(res.text, res.p);
-    openTile('result');
-    $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+// Lecture et confiance, cadre et réglages tels qu'à l'écran. manual : cadre posé à la main
+async function readThenTrust(isStale, manual) {
+  const img = ocr.getWork();
+  set('read', 'run', 'lecture 1…');
+  const rd = await read(img, ocr.getSel(), {
+    stale: isStale,
+    wi: 0,
+    manual,
+    onPass: (i) => set('read', 'run', `lecture ${i}…`),
+    onWiden: () => set('read', 'run', 'pas d’accord net : nouvel essai, cadre élargi aux lignes voisines…')
   });
+  if (!rd || isStale()) return;
+  set('read', rd.st, rd.msg);
+  if (rd.res.none) set('trust', 'fail', 'rien à transmettre');
+  else {
+    const tr = trust(rd.res);
+    if (tr) set('trust', tr.st, tr.msg);
+    ocr.adopt({ img, box: rd.box });
+    $('cropBox').hidden = true;
+  }
+  finish(img, rd.box, rd.res, manual);
 }
 // Depuis la lecture (cadre et réglages tels qu'à l'écran)
-function runRead(manual) {
+async function runRead(manual) {
   if (!ocr.hasPhoto()) return;
-  const myJob = ++job,
-    isStale = stale(myJob, ocr.photoGen());
+  const isStale = begin();
   if (state.zone.st === 'wait' || manual) set('zone', 'ok', 'cadre posé à la main');
   set('read', 'wait', '');
   set('trust', 'wait', '');
-  $('cropBox').hidden = true;
-  readThenTrust(isStale, manual).catch((err) => {
+  try {
+    await readThenTrust(isStale, manual);
+  } catch (err) {
     if (!isStale()) fail(err);
-  });
+  }
 }
-// Depuis la zone (après un changement de géométrie)
-function runFromZone() {
+// Depuis la zone (après un changement de géométrie à la main : perspective)
+async function runFromZone() {
   if (!ocr.hasPhoto()) return;
-  const myJob = ++job,
-    isStale = stale(myJob, ocr.photoGen());
+  const isStale = begin();
   set('read', 'wait', '');
   set('trust', 'wait', '');
-  $('cropBox').hidden = true;
-  stepEnh();
-  stepZone(isStale)
-    .then((found) => {
-      if (isStale()) return;
-      if (!found) {
-        set('read', 'wait', 'en attente du cadre');
-        ocr.openStage('frame');
-        return;
-      }
-      return readThenTrust(isStale, false);
-    })
-    .catch((err) => {
-      if (!isStale()) fail(err);
+  try {
+    const img = ocr.getWork();
+    set('enh', 'ok', enhInfo(img));
+    set('zone', 'run', 'lecture de la photo entière…');
+    const z = await zone(ocr.getBase(), ocr.getAngle(), img, {
+      stale: isStale,
+      wi: 0,
+      onView: (name, i) => i > 1 && set('zone', 'run', `nouvel essai : ${name}…`)
     });
+    if (z === undefined || isStale()) return;
+    set('zone', z.st, z.msg);
+    if (!z.found) {
+      waitFrame();
+      return;
+    }
+    ocr.adopt({ angle: z.angle, img: z.img, box: z.box });
+    $('cropBox').hidden = true;
+    await readThenTrust(isStale, false);
+  } catch (err) {
+    if (!isStale()) fail(err);
+  }
 }
 function stop() {
   job++;
@@ -404,7 +290,7 @@ export function initAuto(show) {
   $('enhGo').addEventListener('click', () => {
     readEnh();
     $('enhBox').hidden = true;
-    stepEnh();
+    set('enh', 'ok', enhInfo(ocr.getWork()));
     runRead(state.zone.st !== 'ok' || /main/.test(state.zone.msg));
   });
   $('enhClose').addEventListener('click', () => {

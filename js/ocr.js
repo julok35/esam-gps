@@ -75,10 +75,13 @@ const ZMAX = 8, // zoom maximal
   MIN_SIDE = 0.02, // plus petit côté du cadre (fraction de la photo)
   DEAD = 8; // mouvement ignoré (px) avant de bouger quoi que ce soit
 
+// Grand côté d'une photo de travail, au plus (pixels) : la même pour une photo seule et pour un lot. Au-delà, une photo
+// tournée de 45° dépasserait la taille de canevas que les iPhone acceptent (16,7 millions de pixels).
+export const PHOTO_MAX = 3200;
 // Fichier image -> canevas (orientation EXIF appliquée), grand côté max pixels au plus
 export function loadCanvas(file, max) {
   const done = function (img) {
-    const s = Math.min(1, (max || 2400) / Math.max(img.width, img.height)),
+    const s = Math.min(1, (max || PHOTO_MAX) / Math.max(img.width, img.height)),
       c = document.createElement('canvas');
     c.width = Math.round(img.width * s);
     c.height = Math.round(img.height * s);
@@ -121,7 +124,7 @@ export function loadFile(file, t) {
   if (!file) return Promise.resolve(false);
   const mine = ++loading;
   photoMsg('');
-  return loadCanvas(file, 2400).then(
+  return loadCanvas(file).then(
     (c) => {
       if (mine !== loading) return false; // une autre photo a été choisie entre-temps
       photoF = file;
@@ -464,7 +467,7 @@ export function getQuad() {
 // autour pour ne rien perdre si un bord est un peu à côté. Les pixels hors photo prennent sa teinte moyenne.
 export function warpCanvas(img, q, max) {
   const src = grow(q, 0.03),
-    r = rectFor(src, max || 2400),
+    r = rectFor(src, max || PHOTO_MAX),
     H = homography(src, [
       [0, 0],
       [r.w, 0],
@@ -485,7 +488,7 @@ export function warpCanvas(img, q, max) {
 }
 export function applyQuad(q) {
   if (!orig || !q) return false;
-  const c = warpCanvas(orig, q, 2400);
+  const c = warpCanvas(orig, q);
   if (!c) return false;
   base = c;
   quad = q;
@@ -716,15 +719,39 @@ export function openStage(m) {
 export function getSel() {
   return { x: sel.x, y: sel.y, w: sel.w, h: sel.h };
 }
+// Cadre ramené dans la photo, avec une taille minimale (fractions)
+export function fitBox(s) {
+  const x = clamp(s.x, 0, 1),
+    y = clamp(s.y, 0, 1);
+  return { x, y, w: clamp(s.w, MIN_SIDE, 1 - x), h: clamp(s.h, MIN_SIDE, 1 - y) };
+}
 export function setSel(s) {
-  sel = {
-    x: clamp(s.x, 0, 1),
-    y: clamp(s.y, 0, 1),
-    w: clamp(s.w, MIN_SIDE, 1 - clamp(s.x, 0, 1)),
-    h: clamp(s.h, MIN_SIDE, 1 - clamp(s.y, 0, 1))
-  };
+  sel = fitBox(s);
   view = { z: 1, tx: 0, ty: 0 };
   applyView();
+}
+/**
+ * Résultat de la chaîne de lecture (pipeline.js) repris à l'écran, pour que chaque étape se reprenne à la main :
+ * o.base (photo redressée en perspective) et o.quad, o.angle (inclinaison), o.img (photo de travail déjà tournée),
+ * o.box (cadre de lecture). Un champ absent garde sa valeur.
+ */
+export function adopt(o) {
+  if (o.base) {
+    base = o.base;
+    quad = o.quad || null;
+  }
+  if (typeof o.angle === 'number') angle = o.angle;
+  work = o.img || null;
+  if (o.box) sel = fitBox(o.box);
+  showAngle();
+  setMode('frame');
+  showWork();
+}
+export function getOrig() {
+  return orig;
+}
+export function getBase() {
+  return base;
 }
 export function getEnh() {
   return { contrast: enh.contrast, sharp: enh.sharp };
@@ -980,7 +1007,8 @@ function cleanZone(z) {
 /**
  * Zone des coordonnées dans img : chaque vue (zoneViews) est lue en entier jusqu'à en trouver une où les coordonnées
  * se lisent nettement ; à défaut, la meilleure zone trouvée. onView(nom, i, total) : vue en cours.
- * Retour (promesse) : résultat de coordZone (boîte en pixels de img) avec view (nom de la vue), ou null ;
+ * Retour (promesse) : résultat de coordZone (boîte en pixels de img) avec view (nom de la vue) et clean (les
+ * coordonnées s'y lisent nettement), ou null ;
  * undefined si la photo a changé entre-temps (stale).
  */
 export function findZone(img, stale, wi, onView) {
@@ -997,9 +1025,10 @@ export function findZone(img, stale, wi, onView) {
       const z = coordZone(full.lines, parse);
       if (z) {
         z.view = v.name;
+        z.clean = cleanZone(z);
         z.rank = z.p.best.score - 0.5 * z.p.best.notes.length - 0.5 * z.p.alts.length;
         if (!best || z.rank > best.rank) best = z;
-        if (cleanZone(z)) return z;
+        if (z.clean) return z;
       }
       return next();
     });
