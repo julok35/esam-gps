@@ -10,7 +10,7 @@ import { initFix, openFix, closeFix } from './fix.js';
 import { initPlace, showPlace, placeText } from './place.js';
 import { initCompass } from './compass.js';
 import { confidence, trusted } from './trust.js';
-import { initTrack, addPoint, trackInfo, trackName, indexOf, decodeTrack, importTrack } from './track.js';
+import { initTrack, addPoint, trackInfo, trackName, indexOf, decodeTrack, importTrack, askResume } from './track.js';
 import { initBatch, batchChecked } from './batch.js';
 import { clearZone, photoTime, photoFile } from './ocr.js';
 
@@ -487,7 +487,7 @@ if (tr0) {
   $('trackMsg').hidden = false;
   $('trackMsg').textContent = importTrack(tr0);
   setHash('');
-}
+} else askResume(); // suivi déjà enregistré sur ce téléphone : le continuer ou repartir de zéro
 lastParse = parse(src.value);
 render();
 cancelHist(); // un lien ouvert n'entre pas dans l'historique tant qu'on ne s'en sert pas

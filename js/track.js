@@ -227,6 +227,24 @@ function setName(n) {
     localStorage.setItem(NAME, (n || '').slice(0, 40));
   } catch (e) {}
 }
+// Champ du nom en rouge tant qu'il est vide
+function nameMark() {
+  $('trackName').classList.toggle('empty', !$('trackName').value.trim());
+}
+// Texte du choix au démarrage : quel suivi est en cours, combien de points, depuis quand
+export function resumeText(name, pts) {
+  const n = pts.length,
+    last = pts[n - 1];
+  return `Suivi en cours${name ? ` : « ${name} »` : ' sans nom'} · ${n} point${n > 1 ? 's' : ''}${
+    last ? `, dernier le ${fmtWhen(last.t)}` : ''
+  }. Le continuer ou repartir de zéro ?`;
+}
+// Ouverture de l'appli avec un suivi déjà enregistré : choisir de le continuer ou de repartir de zéro
+export function askResume() {
+  const pts = loadTrack();
+  $('resume').hidden = !pts.length;
+  if (pts.length) $('resumeTxt').textContent = resumeText(trackName(), pts);
+}
 // Index du point du suivi qui est le point c (à moins de 3 m), sinon -1
 export function indexOf(c) {
   const pts = loadTrack();
@@ -265,6 +283,7 @@ export function importTrack(tr) {
     setName(tr.name);
     msg = `Suivi « ${tr.name} » repris : ${tr.points.length} point${tr.points.length > 1 ? 's' : ''}`;
   } else return `Suivi « ${curName} » gardé, rien n\u2019a été importé.`;
+  $('resume').hidden = true;
   drawTrack();
   openTrack();
   return msg;
@@ -425,7 +444,8 @@ export function drawTrack() {
     cl = climbs(A);
   $('trackCard').hidden = !pts.length;
   setTrack(pts);
-  $('trackName').value = trackName();
+  if (document.activeElement !== $('trackName')) $('trackName').value = trackName();
+  nameMark();
   if (!pts.length) {
     $('trackSum').textContent = '';
     $('trackList').innerHTML = '';
@@ -523,6 +543,7 @@ export function initTrack(onChange) {
     save(pts);
     drawTrack();
   });
+  $('trackName').addEventListener('input', nameMark);
   $('trackName').addEventListener('change', () => {
     setName($('trackName').value.trim());
     drawTrack();
@@ -592,8 +613,27 @@ export function initTrack(onChange) {
       return;
     save([]);
     setName('');
+    $('resume').hidden = true;
     drawTrack();
     onName();
+  });
+  $('resumeGo').addEventListener('click', () => {
+    $('resume').hidden = true;
+    openTile('trackCard');
+    openTile('map');
+    fitTrack();
+    if (!trackName()) $('trackName').focus();
+  });
+  $('resumeNew').addEventListener('click', () => {
+    const n = trackName();
+    if (!confirm(`Effacer le suivi${n ? ` « ${n} »` : ''} et ses ${loadTrack().length} points pour repartir de zéro ?`))
+      return;
+    $('resume').hidden = true;
+    save([]);
+    setName('');
+    drawTrack();
+    onName();
+    $('trackName').focus();
   });
   $('trackCard').addEventListener('toggle', () => {
     if ($('trackCard').open) drawTrack();

@@ -11,7 +11,8 @@ import {
   decodeTrack,
   toGPX,
   parseGPX,
-  mergeTracks
+  mergeTracks,
+  resumeText
 } from '../js/track.js';
 
 const H = 3600000;
@@ -148,4 +149,9 @@ test('GPX : étiquette décodée une seule fois, points auto-fermants lus, posit
       [45.2, 6.2]
     ]
   );
+});
+
+test('choix au démarrage : rappelle le nom de l’animal et le nombre de points', () => {
+  assert.match(resumeText('Pirate', pts), /^Suivi en cours : « Pirate » · 3 points, dernier le /);
+  assert.match(resumeText('', pts.slice(0, 1)), /^Suivi en cours sans nom · 1 point, dernier le /);
 });

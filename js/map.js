@@ -70,7 +70,7 @@ export function initMap() {
       fit();
     }
   });
-  $('fitBoth').addEventListener('click', fit);
+  $('fitBoth').addEventListener('click', fitAll);
   $('goTarget').addEventListener('click', () => {
     if (state.current) map.setView([state.current.lat, state.current.lon], 16);
   });
@@ -233,6 +233,23 @@ export function focusView(pts, me) {
 export function focusPoints(pts) {
   focus = pts && pts.length ? pts.map((p) => ({ lat: p.lat, lon: p.lon })) : null;
   fit();
+}
+
+// « Les deux » : moi et l'ensemble des points (point affiché, points du lot lu, points du suivi), sans doublon
+export function bothView(me, current, pts) {
+  const ll = [];
+  [me, current, ...(pts || [])].forEach((p) => {
+    if (p && !ll.some((q) => q[0] === p.lat && q[1] === p.lon)) ll.push([p.lat, p.lon]);
+  });
+  return ll;
+}
+function fitAll() {
+  if (!map) return;
+  const ll = bothView(state.me, state.current, (focus || []).concat(trackPts));
+  if (!ll.length) return;
+  map.invalidateSize();
+  if (ll.length === 1) map.setView(ll[0], 15);
+  else map.fitBounds(L.latLngBounds(ll), { padding: [40, 40], maxZoom: 16 });
 }
 
 function fit() {
