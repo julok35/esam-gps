@@ -3,13 +3,13 @@
 import { $, esc, fmtDist, CARD, state } from './util.js';
 import { distM, bearing } from './parser.js';
 
-var RADIUS = 2000,
+const RADIUS = 2000,
   RETRY = 30000;
-var memo = {},
-  done = {},
-  failed = {},
-  meAt = null,
-  meAlt = null;
+const memo = {};
+const done = {};
+const failed = {};
+let meAt = null;
+let meAlt = null;
 
 function key(p) {
   return p.lat.toFixed(5) + ',' + p.lon.toFixed(5);
@@ -23,17 +23,17 @@ export function fmtDelta(d) {
 }
 
 function getJSON(url, ms) {
-  var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  var t = setTimeout(function () {
+  const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const t = setTimeout(() => {
     if (ctl) ctl.abort();
   }, ms);
   return fetch(url, { signal: ctl ? ctl.signal : undefined, credentials: 'omit' }).then(
-    function (r) {
+    (r) => {
       clearTimeout(t);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     },
-    function (e) {
+    (e) => {
       clearTimeout(t);
       throw e;
     }
@@ -42,15 +42,15 @@ function getJSON(url, ms) {
 
 // Une requête par point et par sorte ; un échec n'est retenté qu'après 30 s (la position du téléphone change chaque seconde)
 function once(kind, p, fn) {
-  var id = kind + ':' + key(p);
+  const id = kind + ':' + key(p);
   if (memo[id]) return memo[id];
   if (failed[id] && Date.now() - failed[id] < RETRY) return Promise.reject(new Error('échec récent'));
   memo[id] = fn(p).then(
-    function (v) {
+    (v) => {
       done[id] = v;
       return v;
     },
-    function (e) {
+    (e) => {
       delete memo[id];
       failed[id] = Date.now();
       throw e;
@@ -62,7 +62,7 @@ function known(kind, p) {
   return done[kind + ':' + key(p)];
 }
 function pending(kind, p) {
-  var id = kind + ':' + key(p);
+  const id = kind + ':' + key(p);
   return !!memo[id] && !(id in done);
 }
 
@@ -75,8 +75,8 @@ function altIgn(p) {
       p.lat.toFixed(6) +
       '&resource=ign_rge_alti_wld&zonly=true',
     8000
-  ).then(function (j) {
-    var z = j && j.elevations && j.elevations[0];
+  ).then((j) => {
+    let z = j && j.elevations && j.elevations[0];
     if (z && typeof z === 'object') z = z.z;
     if (typeof z !== 'number' || !isFinite(z) || z < -1000) throw new Error('hors modèle IGN'); // -99999 : pas de donnée
     return z;
@@ -86,8 +86,8 @@ function altCopernicus(p) {
   return getJSON(
     'https://api.open-meteo.com/v1/elevation?latitude=' + p.lat.toFixed(6) + '&longitude=' + p.lon.toFixed(6),
     8000
-  ).then(function (j) {
-    var z = j && j.elevation && j.elevation[0];
+  ).then((j) => {
+    const z = j && j.elevation && j.elevation[0];
     if (typeof z !== 'number' || !isFinite(z)) throw new Error('altitude inconnue');
     return z;
   });
@@ -96,23 +96,15 @@ function altCopernicus(p) {
 function altsIgn(ps) {
   return getJSON(
     'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=' +
-      ps
-        .map(function (p) {
-          return p.lon.toFixed(6);
-        })
-        .join('|') +
+      ps.map((p) => p.lon.toFixed(6)).join('|') +
       '&lat=' +
-      ps
-        .map(function (p) {
-          return p.lat.toFixed(6);
-        })
-        .join('|') +
+      ps.map((p) => p.lat.toFixed(6)).join('|') +
       '&resource=ign_rge_alti_wld&zonly=true',
     12000
-  ).then(function (j) {
-    var zs = (j && j.elevations) || [];
+  ).then((j) => {
+    let zs = (j && j.elevations) || [];
     if (zs.length !== ps.length) throw new Error('réponse IGN incomplète');
-    zs = zs.map(function (z) {
+    zs = zs.map((z) => {
       if (z && typeof z === 'object') z = z.z;
       return typeof z === 'number' && isFinite(z) && z > -1000 ? z : null;
     });
@@ -123,45 +115,29 @@ function altsIgn(ps) {
 function altsCopernicus(ps) {
   return getJSON(
     'https://api.open-meteo.com/v1/elevation?latitude=' +
-      ps
-        .map(function (p) {
-          return p.lat.toFixed(6);
-        })
-        .join(',') +
+      ps.map((p) => p.lat.toFixed(6)).join(',') +
       '&longitude=' +
-      ps
-        .map(function (p) {
-          return p.lon.toFixed(6);
-        })
-        .join(','),
+      ps.map((p) => p.lon.toFixed(6)).join(','),
     12000
-  ).then(function (j) {
-    var zs = (j && j.elevation) || [];
+  ).then((j) => {
+    const zs = (j && j.elevation) || [];
     if (zs.length !== ps.length) throw new Error('altitudes inconnues');
-    return zs.map(function (z) {
-      return typeof z === 'number' && isFinite(z) ? z : null;
-    });
+    return zs.map((z) => (typeof z === 'number' && isFinite(z) ? z : null));
   });
 }
-var altsMemo = {};
+const altsMemo = {};
 export function altitudes(ps) {
-  var id = ps.map(key).join(';');
+  const id = ps.map(key).join(';');
   if (altsMemo[id]) return altsMemo[id];
-  var packs = [];
-  for (var i = 0; i < ps.length; i += 100) packs.push(ps.slice(i, i + 100));
-  altsMemo[id] = Promise.all(
-    packs.map(function (pk) {
-      return altsIgn(pk).catch(function () {
-        return altsCopernicus(pk);
-      });
-    })
-  ).then(
-    function (r) {
-      var zs = [].concat.apply([], r);
+  const packs = [];
+  for (let i = 0; i < ps.length; i += 100) packs.push(ps.slice(i, i + 100));
+  altsMemo[id] = Promise.all(packs.map((pk) => altsIgn(pk).catch(() => altsCopernicus(pk)))).then(
+    (r) => {
+      const zs = [].concat.apply([], r);
       // les points du suivi servent aussi à la fiche du point (même cache que l'altitude d'un point seul)
-      ps.forEach(function (p, i) {
+      ps.forEach((p, i) => {
         if (zs[i] !== null) {
-          var k = 'alt:' + key(p);
+          const k = 'alt:' + key(p);
           if (!(k in done)) {
             done[k] = zs[i];
             memo[k] = Promise.resolve(zs[i]);
@@ -170,7 +146,7 @@ export function altitudes(ps) {
       });
       return zs;
     },
-    function (e) {
+    (e) => {
       delete altsMemo[id];
       throw e;
     }
@@ -183,11 +159,7 @@ export function knownAlt(p) {
 }
 
 export function altitude(p) {
-  return once('alt', p, function () {
-    return altIgn(p).catch(function () {
-      return altCopernicus(p);
-    });
-  });
+  return once('alt', p, () => altIgn(p).catch(() => altCopernicus(p)));
 }
 
 // ---------- Commune : base officielle en France, OpenStreetMap ailleurs (Suisse, Italie...) ----------
@@ -199,7 +171,7 @@ function communeFr(p) {
       p.lon.toFixed(6) +
       '&fields=nom,codeDepartement&format=json',
     8000
-  ).then(function (a) {
+  ).then((a) => {
     if (!a || !a.length) throw new Error('hors France');
     return { nom: a[0].nom, dep: a[0].codeDepartement || '' };
   });
@@ -211,23 +183,19 @@ function communeOsm(p) {
       '&lon=' +
       p.lon.toFixed(6),
     8000
-  ).then(function (j) {
-    var a = (j && j.address) || {},
+  ).then((j) => {
+    const a = (j && j.address) || {},
       nom = a.city || a.town || a.village || a.municipality || a.hamlet;
     if (!nom) throw new Error('commune inconnue');
-    return { nom: nom, pays: a.country_code && a.country_code !== 'fr' ? a.country || '' : '' };
+    return { nom, pays: a.country_code && a.country_code !== 'fr' ? a.country || '' : '' };
   });
 }
 export function commune(p) {
-  return once('com', p, function () {
-    return communeFr(p).catch(function () {
-      return communeOsm(p);
-    });
-  });
+  return once('com', p, () => communeFr(p).catch(() => communeOsm(p)));
 }
 
 // ---------- Lieux nommés proches (OpenStreetMap, Overpass) ----------
-var KIND = {
+const KIND = {
   peak: 'sommet',
   saddle: 'col',
   waterfall: 'cascade',
@@ -251,37 +219,35 @@ export function kindOf(t) {
 
 // Éléments Overpass -> repères triés par distance au point ; distance au bord pour un lac ou un glacier
 export function nearby(els, p, max) {
-  var byName = {},
+  const byName = {},
     out = [];
-  (els || []).forEach(function (e) {
-    var t = e.tags || {},
+  (els || []).forEach((e) => {
+    const t = e.tags || {},
       kind = kindOf(t),
       name = t['name:fr'] || t.name;
     if (!kind || !name) return;
-    var pts = e.geometry || (e.lat != null ? [e] : e.center ? [e.center] : []),
-      best = null;
-    pts.forEach(function (q) {
+    const pts = e.geometry || (e.lat != null ? [e] : e.center ? [e.center] : []);
+    let best = null;
+    pts.forEach((q) => {
       if (q && q.lat != null) {
-        var d = distM(p, q);
-        if (!best || d < best.d) best = { d: d, q: q };
+        const d = distM(p, q);
+        if (!best || d < best.d) best = { d, q };
       }
     });
     if (!best) return;
-    var id = name.toLowerCase(),
+    const id = name.toLowerCase(),
       prev = byName[id];
     if (prev && prev.d <= best.d) return; // même nom (col noté deux fois) : le plus proche
-    var item = { name: name, kind: kind, d: best.d, b: bearing(best.q, p) };
+    const item = { name, kind, d: best.d, b: bearing(best.q, p) };
     if (prev) out.splice(out.indexOf(prev), 1);
     byName[id] = item;
     out.push(item);
   });
-  out.sort(function (a, b) {
-    return a.d - b.d;
-  });
+  out.sort((a, b) => a.d - b.d);
   return out.slice(0, max || 3);
 }
 function overpassQuery(p) {
-  var a = '(around:' + RADIUS + ',' + p.lat.toFixed(5) + ',' + p.lon.toFixed(5) + ')';
+  const a = '(around:' + RADIUS + ',' + p.lat.toFixed(5) + ',' + p.lon.toFixed(5) + ')';
   return (
     '[out:json][timeout:10];(' +
     'node' +
@@ -306,14 +272,12 @@ function overpassQuery(p) {
   );
 }
 export function lieux(p) {
-  return once('osm', p, function () {
-    var q = '/api/interpreter?data=' + encodeURIComponent(overpassQuery(p));
+  return once('osm', p, () => {
+    const q = '/api/interpreter?data=' + encodeURIComponent(overpassQuery(p));
     // serveur principal souvent chargé : un second serveur en secours
     return getJSON('https://overpass-api.de' + q, 12000)
-      .catch(function () {
-        return getJSON('https://overpass.kumi.systems' + q, 15000);
-      })
-      .then(function (j) {
+      .catch(() => getJSON('https://overpass.kumi.systems' + q, 15000))
+      .then((j) => {
         if (!j || !j.elements) throw new Error('réponse vide');
         return nearby(j.elements, p, 3);
       });
@@ -329,9 +293,9 @@ function comTxt(c) {
 
 // ---------- Affichage dans le résultat ----------
 function paint(c) {
-  var box = $('place');
+  const box = $('place');
   if (!box || !state.current || key(state.current) !== key(c)) return;
-  var com = known('com', c),
+  const com = known('com', c),
     alt = known('alt', c),
     near = known('osm', c);
   if (!navigator.onLine && com === undefined && alt === undefined && near === undefined) {
@@ -339,7 +303,7 @@ function paint(c) {
     paintPilot(undefined, false);
     return;
   }
-  var h =
+  let h =
     '<div class="pl1">' +
     (com
       ? '<b>' +
@@ -353,11 +317,7 @@ function paint(c) {
   if (near && near.length)
     h +=
       '<ul class="near">' +
-      near
-        .map(function (n) {
-          return '<li><b>' + esc(n.name) + '</b> <small>' + n.kind + ' · ' + where(n) + '</small></li>';
-        })
-        .join('') +
+      near.map((n) => '<li><b>' + esc(n.name) + '</b> <small>' + n.kind + ' · ' + where(n) + '</small></li>').join('') +
       '</ul>';
   else if (pending('osm', c)) h += '<div class="wait">Lieux proches…</div>';
   else if (near) h += '<div class="wait">Aucun lieu nommé à moins de 2 km</div>';
@@ -369,24 +329,24 @@ function paint(c) {
 
 // Saisie DJI Pilot 2 : altitude ASL du terrain au point, en mètres entiers (champ ASL de « Modifier les repères »)
 function paintPilot(alt, wait) {
-  var el = $('pilotAlt');
+  const el = $('pilotAlt');
   if (!el) return;
   if (alt === undefined) {
     el.innerHTML =
       '<span class="pv off">' + (wait ? '…' : navigator.onLine ? 'inconnue' : 'réseau nécessaire') + '</span>';
     return;
   }
-  var v = String(Math.round(alt));
+  const v = String(Math.round(alt));
   if (el.dataset.v === v) return; // garde la coche « copié »
   el.dataset.v = v;
   el.innerHTML = '<button class="pv" type="button" data-copy="' + v + '"><b>' + v + '</b><i>m</i></button>';
 }
 
 export function showPlace() {
-  var c = state.current;
+  let c = state.current;
   if (!c) return;
   c = { lat: c.lat, lon: c.lon };
-  var again = function () {
+  const again = function () {
     paint(c);
     updateRelief();
   };
@@ -401,27 +361,27 @@ export function showPlace() {
 // Dénivelé : altitude du terrain au point moins altitude du terrain sous le téléphone
 // (l'altitude GPS du téléphone dérive de plusieurs dizaines de mètres)
 export function updateRelief() {
-  var c = state.current,
+  const c = state.current,
     me = state.me,
     el = $('dZ'),
     sub = $('dZme');
   if (!el) return;
   if (me && navigator.onLine && (!meAt || distM(meAt, me) > 25)) {
-    var at = (meAt = { lat: me.lat, lon: me.lon });
+    const at = (meAt = { lat: me.lat, lon: me.lon });
     altitude(at).then(
-      function (z) {
+      (z) => {
         if (at === meAt) {
           meAlt = z;
           updateRelief();
         }
       },
-      function () {
+      () => {
         if (at === meAt) meAt = null;
       }
     ); // nouvel essai au prochain relevé GPS
   }
   sub.textContent = me && meAlt !== null ? 'vous ' + fmtAlt(meAlt) : '';
-  var zc = c ? known('alt', c) : undefined;
+  const zc = c ? known('alt', c) : undefined;
   if (!c || !me) {
     el.textContent = '-';
     el.title = '';
@@ -438,13 +398,13 @@ export function updateRelief() {
 
 // Altitudes du terrain connues au point et sous le téléphone (null si pas encore)
 export function reliefNow() {
-  var zc = state.current ? known('alt', state.current) : undefined;
+  const zc = state.current ? known('alt', state.current) : undefined;
   return zc === undefined || meAlt === null ? null : { point: zc, me: meAlt };
 }
 
 // Lignes ajoutées au message partagé, avec ce qui est déjà connu
 export function placeText(c) {
-  var com = known('com', c),
+  const com = known('com', c),
     alt = known('alt', c),
     near = known('osm', c),
     l = [];

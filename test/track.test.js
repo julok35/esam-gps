@@ -130,3 +130,22 @@ test('message de partage avec altitudes du terrain', () => {
   assert.match(t, /dénivelé \+182 m, en 52 min/);
   assert.doesNotMatch(trackText(pts, '', [null, 1462]), /dénivelé/);
 });
+
+test('GPX : étiquette décodée une seule fois, points auto-fermants lus, positions hors du globe écartées', () => {
+  const tr = parseGPX(
+    '<gpx><wpt lat="45.1" lon="6.1"><name>1 · A &amp;lt; B &amp; C</name></wpt>' +
+      '<wpt lat="95" lon="6.1"><name>hors globe</name></wpt></gpx>'
+  );
+  assert.equal(tr.points.length, 1);
+  assert.equal(tr.points[0].label, 'A &lt; B & C');
+  const seg = parseGPX(
+    '<gpx><trk><trkseg><trkpt lat="45.1" lon="6.1"/><trkpt lat="45.2" lon="6.2" /></trkseg></trk></gpx>'
+  );
+  assert.deepEqual(
+    seg.points.map((p) => [p.lat, p.lon]),
+    [
+      [45.1, 6.1],
+      [45.2, 6.2]
+    ]
+  );
+});

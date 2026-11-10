@@ -9,7 +9,7 @@ import { exifDate } from './exif.js';
 
 // Bibliothèque et worker hébergés avec l'appli (worker de même origine : contrôlé par le service worker, donc utilisable hors ligne).
 // Moteur WebAssembly et langue sur le CDN (versions figées), gardés en cache par le service worker.
-var TESS = {
+const TESS = {
   lib: 'vendor/tesseract/tesseract.min.js',
   worker: 'vendor/tesseract/worker.min.js',
   core: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
@@ -17,7 +17,7 @@ var TESS = {
 };
 // Lectures successives : [largeur visée, marge blanche, mode de segmentation]. Toutes lisent exactement le cadre
 // affiché, avec la photo telle que redressée à l'écran : rien n'est élargi ni tourné en coulisse.
-var PASSES = [
+const PASSES = [
   [900, 0, '6'],
   [900, 0, '11'],
   [1800, 0, '11'],
@@ -27,18 +27,18 @@ var PASSES = [
   [1800, 1, '6'],
   [900, 1, '6']
 ];
-var NEED = 3; // lectures concordantes nécessaires
-export var AUTO_GAIN = 1.5; // Auto : inclinaison appliquée seulement si la mesure est nette
-export var QUAD_GAIN = 3; // perspective : cadre d'écran appliqué seulement si ses bords sont nets
-var TOL = 0.00002; // deux lectures à moins de ~2 m sur un axe votent ensemble
-var FULL_W = 1200; // largeur de la lecture pleine image (recherche de la zone des coordonnées)
+const NEED = 3; // lectures concordantes nécessaires
+export const AUTO_GAIN = 1.5; // Auto : inclinaison appliquée seulement si la mesure est nette
+export const QUAD_GAIN = 3; // perspective : cadre d'écran appliqué seulement si ses bords sont nets
+const TOL = 0.00002; // deux lectures à moins de ~2 m sur un axe votent ensemble
+const FULL_W = 1200; // largeur de la lecture pleine image (recherche de la zone des coordonnées)
 
 // orig : photo telle que prise (aux quarts de tour près) ; base : la même, redressée en perspective si demandé ;
 // work : base tournée de angle degrés, refaite à la demande ; zone : la zone lue, agrandie et contrastée
 // gen : numéro de la photo, incrémenté à chaque nouvelle photo, quart de tour ou perspective (une lecture en cours se sait périmée)
 // sel : cadre de lecture, en fractions (0 à 1) de la photo affichée ; quad : coins du cadre de perspective (pixels de base)
 // enh : réglages de contraste (gain) et de netteté (null : choisie d'elle-même selon le flou de la zone)
-var orig = null,
+let orig = null,
   base = null,
   angle = 0,
   work = null,
@@ -55,16 +55,16 @@ var orig = null,
   photoCb = function () {},
   filesCb = function () {};
 // Vue de la photo : zoom z (1 = photo entière) et décalage en pixels de l'écran ; doigts posés sur la photo
-var view = { z: 1, tx: 0, ty: 0 },
-  ptrs = new Map();
-var ZMAX = 8, // zoom maximal
+let view = { z: 1, tx: 0, ty: 0 };
+const ptrs = new Map();
+const ZMAX = 8, // zoom maximal
   MIN_SIDE = 0.02, // plus petit côté du cadre (fraction de la photo)
   DEAD = 8; // mouvement ignoré (px) avant de bouger quoi que ce soit
 
 // Fichier image -> canevas (orientation EXIF appliquée), grand côté max pixels au plus
 export function loadCanvas(file, max) {
-  var done = function (img) {
-    var s = Math.min(1, (max || 2400) / Math.max(img.width, img.height)),
+  const done = function (img) {
+    const s = Math.min(1, (max || 2400) / Math.max(img.width, img.height)),
       c = document.createElement('canvas');
     c.width = Math.round(img.width * s);
     c.height = Math.round(img.height * s);
@@ -74,25 +74,21 @@ export function loadCanvas(file, max) {
   };
   return (
     window.createImageBitmap
-      ? createImageBitmap(file, { imageOrientation: 'from-image' }).catch(function () {
-          return viaImg(file);
-        })
+      ? createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => viaImg(file))
       : viaImg(file)
   ).then(done);
 }
 // Date de prise de vue (EXIF), sinon date du fichier : { t, exif : vrai si lue dans la photo }
 export function photoDate(file) {
-  return (file.slice ? file.slice(0, 131072).arrayBuffer() : Promise.reject()).then(
-    function (b) {
-      var t = exifDate(b);
-      return t ? { t: t, exif: true } : { t: file.lastModified || Date.now(), exif: false };
+  return (file.slice ? file.slice(0, 131072).arrayBuffer() : Promise.reject(new Error('fichier illisible'))).then(
+    (b) => {
+      const t = exifDate(b);
+      return t ? { t, exif: true } : { t: file.lastModified || Date.now(), exif: false };
     },
-    function () {
-      return { t: file.lastModified || Date.now(), exif: false };
-    }
+    () => ({ t: file.lastModified || Date.now(), exif: false })
   );
 }
-var photoT = null, // date de la photo affichée (ms) ou null
+let photoT = null, // date de la photo affichée (ms) ou null
   photoF = null; // fichier de la photo affichée
 export function photoTime() {
   return photoT;
@@ -100,49 +96,76 @@ export function photoTime() {
 export function photoFile() {
   return photoF;
 }
-// t : date de la photo déjà connue (lot), sinon lue dans ses métadonnées
+let loading = 0;
+function photoMsg(t) {
+  $('photoMsg').textContent = t || '';
+  $('photoMsg').hidden = !t;
+}
+// t : date de la photo déjà connue (lot), sinon lue dans ses métadonnées.
+// Retour : promesse, vrai si la photo est affichée (faux : illisible, ou une autre photo choisie entre-temps)
 export function loadFile(file, t) {
-  if (!file) return;
-  photoF = file;
-  photoT = t || null;
-  if (!t)
-    photoDate(file).then(function (d) {
-      photoT = d.exif ? d.t : null;
-    });
-  loadCanvas(file, 2400).then(function (c) {
-    orig = c;
-    base = orig;
-    angle = 0;
-    work = null;
-    quad = null;
-    enh = { contrast: 1, sharp: null };
-    gen++;
-    showAngle();
-    clearZone();
-    setMode('frame');
-    sel = { x: 0.15, y: 0.35, w: 0.7, h: 0.35 };
-    $('cropBox').hidden = false;
-    $('prog').hidden = true;
-    showWork();
-    photoCb(file);
-  });
+  if (!file) return Promise.resolve(false);
+  const mine = ++loading;
+  photoMsg('');
+  return loadCanvas(file, 2400).then(
+    (c) => {
+      if (mine !== loading) return false; // une autre photo a été choisie entre-temps
+      photoF = file;
+      photoT = t || null;
+      if (!t)
+        photoDate(file).then((d) => {
+          if (photoF === file) photoT = d.exif ? d.t : null;
+        });
+      showPhoto(c);
+      photoCb(file);
+      return true;
+    },
+    (err) => {
+      console.error('Photo :', err);
+      if (mine === loading)
+        photoMsg(
+          'Photo illisible sur ce téléphone (format non reconnu ou fichier abîmé) : essayez une capture d’écran, ou tapez le texte.'
+        );
+      return false;
+    }
+  );
+}
+// Photo chargée : affichée, réglages et cadre remis à zéro
+function showPhoto(c) {
+  orig = c;
+  base = orig;
+  angle = 0;
+  work = null;
+  quad = null;
+  enh = { contrast: 1, sharp: null };
+  gen++;
+  showAngle();
+  clearZone();
+  setMode('frame');
+  sel = { x: 0.15, y: 0.35, w: 0.7, h: 0.35 };
+  $('cropBox').hidden = false;
+  $('prog').hidden = true;
+  showWork();
 }
 function viaImg(file) {
-  return new Promise(function (res, rej) {
-    var u = URL.createObjectURL(file),
+  return new Promise((res, rej) => {
+    const u = URL.createObjectURL(file),
       im = new Image();
     im.onload = function () {
       URL.revokeObjectURL(u);
       res(im);
     };
-    im.onerror = rej;
+    im.onerror = function () {
+      URL.revokeObjectURL(u);
+      rej(new Error('image illisible'));
+    };
     im.src = u;
   });
 }
 // Photo tournée de deg degrés autour de son centre, dans un canevas agrandi pour n'en rien perdre ; échelle s.
 // Les coins laissés vides prennent la teinte moyenne de la photo, pour ne pas fausser le contraste de la lecture.
 function rotDimsOf(img, deg) {
-  var a = (deg * Math.PI) / 180,
+  const a = (deg * Math.PI) / 180,
     c = Math.abs(Math.cos(a)),
     si = Math.abs(Math.sin(a));
   return { w: img.width * c + img.height * si, h: img.width * si + img.height * c };
@@ -151,20 +174,20 @@ function rotDims(deg) {
   return rotDimsOf(base, deg);
 }
 function meanColor(img) {
-  var g = document.createElement('canvas').getContext('2d');
+  const g = document.createElement('canvas').getContext('2d');
   g.canvas.width = g.canvas.height = 1;
   g.drawImage(img, 0, 0, 1, 1);
   return g.getImageData(0, 0, 1, 1).data;
 }
 export function rotateCanvas(img, deg, s) {
-  var r = rotDimsOf(img, deg),
+  const r = rotDimsOf(img, deg),
     c = document.createElement('canvas');
   s = s || 1;
   c.width = Math.max(1, Math.round(r.w * s));
   c.height = Math.max(1, Math.round(r.h * s));
-  var g = c.getContext('2d');
+  const g = c.getContext('2d');
   if (deg) {
-    var m = meanColor(img);
+    const m = meanColor(img);
     g.fillStyle = 'rgb(' + m[0] + ',' + m[1] + ',' + m[2] + ')';
     g.fillRect(0, 0, c.width, c.height);
   }
@@ -193,7 +216,7 @@ export function photoGen() {
 }
 function showWork(keep) {
   // affichage assez fin pour rester net une fois zoomé
-  var r = rotDims(angle),
+  const r = rotDims(angle),
     s = Math.min(1, 2000 / Math.max(r.w, r.h)),
     c = drawRotated(angle, s);
   cv.width = c.width;
@@ -211,7 +234,7 @@ function dims() {
   return { W: cv.offsetWidth || 1, H: cv.offsetHeight || 1 };
 }
 function applyView() {
-  var d = dims();
+  const d = dims();
   view.z = clamp(view.z, 1, ZMAX);
   view.tx = clamp(view.tx, d.W - d.W * view.z, 0);
   view.ty = clamp(view.ty, d.H - d.H * view.z, 0);
@@ -223,7 +246,7 @@ function applyView() {
 }
 // cadre en coordonnées de la photo (0 à 1), placé à l'écran selon le zoom
 function drawSel() {
-  var d = dims(),
+  const d = dims(),
     kx = d.W * view.z,
     ky = d.H * view.z;
   selEl.style.left = view.tx + sel.x * kx + 'px';
@@ -232,12 +255,12 @@ function drawSel() {
   selEl.style.height = sel.h * ky + 'px';
 }
 function local(e) {
-  var r = stage.getBoundingClientRect();
+  const r = stage.getBoundingClientRect();
   return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 // zoom vers z en gardant immobile le point p de l'écran
 function zoomAt(z, p) {
-  var nz = clamp(z, 1, ZMAX);
+  const nz = clamp(z, 1, ZMAX);
   view.tx = p.x - ((p.x - view.tx) * nz) / view.z;
   view.ty = p.y - ((p.y - view.ty) * nz) / view.z;
   view.z = nz;
@@ -245,36 +268,36 @@ function zoomAt(z, p) {
 }
 // centre du cadre à l'écran (ramené dans la photo visible) : les boutons zooment vers lui
 function selCenter() {
-  var d = dims();
+  const d = dims();
   return {
     x: clamp(view.tx + (sel.x + sel.w / 2) * d.W * view.z, 0, d.W),
     y: clamp(view.ty + (sel.y + sel.h / 2) * d.H * view.z, 0, d.H)
   };
 }
 // Redressement : la photo tourne de nd degrés ; le cadre reste sur le même endroit de la photo, au même endroit de l'écran
-var TILT = 45;
+const TILT = 45;
 export function setAngle(nd) {
   nd = clamp(Math.round(nd * 10) / 10, -TILT, TILT);
   if (!base || nd === angle) {
     showAngle();
     return;
   }
-  var o = rotDims(angle),
-    n = rotDims(nd),
-    d = dims(),
-    a = ((nd - angle) * Math.PI) / 180,
-    c = Math.cos(a),
-    s = Math.sin(a);
-  var mx = sel.x + sel.w / 2,
-    my = sel.y + sel.h / 2,
-    sp = { x: view.tx + mx * d.W * view.z, y: view.ty + my * d.H * view.z };
-  var cx = (mx - 0.5) * o.w,
+  const o = rotDims(angle);
+  const n = rotDims(nd);
+  let d = dims();
+  const a = ((nd - angle) * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  let mx = sel.x + sel.w / 2;
+  let my = sel.y + sel.h / 2;
+  const sp = { x: view.tx + mx * d.W * view.z, y: view.ty + my * d.H * view.z };
+  const cx = (mx - 0.5) * o.w,
     cy = (my - 0.5) * o.h,
     w = Math.min(1, (sel.w * o.w) / n.w),
     h = Math.min(1, (sel.h * o.h) / n.h);
   mx = (cx * c - cy * s) / n.w + 0.5;
   my = (cx * s + cy * c) / n.h + 0.5;
-  sel = { x: clamp(mx - w / 2, 0, 1 - w), y: clamp(my - h / 2, 0, 1 - h), w: w, h: h };
+  sel = { x: clamp(mx - w / 2, 0, 1 - w), y: clamp(my - h / 2, 0, 1 - h), w, h };
   angle = nd;
   work = null;
   showAngle();
@@ -292,39 +315,39 @@ function showAngle() {
   $('tVal').textContent = (angle > 0 ? '+' : angle < 0 ? '−' : '') + String(Math.abs(angle)).replace('.', ',') + '°';
 }
 // lignes horizontales sur la photo pendant le réglage, pour aligner le texte à l'œil
-var guideT;
+let guideT;
 function guides() {
   stage.classList.add('leveling');
   clearTimeout(guideT);
-  guideT = setTimeout(function () {
+  guideT = setTimeout(() => {
     stage.classList.remove('leveling');
   }, 1500);
 }
 // Niveaux de gris du cadre box (fractions) de img, à la taille de la photo ou en dessous (jamais agrandi : l'agrandissement
 // floute les contours et fausse les mesures), maxW pixels de large au plus. Retour : { g, w, h, k : échelle appliquée }
 export function grayOf(img, box, maxW) {
-  var b = box || { x: 0, y: 0, w: 1, h: 1 },
+  const b = box || { x: 0, y: 0, w: 1, h: 1 },
     sx = b.x * img.width,
     sy = b.y * img.height,
     sw = Math.max(8, b.w * img.width),
     sh = Math.max(8, b.h * img.height);
-  var k = Math.min(1, (maxW || 800) / Math.max(sw, sh)),
+  const k = Math.min(1, (maxW || 800) / Math.max(sw, sh)),
     c = document.createElement('canvas');
   c.width = Math.round(sw * k);
   c.height = Math.round(sh * k);
-  var g = c.getContext('2d', { willReadFrequently: true });
+  const g = c.getContext('2d', { willReadFrequently: true });
   g.imageSmoothingQuality = 'high';
   g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
-  return { g: toGray(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height), w: c.width, h: c.height, k: k };
+  return { g: toGray(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height), w: c.width, h: c.height, k };
 }
 // Inclinaison du texte dans le cadre de img : { deg, gain }
 export function leanIn(img, box, max) {
-  var G = grayOf(img, box, 800);
+  const G = grayOf(img, box, 800);
   return skewAngle(G.g, G.w, G.h, max);
 }
 function autoLevel() {
   if (!base) return;
-  var r = leanIn(getWork(), sel, TILT);
+  const r = leanIn(getWork(), sel, TILT);
   if (r.gain < AUTO_GAIN) {
     flash($('tAuto'), 'Pas net');
     return;
@@ -337,7 +360,7 @@ function autoLevel() {
   guides();
 }
 function two() {
-  var p = Array.from(ptrs.values());
+  const p = Array.from(ptrs.values());
   return {
     d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1,
     m: { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 }
@@ -346,7 +369,7 @@ function two() {
 
 // ---------- Perspective ----------
 // Mode de la scène : 'frame' (cadre de lecture, réglette d'inclinaison) ou 'persp' (quatre coins sur les bords de l'écran)
-var mode = 'frame';
+let mode = 'frame';
 export function setMode(m) {
   mode = m;
   $('cropBox').classList.toggle('persp', m === 'persp');
@@ -357,7 +380,7 @@ export function getMode() {
   return mode;
 }
 function defaultQuad() {
-  var w = base.width,
+  const w = base.width,
     h = base.height;
   quad = [
     [w * 0.1, h * 0.1],
@@ -368,33 +391,24 @@ function defaultQuad() {
 }
 // coins (pixels de base, photo non tournée) placés à l'écran : en mode perspective la réglette est à 0
 function drawQuad() {
-  var svg = $('quadSvg');
+  const svg = $('quadSvg');
   if (!svg || !base || mode !== 'persp' || !quad) {
     if (svg) svg.setAttribute('hidden', ''); // un élément SVG n'a pas de propriété hidden
 
-    stage.querySelectorAll('.qh').forEach(function (h) {
+    stage.querySelectorAll('.qh').forEach((h) => {
       h.hidden = true;
     });
     return;
   }
-  var d = dims(),
+  const d = dims(),
     kx = (d.W * view.z) / base.width,
     ky = (d.H * view.z) / base.height,
-    pts = quad.map(function (p) {
-      return [view.tx + p[0] * kx, view.ty + p[1] * ky];
-    });
+    pts = quad.map((p) => [view.tx + p[0] * kx, view.ty + p[1] * ky]);
   svg.removeAttribute('hidden');
   svg.setAttribute('viewBox', '0 0 ' + d.W + ' ' + d.H);
-  $('quadPoly').setAttribute(
-    'points',
-    pts
-      .map(function (p) {
-        return p[0] + ',' + p[1];
-      })
-      .join(' ')
-  );
-  stage.querySelectorAll('.qh').forEach(function (h) {
-    var p = pts[+h.dataset.q];
+  $('quadPoly').setAttribute('points', pts.map((p) => p[0] + ',' + p[1]).join(' '));
+  stage.querySelectorAll('.qh').forEach((h) => {
+    const p = pts[+h.dataset.q];
     h.hidden = false;
     h.style.left = p[0] + 'px';
     h.style.top = p[1] + 'px';
@@ -402,12 +416,10 @@ function drawQuad() {
 }
 // Cadre de l'écran trouvé dans la photo : { quad, gain, tilt, cover } ou null
 export function detectQuadIn(img) {
-  var G = grayOf(img, null, 480),
+  const G = grayOf(img, null, 480),
     q = findQuad(G.g, G.w, G.h);
   if (!q) return null;
-  q.quad = q.quad.map(function (p) {
-    return [p[0] / G.k, p[1] / G.k];
-  });
+  q.quad = q.quad.map((p) => [p[0] / G.k, p[1] / G.k]);
   return q;
 }
 export function detectQuad() {
@@ -423,7 +435,7 @@ export function getQuad() {
 // La photo d'origine redressée : le quadrilatère q (pixels de orig) devient un rectangle, avec une marge de 3 %
 // autour pour ne rien perdre si un bord est un peu à côté. Les pixels hors photo prennent sa teinte moyenne.
 export function warpCanvas(img, q, max) {
-  var src = grow(q, 0.03),
+  const src = grow(q, 0.03),
     r = rectFor(src, max || 2400),
     H = homography(src, [
       [0, 0],
@@ -433,11 +445,11 @@ export function warpCanvas(img, q, max) {
     ]),
     Hi = H && invert(H);
   if (!Hi) return null;
-  var g = img.getContext('2d', { willReadFrequently: true }),
+  const g = img.getContext('2d', { willReadFrequently: true }),
     d = g.getImageData(0, 0, img.width, img.height),
     m = meanColor(img),
     out = warp(d.data, img.width, img.height, 4, Hi, r.w, r.h, [m[0], m[1], m[2], 255]);
-  var c = document.createElement('canvas');
+  const c = document.createElement('canvas');
   c.width = r.w;
   c.height = r.h;
   c.getContext('2d').putImageData(new ImageData(out, r.w, r.h), 0, 0);
@@ -445,7 +457,7 @@ export function warpCanvas(img, q, max) {
 }
 export function applyQuad(q) {
   if (!orig || !q) return false;
-  var c = warpCanvas(orig, q, 2400);
+  const c = warpCanvas(orig, q, 2400);
   if (!c) return false;
   base = c;
   quad = q;
@@ -476,7 +488,7 @@ export function resetQuad() {
 // Un doigt : coin = redimensionner, intérieur du cadre = déplacer, coin de perspective = le déplacer, ailleurs = faire
 // glisser la photo zoomée. Deux doigts : zoom, sans toucher au cadre. Rien ne bouge avant DEAD px.
 function initCrop() {
-  stage.addEventListener('pointerdown', function (e) {
+  stage.addEventListener('pointerdown', (e) => {
     if (e.target.closest('.zoombar')) return;
     ptrs.set(e.pointerId, local(e));
     try {
@@ -493,35 +505,31 @@ function initCrop() {
         quad = drag.q;
         drawQuad();
       }
-      var t = two();
+      const t = two();
       drag = { mode: 'pinch', d0: t.d, m0: t.m, z0: view.z, tx0: view.tx, ty0: view.ty };
       return;
     }
     if (ptrs.size > 2) return;
-    var qh = e.target.closest('.qh');
-    var md = qh ? 'quad' : e.target.dataset.h || (e.target === selEl ? 'move' : 'pan');
+    const qh = e.target.closest('.qh');
+    const md = qh ? 'quad' : e.target.dataset.h || (e.target === selEl ? 'move' : 'pan');
     drag = {
       mode: md,
       qi: qh ? +qh.dataset.q : -1,
       p0: local(e),
       s: { x: sel.x, y: sel.y, w: sel.w, h: sel.h },
-      q:
-        quad &&
-        quad.map(function (p) {
-          return p.slice();
-        }),
+      q: quad && quad.map((p) => p.slice()),
       tx0: view.tx,
       ty0: view.ty,
       live: false
     };
   });
-  stage.addEventListener('pointermove', function (e) {
+  stage.addEventListener('pointermove', (e) => {
     if (!drag || !ptrs.has(e.pointerId)) return;
-    var p = local(e);
+    const p = local(e);
     ptrs.set(e.pointerId, p);
     if (drag.mode === 'pinch') {
       if (ptrs.size < 2) return;
-      var t = two(),
+      const t = two(),
         nz = clamp((drag.z0 * t.d) / drag.d0, 1, ZMAX);
       // le point de la photo sous les doigts au départ suit le milieu des doigts
       view.tx = t.m.x - ((drag.m0.x - drag.tx0) * nz) / drag.z0;
@@ -531,7 +539,7 @@ function initCrop() {
       return;
     }
     if (ptrs.size > 1 || !drag.s) return;
-    var dx = p.x - drag.p0.x,
+    const dx = p.x - drag.p0.x,
       dy = p.y - drag.p0.y;
     if (!drag.live) {
       if (Math.hypot(dx, dy) < DEAD) return;
@@ -545,9 +553,9 @@ function initCrop() {
       applyView();
       return;
     }
-    var d = dims();
+    const d = dims();
     if (drag.mode === 'quad') {
-      var q0 = drag.q[drag.qi];
+      const q0 = drag.q[drag.qi];
       quad[drag.qi] = [
         clamp(q0[0] + (dx * base.width) / (d.W * view.z), -base.width * 0.1, base.width * 1.1),
         clamp(q0[1] + (dy * base.height) / (d.H * view.z), -base.height * 0.1, base.height * 1.1)
@@ -555,7 +563,7 @@ function initCrop() {
       drawQuad();
       return;
     }
-    var s = drag.s,
+    const s = drag.s,
       ux = dx / (d.W * view.z),
       uy = dy / (d.H * view.z);
     if (drag.mode === 'move') {
@@ -563,7 +571,7 @@ function initCrop() {
       sel.y = clamp(s.y + uy, 0, 1 - s.h);
     } else {
       // coin : seul le coin tenu bouge, le cadre ne se retourne pas et garde une taille minimale
-      var x0 = s.x,
+      let x0 = s.x,
         y0 = s.y,
         x1 = s.x + s.w,
         y1 = s.y + s.h;
@@ -575,8 +583,8 @@ function initCrop() {
     }
     drawSel();
   });
-  ['pointerup', 'pointercancel'].forEach(function (ev) {
-    stage.addEventListener(ev, function (e) {
+  ['pointerup', 'pointercancel'].forEach((ev) => {
+    stage.addEventListener(ev, (e) => {
       ptrs.delete(e.pointerId);
       // après un zoom à deux doigts, le doigt qui reste ne fait rien jusqu'à ce qu'il soit levé
       if (!ptrs.size) drag = null;
@@ -585,28 +593,28 @@ function initCrop() {
   });
   stage.addEventListener(
     'wheel',
-    function (e) {
+    (e) => {
       if (!base) return;
       e.preventDefault();
       zoomAt(view.z * (e.deltaY < 0 ? 1.25 : 0.8), local(e));
     },
     { passive: false }
   );
-  $('zIn').addEventListener('click', function () {
+  $('zIn').addEventListener('click', () => {
     zoomAt(view.z * 1.6, selCenter());
   });
-  $('zOut').addEventListener('click', function () {
+  $('zOut').addEventListener('click', () => {
     zoomAt(view.z / 1.6, selCenter());
   });
-  window.addEventListener('resize', function () {
+  window.addEventListener('resize', () => {
     if (base && !$('cropBox').hidden) applyView();
   });
-  $('rot').addEventListener('click', function () {
+  $('rot').addEventListener('click', () => {
     if (!base) return;
-    var c = document.createElement('canvas');
+    const c = document.createElement('canvas');
     c.width = orig.height;
     c.height = orig.width;
-    var g = c.getContext('2d');
+    const g = c.getContext('2d');
     g.translate(c.width, 0);
     g.rotate(Math.PI / 2);
     g.drawImage(orig, 0, 0);
@@ -621,46 +629,46 @@ function initCrop() {
     showWork();
   });
   // réglette : rendu au plus une fois par image affichée ; boutons : pas d'un demi-degré
-  var pend = null;
-  $('tilt').addEventListener('input', function (e) {
+  let pend = null;
+  $('tilt').addEventListener('input', (e) => {
     guides();
     if (pend === null)
-      requestAnimationFrame(function () {
-        var v = pend;
+      requestAnimationFrame(() => {
+        const v = pend;
         pend = null;
         setAngle(v);
       });
     pend = +e.target.value;
   });
-  $('tL').addEventListener('click', function () {
+  $('tL').addEventListener('click', () => {
     setAngle(angle - 0.5);
     guides();
   });
-  $('tR').addEventListener('click', function () {
+  $('tR').addEventListener('click', () => {
     setAngle(angle + 0.5);
     guides();
   });
   $('tAuto').addEventListener('click', autoLevel);
-  $('cropAll').addEventListener('click', function () {
+  $('cropAll').addEventListener('click', () => {
     sel = { x: 0, y: 0, w: 1, h: 1 };
     view = { z: 1, tx: 0, ty: 0 };
     applyView();
   });
-  $('cropClose').addEventListener('click', function () {
+  $('cropClose').addEventListener('click', () => {
     $('cropBox').hidden = true;
   });
-  $('reCrop').addEventListener('click', function () {
+  $('reCrop').addEventListener('click', () => {
     openStage('frame');
   });
-  $('zoneClose').addEventListener('click', function () {
+  $('zoneClose').addEventListener('click', () => {
     $('cropBox').hidden = true;
   });
-  $('cam').addEventListener('change', function (e) {
+  $('cam').addEventListener('change', (e) => {
     loadFile(e.target.files[0]);
     e.target.value = '';
   });
-  $('gal').addEventListener('change', function (e) {
-    var fs = Array.from(e.target.files || []);
+  $('gal').addEventListener('change', (e) => {
+    const fs = Array.from(e.target.files || []);
     e.target.value = '';
     // plusieurs photos (ou un lot déjà ouvert) : le lot les prend ; sinon la photo seule
     if (!filesCb(fs)) loadFile(fs[0]);
@@ -702,43 +710,43 @@ export function setEnh(e) {
 // taille réelle), pad : marge blanche autour du texte, shrink : réduction permise (lecture de toute la photo).
 // Retour : { c : canevas, p : réglages appliqués }
 export function prepared(img, box, targetW, pad, shrink) {
-  var sx = Math.round(box.x * img.width),
+  const sx = Math.round(box.x * img.width),
     sy = Math.round(box.y * img.height),
     sw = Math.max(8, Math.round(box.w * img.width)),
     sh = Math.max(8, Math.round(box.h * img.height));
-  var k = Math.max(shrink ? 0.1 : 1, Math.min(8, targetW / sw));
-  var c = document.createElement('canvas');
+  const k = Math.max(shrink ? 0.1 : 1, Math.min(8, targetW / sw));
+  const c = document.createElement('canvas');
   c.width = Math.round(sw * k);
   c.height = Math.round(sh * k);
-  var g = c.getContext('2d', { willReadFrequently: true });
+  const g = c.getContext('2d', { willReadFrequently: true });
   g.imageSmoothingQuality = 'high';
   g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
-  var d = g.getImageData(0, 0, c.width, c.height),
+  const d = g.getImageData(0, 0, c.width, c.height),
     gray = toGray(d.data, c.width, c.height),
     b = stretchBounds(gray),
     p = { lo: b.lo, hi: b.hi, contrast: enh.contrast, sharp: enh.sharp };
   if (p.sharp === null) {
-    var G = grayOf(img, box, 800);
+    const G = grayOf(img, box, 800);
     p.sharp = autoParams(G.g, G.w, G.h).sharp;
   }
-  var out = enhance(gray, c.width, c.height, p, Math.max(2, Math.round(k * 1.5)));
-  for (var i = 0; i < out.length; i++) d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = out[i];
+  const out = enhance(gray, c.width, c.height, p, Math.max(2, Math.round(k * 1.5)));
+  for (let i = 0; i < out.length; i++) d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = out[i];
   g.putImageData(d, 0, 0);
-  if (!pad) return { c: c, p: p };
-  var m = Math.round(c.height / 4),
+  if (!pad) return { c, p };
+  const m = Math.round(c.height / 4),
     o = document.createElement('canvas');
   o.width = c.width + 2 * m;
   o.height = c.height + 2 * m;
-  var go = o.getContext('2d');
+  const go = o.getContext('2d');
   go.fillStyle = '#fff';
   go.fillRect(0, 0, o.width, o.height);
   go.drawImage(c, m, m);
-  return { c: o, p: p };
+  return { c: o, p };
 }
 
 // Zone lue pour l'œil : exactement le cadre lu, plus net (masque flou), contraste en S
 function zoneImage(img, box) {
-  var c = prepared(img, box, 1400, 0).c,
+  const c = prepared(img, box, 1400, 0).c,
     W = c.width,
     H = c.height,
     g = c.getContext('2d'),
@@ -746,9 +754,9 @@ function zoneImage(img, box) {
     p = d.data,
     gray = toGray(p, W, H),
     sharp = enhance(gray, W, H, { lo: 0, hi: 255, contrast: 1, sharp: 1.2 }, Math.max(2, Math.round(W / 300)));
-  var lut = new Uint8Array(256);
-  for (var v = 0; v < 256; v++) lut[v] = Math.round(255 / (1 + Math.exp(-(v - 128) / 30)));
-  for (var i = 0; i < sharp.length; i++) p[i * 4] = p[i * 4 + 1] = p[i * 4 + 2] = lut[sharp[i]];
+  const lut = new Uint8Array(256);
+  for (let v = 0; v < 256; v++) lut[v] = Math.round(255 / (1 + Math.exp(-(v - 128) / 30)));
+  for (let i = 0; i < sharp.length; i++) p[i * 4] = p[i * 4 + 1] = p[i * 4 + 2] = lut[sharp[i]];
   g.putImageData(d, 0, 0);
   return c;
 }
@@ -763,7 +771,7 @@ export function clearZone() {
 }
 export function showZone(z) {
   zone = z;
-  var c = $('zoneCv');
+  const c = $('zoneCv');
   c.width = z.width;
   c.height = z.height;
   c.getContext('2d').drawImage(z, 0, 0);
@@ -773,8 +781,8 @@ export function showZone(z) {
 }
 
 function loadScript(u) {
-  return new Promise(function (res, rej) {
-    var s = document.createElement('script');
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
     s.src = u;
     s.onload = res;
     s.onerror = rej;
@@ -782,49 +790,49 @@ function loadScript(u) {
   });
 }
 // Chien de garde : Tesseract ne signale pas toujours un moteur qui ne se charge pas ; sans aucun progrès pendant STALL ms, échec
-var STALL = 60000;
+const STALL = 60000;
 // Moteurs de lecture : le premier sert à la photo affichée, les suivants au lot de photos (lectures en parallèle)
-var workers = [];
+const workers = [];
 export function workerCount() {
-  var n = (navigator.hardwareConcurrency || 2) - 1;
+  const n = (navigator.hardwareConcurrency || 2) - 1;
   return Math.max(1, Math.min(3, n));
 }
 export function getWorker(i) {
   i = i || 0;
   if (workers[i]) return workers[i];
-  var timer,
-    settled = false,
-    kick = function (fail) {
-      if (settled) return;
-      clearTimeout(timer);
-      timer = setTimeout(function () {
-        fail(new Error('bloqué'));
-      }, STALL);
-    };
-  var pr = new Promise(function (resolve, reject) {
+  let timer;
+  let settled = false;
+  const kick = function (fail) {
+    if (settled) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      fail(new Error('bloqué'));
+    }, STALL);
+  };
+  const pr = new Promise((resolve, reject) => {
     kick(reject);
     (window.Tesseract ? Promise.resolve() : loadScript(TESS.lib))
-      .then(function () {
-        return Tesseract.createWorker('eng', 1, {
+      .then(() =>
+        Tesseract.createWorker('eng', 1, {
           workerPath: TESS.worker,
           workerBlobURL: false,
           corePath: TESS.core,
           langPath: TESS.lang,
-          logger: function (m) {
+          logger(m) {
             kick(reject);
             if (!i) progCb(m);
           }
-        });
-      })
+        })
+      )
       .then(resolve, reject);
   });
   workers[i] = pr;
   pr.then(
-    function () {
+    () => {
       settled = true;
       clearTimeout(timer);
     },
-    function () {
+    () => {
       settled = true;
       clearTimeout(timer);
       workers[i] = null;
@@ -832,7 +840,7 @@ export function getWorker(i) {
   );
   return pr;
 }
-var LBL = {
+const LBL = {
   'loading tesseract core': 'Chargement du moteur',
   'initializing tesseract': 'Initialisation',
   'loading language traineddata': 'Chargement de la langue',
@@ -854,42 +862,38 @@ export function setProgress(onProg, label) {
 // peut encore confirmer la longitude. Groupe de vote : { v : valeur retenue, w : poids cumulé, n : nombre de lectures,
 // runs : indices des lectures, vals : poids par valeur exacte }. Les valeurs à moins de TOL degré votent ensemble.
 function addVote(list, v, w, idx) {
-  var o = null;
-  for (var i = 0; i < list.length; i++)
+  let o = null;
+  for (let i = 0; i < list.length; i++)
     if (Math.abs(list[i].v - v) < TOL) {
       o = list[i];
       break;
     }
   if (!o) {
-    o = { v: v, w: 0, n: 0, runs: [], vals: {} };
+    o = { v, w: 0, n: 0, runs: [], vals: {} };
     list.push(o);
   }
   o.w += w;
   o.n++;
   o.runs.push(idx);
-  var k = v.toFixed(6);
+  const k = v.toFixed(6);
   o.vals[k] = (o.vals[k] || 0) + w;
   // valeur retenue pour le groupe : la plus lue
-  o.v = +Object.keys(o.vals).sort(function (a, b) {
-    return o.vals[b] - o.vals[a];
-  })[0];
+  o.v = +Object.keys(o.vals).sort((a, b) => o.vals[b] - o.vals[a])[0];
 }
 // runs : [{ txt, p : résultat de parse() }]. Une lecture hors zone d'intervention ne vote pas ; une lecture avec
 // avertissements vote pour 0,6. Retour : pour chaque axe, le groupe en tête (best) et son suivant (second), par poids.
 export function votes(runs) {
-  var V = { lat: [], lon: [] };
-  runs.forEach(function (r, idx) {
+  const V = { lat: [], lon: [] };
+  runs.forEach((r, idx) => {
     if (!r.p.ok) return;
-    var b = r.p.best;
+    const b = r.p.best;
     if (!inRegion(b.lat, b.lon)) return;
-    var w = b.notes.length ? 0.6 : 1;
+    const w = b.notes.length ? 0.6 : 1;
     addVote(V.lat, b.lat, w, idx);
     addVote(V.lon, b.lon, w, idx);
   });
-  var win = function (list) {
-    var s = list.slice().sort(function (a, b) {
-      return b.w - a.w;
-    });
+  const win = function (list) {
+    const s = list.slice().sort((a, b) => b.w - a.w);
     return { best: s[0] || null, second: s[1] || null };
   };
   return { lat: win(V.lat), lon: win(V.lon) };
@@ -902,46 +906,40 @@ export function firm(x) {
 // Lecture pleine image (mode texte épars), pour trouver où sont les coordonnées : { lines, text } (lignes avec mots,
 // boîtes en pixels de img et confiances). stale() : vrai si la photo a changé entre-temps.
 export function recognizeFull(img, stale, wi) {
-  var pr = prepared(img, { x: 0, y: 0, w: 1, h: 1 }, FULL_W, 0, true),
+  const pr = prepared(img, { x: 0, y: 0, w: 1, h: 1 }, FULL_W, 0, true),
     k = pr.c.width / img.width;
-  var fix = function (b) {
+  const fix = function (b) {
     return { x0: b.x0 / k, y0: b.y0 / k, x1: b.x1 / k, y1: b.y1 / k };
   };
-  return getWorker(wi).then(function (w) {
+  return getWorker(wi).then((w) => {
     if (stale()) return null;
     return w
       .setParameters({ tessedit_pageseg_mode: '11' })
-      .then(function () {
-        return w.recognize(pr.c);
-      })
-      .then(function (r) {
-        var lines = [];
-        (r.data.blocks || []).forEach(function (bl) {
-          (bl.paragraphs || []).forEach(function (pa) {
-            (pa.lines || []).forEach(function (l) {
+      .then(() => w.recognize(pr.c))
+      .then((r) => {
+        const lines = [];
+        (r.data.blocks || []).forEach((bl) => {
+          (bl.paragraphs || []).forEach((pa) => {
+            (pa.lines || []).forEach((l) => {
               lines.push({
                 text: l.text,
                 confidence: l.confidence,
                 bbox: fix(l.bbox),
-                words: (l.words || []).map(function (wd) {
-                  return { text: wd.text, confidence: wd.confidence, bbox: fix(wd.bbox) };
-                })
+                words: (l.words || []).map((wd) => ({ text: wd.text, confidence: wd.confidence, bbox: fix(wd.bbox) }))
               });
             });
           });
         });
         if (!lines.length && r.data.lines)
-          r.data.lines.forEach(function (l) {
+          r.data.lines.forEach((l) => {
             lines.push({
               text: l.text,
               confidence: l.confidence,
               bbox: fix(l.bbox),
-              words: (l.words || []).map(function (wd) {
-                return { text: wd.text, confidence: wd.confidence, bbox: fix(wd.bbox) };
-              })
+              words: (l.words || []).map((wd) => ({ text: wd.text, confidence: wd.confidence, bbox: fix(wd.bbox) }))
             });
           });
-        return { lines: lines, text: r.data.text || '', p: pr.p };
+        return { lines, text: r.data.text || '', p: pr.p };
       });
   });
 }
@@ -954,48 +952,46 @@ export function recognizeFull(img, stale, wi) {
  *   none : aucune coordonnée dans aucune lecture, enh : réglages appliqués }
  */
 export function readBox(img, box, onPass, stale, wi) {
-  var imgs = {},
-    runs = [],
-    p0 = null;
-  var done = function () {
-    var v = votes(runs);
+  const imgs = {};
+  const runs = [];
+  let p0 = null;
+  const done = function () {
+    const v = votes(runs);
     return firm(v.lat) && firm(v.lon);
   };
-  return getWorker(wi).then(function (w) {
-    var i = 0;
-    var step = function () {
+  return getWorker(wi).then((w) => {
+    let i = 0;
+    const step = function () {
       if (i >= PASSES.length || done() || stale()) return;
-      var ps = PASSES[i++],
+      const ps = PASSES[i++],
         ik = ps[0] + '_' + ps[1];
       onPass(i);
       if (!imgs[ik]) {
-        var pr = prepared(img, box, ps[0], ps[1]);
+        const pr = prepared(img, box, ps[0], ps[1]);
         imgs[ik] = pr.c;
         p0 = p0 || pr.p;
       }
       return w
         .setParameters({ tessedit_pageseg_mode: ps[2] })
-        .then(function () {
-          return w.recognize(imgs[ik]);
-        })
-        .then(function (r) {
-          var txt = (r.data.text || '').trim(),
-            words = [];
-          (r.data.blocks || []).forEach(function (bl) {
-            (bl.paragraphs || []).forEach(function (pa) {
-              (pa.lines || []).forEach(function (l) {
-                (l.words || []).forEach(function (wd) {
+        .then(() => w.recognize(imgs[ik]))
+        .then((r) => {
+          const txt = (r.data.text || '').trim();
+          let words = [];
+          (r.data.blocks || []).forEach((bl) => {
+            (bl.paragraphs || []).forEach((pa) => {
+              (pa.lines || []).forEach((l) => {
+                (l.words || []).forEach((wd) => {
                   words.push({ text: wd.text, confidence: wd.confidence });
                 });
               });
             });
           });
           if (!words.length && r.data.words) words = r.data.words;
-          runs.push({ txt: txt, p: parse(txt), words: words });
+          runs.push({ txt, p: parse(txt), words });
         })
         .then(step);
     };
-    return step().then(function () {
+    return step().then(() => {
       if (stale()) return null;
       return settle(runs, p0);
     });
@@ -1003,34 +999,30 @@ export function readBox(img, box, onPass, stale, wi) {
 }
 // Résultat d'une série de lectures (voir readBox)
 export function settle(runs, enhUsed) {
-  var v = votes(runs),
+  const v = votes(runs),
     total = runs.length,
-    out = { runs: runs, v: v, total: total, enh: enhUsed, rival: false, tess: null, sure: false, none: false };
+    out = { runs, v, total, enh: enhUsed, rival: false, tess: null, sure: false, none: false };
   if (!v.lat.best || !v.lon.best) {
-    var r0 = runs[0] || { txt: '', p: parse('') };
+    const r0 = runs[0] || { txt: '', p: parse('') };
     out.text = r0.txt;
     out.p = r0.p;
     out.none = true;
     return out;
   }
-  var LA = v.lat.best,
-    LO = v.lon.best,
-    text,
-    lastParse,
-    chosen = -1;
+  const LA = v.lat.best;
+  const LO = v.lon.best;
+  let text;
+  let lastParse;
+  let chosen = -1;
   // une lecture qui contient les deux valeurs gagnantes sert de texte de référence (de préférence exactement les valeurs retenues)
-  var both = LA.runs.filter(function (x) {
-    return LO.runs.indexOf(x) >= 0;
-  });
-  var rank = function (x) {
-    var b = runs[x].p.best;
+  const both = LA.runs.filter((x) => LO.runs.indexOf(x) >= 0);
+  const rank = function (x) {
+    const b = runs[x].p.best;
     return (
       (b.lat.toFixed(6) === LA.v.toFixed(6) ? 0 : 10) + (b.lon.toFixed(6) === LO.v.toFixed(6) ? 0 : 10) + b.notes.length
     );
   };
-  both.sort(function (a, b) {
-    return rank(a) - rank(b);
-  });
+  both.sort((a, b) => rank(a) - rank(b));
   if (both.length) {
     chosen = both[0];
     text = runs[chosen].txt;
@@ -1041,21 +1033,19 @@ export function settle(runs, enhUsed) {
     if (lastParse.ok)
       lastParse.best.notes.push({ lvl: 'warn', t: 'Latitude et longitude prises dans deux lectures différentes.' });
   }
-  var sure = firm(v.lat) && firm(v.lon);
-  var rival = function (x) {
+  const sure = firm(v.lat) && firm(v.lon);
+  const rival = function (x) {
     return x.second && x.second.n >= x.best.n;
   };
   out.rival = !!(rival(v.lat) || rival(v.lon));
   if (lastParse.ok) {
     if (sure) {
-      lastParse.best.notes = lastParse.best.notes.filter(function (x) {
-        return !/symbole|deux lectures/.test(x.t);
-      });
+      lastParse.best.notes = lastParse.best.notes.filter((x) => !/symbole|deux lectures/.test(x.t));
       lastParse.alts = [];
     } else {
-      var alts = [];
+      const alts = [];
       if (v.lat.second || v.lon.second) {
-        var a2 = {
+        const a2 = {
           lat: (v.lat.second || LA).v,
           lon: (v.lon.second || LO).v,
           seg: 'autre lecture',
@@ -1080,15 +1070,15 @@ export function settle(runs, enhUsed) {
           '. Comparez avec la photo.'
       });
     }
-    lastParse.agree = { n: Math.min(LA.n, LO.n), total: total };
+    lastParse.agree = { n: Math.min(LA.n, LO.n), total };
   }
   // confiance du moteur : mots porteurs de chiffres de la lecture retenue, sinon moyenne des lectures gagnantes
-  var confOf = function (idx) {
-    var cw = 0,
+  const confOf = function (idx) {
+    let cw = 0,
       cn = 0;
-    (runs[idx].words || []).forEach(function (wd) {
+    (runs[idx].words || []).forEach((wd) => {
       if (typeof wd.confidence !== 'number' || !/\d/.test(wd.text || '')) return;
-      var wgt = Math.max(1, wd.text.replace(/\s/g, '').length);
+      const wgt = Math.max(1, wd.text.replace(/\s/g, '').length);
       cw += wd.confidence * wgt;
       cn += wgt;
     });
@@ -1096,17 +1086,11 @@ export function settle(runs, enhUsed) {
   };
   if (chosen >= 0) out.tess = confOf(chosen);
   else {
-    var cs = LA.runs
+    const cs = LA.runs
       .concat(LO.runs)
       .map(confOf)
-      .filter(function (x) {
-        return x !== null;
-      });
-    if (cs.length)
-      out.tess =
-        cs.reduce(function (a, b) {
-          return a + b;
-        }, 0) / cs.length;
+      .filter((x) => x !== null);
+    if (cs.length) out.tess = cs.reduce((a, b) => a + b, 0) / cs.length;
   }
   if (out.tess !== null) out.tess = Math.round(out.tess);
   out.text = text;
@@ -1125,41 +1109,39 @@ export function showZoneOf(img, box) {
 
 // Préparation hors ligne : moteur et langue téléchargés une fois, gardés par le service worker
 function prepareOffline() {
-  var b = $('prepOff');
+  const b = $('prepOff');
   b.disabled = true;
   $('prepMsg').textContent = 'Téléchargement du moteur de lecture (environ 7 Mo)...';
-  var simd =
+  const simd =
     typeof WebAssembly === 'object' &&
     WebAssembly.validate(
       new Uint8Array([
         0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11
       ])
     );
-  var urls = [
+  const urls = [
     TESS.lib,
     TESS.worker,
     TESS.core + '/tesseract-core-' + (simd ? 'simd-' : '') + 'lstm.wasm.js',
     TESS.lang + '/eng.traineddata.gz'
   ];
   Promise.all(
-    urls.map(function (u) {
-      return fetch(u, { mode: 'cors' }).then(function (r) {
-        if (!r.ok) throw 0;
+    urls.map((u) =>
+      fetch(u, { mode: 'cors' }).then((r) => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.blob();
-      });
-    })
+      })
+    )
   )
-    .then(function () {
-      return getWorker();
-    })
-    .then(function () {
+    .then(() => getWorker())
+    .then(() => {
       $('prepMsg').textContent = 'Prêt : la lecture de photo fonctionne maintenant sans réseau sur ce téléphone.';
       flash(b, 'Prêt');
     })
-    .catch(function () {
+    .catch(() => {
       $('prepMsg').textContent = 'Échec du téléchargement : réessayez avec du réseau.';
     })
-    .then(function () {
+    .then(() => {
       b.disabled = false;
     });
 }

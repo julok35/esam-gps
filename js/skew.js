@@ -5,7 +5,7 @@
    2. Affinage par lignes, à 1,5° au plus du pic : projetés perpendiculairement à la bonne inclinaison, les bords des
       caractères s'empilent sur quelques rangées. */
 
-var MAXPTS = 20000,
+const MAXPTS = 20000,
   BIN = 0.5,
   NB = 90 / BIN;
 
@@ -13,13 +13,13 @@ var MAXPTS = 20000,
 // Retour : deg, angle du texte en degrés (positif : le texte descend vers la droite ; pour redresser, tourner de -deg),
 // gain : hauteur du pic d'orientation rapportée à la moyenne (1 = aucune direction privilégiée ; net au-delà de 2).
 export function skewAngle(gray, w, h, maxDeg) {
-  var M = maxDeg || 45,
-    x,
-    y,
-    o,
-    i;
+  const M = maxDeg || 45;
+  let x;
+  let y;
+  let o;
+  let i;
   // léger lissage 3 x 3 : le grain de la photo ne fait pas de faux contours
-  var sg = new Float32Array(w * h);
+  const sg = new Float32Array(w * h);
   for (y = 1; y < h - 1; y++)
     for (x = 1; x < w - 1; x++) {
       o = y * w + x;
@@ -45,14 +45,14 @@ export function skewAngle(gray, w, h, maxDeg) {
   }
   gray = sg;
   // gradients de Sobel ; on garde les contours les plus marqués (les 12 % plus forts), quel que soit le flou
-  var GX = new Float32Array(w * h),
+  const GX = new Float32Array(w * h),
     GY = new Float32Array(w * h),
     MG = new Float32Array(w * h),
     cnt = new Uint32Array(1025);
   for (y = 1; y < h - 1; y++)
     for (x = 1; x < w - 1; x++) {
       o = y * w + x;
-      var a = gray[o - w - 1],
+      const a = gray[o - w - 1],
         b = gray[o - w],
         c = gray[o - w + 1],
         d = gray[o - 1],
@@ -60,7 +60,7 @@ export function skewAngle(gray, w, h, maxDeg) {
         g = gray[o + w - 1],
         k = gray[o + w],
         l = gray[o + w + 1];
-      var gx = c + 2 * f + l - a - 2 * d - g,
+      const gx = c + 2 * f + l - a - 2 * d - g,
         gy = g + 2 * k + l - a - 2 * b - c,
         m = Math.hypot(gx, gy);
       GX[o] = gx;
@@ -68,67 +68,67 @@ export function skewAngle(gray, w, h, maxDeg) {
       MG[o] = m;
       cnt[Math.min(1024, m | 0)]++;
     }
-  var T = 1024,
+  let T = 1024,
     acc = 0;
   while (T > 0 && acc < w * h * 0.12) acc += cnt[T--];
   T = Math.max(24, T);
-  var hist = new Float64Array(NB),
+  const hist = new Float64Array(NB),
     px = [],
     py = [];
   for (y = 1; y < h - 1; y++)
     for (x = 1; x < w - 1; x++) {
       o = y * w + x;
-      m = MG[o];
-      gx = GX[o];
-      gy = GY[o];
+      const m = MG[o],
+        gx = GX[o],
+        gy = GY[o];
       if (m < T) continue;
-      var t = (Math.atan2(gy, gx) * 180) / Math.PI;
+      let t = (Math.atan2(gy, gx) * 180) / Math.PI;
       t = (((t % 90) + 90) % 90) / BIN;
-      var j = Math.floor(t),
+      const j = Math.floor(t),
         r = t - j;
       hist[j % NB] += m * (1 - r);
       hist[(j + 1) % NB] += m * r;
       px.push(x - w / 2);
       py.push(y - h / 2);
     }
-  var n = px.length;
+  const n = px.length;
   if (n < 30) return { deg: 0, gain: 1 };
   // lissage circulaire sur ±1,5°
-  var sm = new Float64Array(NB),
-    W = [1, 2, 3, 4, 3, 2, 1],
-    sum = 0,
-    best = 0;
+  const sm = new Float64Array(NB);
+  const W = [1, 2, 3, 4, 3, 2, 1];
+  let sum = 0;
+  let best = 0;
   for (i = 0; i < NB; i++) {
-    for (var q = -3; q <= 3; q++) sm[i] += W[q + 3] * hist[(i + q + NB) % NB];
+    for (let q = -3; q <= 3; q++) sm[i] += W[q + 3] * hist[(i + q + NB) % NB];
     sum += sm[i];
     if (sm[i] > sm[best]) best = i;
   }
-  var gain = sm[best] / (sum / NB);
-  var deg0 = best * BIN;
+  const gain = sm[best] / (sum / NB);
+  let deg0 = best * BIN;
   if (deg0 >= 45) deg0 -= 90;
 
   // affinage par lignes autour du pic
-  var stride = Math.max(1, Math.ceil(n / MAXPTS)),
+  const stride = Math.max(1, Math.ceil(n / MAXPTS)),
     R = Math.ceil(Math.hypot(w, h) / 2) + 2,
     bins = new Float64Array(2 * R + 1);
-  var score = function (dg) {
-    var an = (dg * Math.PI) / 180,
-      s = Math.sin(an),
-      co = Math.cos(an),
-      tot = 0,
-      z;
+  const score = function (dg) {
+    const an = (dg * Math.PI) / 180;
+    const s = Math.sin(an);
+    const co = Math.cos(an);
+    let tot = 0;
+    let z;
     bins.fill(0);
     for (z = 0; z < n; z += stride) bins[Math.round(py[z] * co - px[z] * s) + R]++;
     for (z = 1; z < bins.length - 1; z++) {
-      var v = bins[z - 1] + 2 * bins[z] + bins[z + 1];
+      const v = bins[z - 1] + 2 * bins[z] + bins[z + 1];
       tot += v * v;
     }
     return tot;
   };
-  var dg = deg0,
+  let dg = deg0,
     bs = score(deg0),
     sc;
-  for (var e = deg0 - 1.5; e <= deg0 + 1.5001; e += 0.1) {
+  for (let e = deg0 - 1.5; e <= deg0 + 1.5001; e += 0.1) {
     sc = score(e);
     if (sc > bs) {
       bs = sc;
@@ -137,5 +137,5 @@ export function skewAngle(gray, w, h, maxDeg) {
   }
   dg = Math.round(dg * 10) / 10;
   if (Math.abs(dg) > M) return { deg: 0, gain: 1 };
-  return { deg: dg === 0 ? 0 : dg, gain: gain };
+  return { deg: dg === 0 ? 0 : dg, gain };
 }

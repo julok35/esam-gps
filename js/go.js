@@ -3,7 +3,7 @@
    sa recherche ; l'appli copie donc les coordonnées avant d'ouvrir la carte, l'utilisateur n'a plus qu'à les coller. */
 
 // France métropolitaine (Corse comprise), en degrés décimaux WGS84
-export var FR = { la0: 41, la1: 51.5, lo0: -5.5, lo1: 10 };
+export const FR = { la0: 41, la1: 51.5, lo0: -5.5, lo1: 10 };
 
 function inFR(lat, lon) {
   return lat >= FR.la0 && lat <= FR.la1 && lon >= FR.lo0 && lon <= FR.lo1;
@@ -48,6 +48,6 @@ export function routeUrl(lat, lon) {
 }
 // Lien geo: (Android) : propose OsmAnd, Waze, Organic Maps... avec un repère nommé
 export function geoUrl(lat, lon) {
-  var p = n6(lat) + ',' + n6(lon);
+  const p = n6(lat) + ',' + n6(lon);
   return 'geo:' + p + '?q=' + p + '(Intervention%20ESAM)';
 }

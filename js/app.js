@@ -14,9 +14,9 @@ import { initTrack, addPoint, trackInfo, trackName, indexOf, decodeTrack, import
 import { initBatch, batchChecked } from './batch.js';
 import { clearZone, photoTime, photoFile } from './ocr.js';
 
-var src = $('src'),
+const src = $('src'),
   out = $('result');
-var chosen = 0,
+let chosen = 0,
   lastParse = null,
   // texte issu d'une photo (lecture, puis corrections à la main) : le point du suivi garde la date de la photo
   fromPhoto = false,
@@ -26,7 +26,7 @@ var chosen = 0,
 // Annonce courte pour les lecteurs d'écran, une fois la saisie posée
 function say(t) {
   clearTimeout(sayTimer);
-  sayTimer = setTimeout(function () {
+  sayTimer = setTimeout(() => {
     $('announce').textContent = t;
   }, 800);
 }
@@ -38,10 +38,10 @@ function setHash(h) {
 
 // DJI Pilot 2 (Modifier les repères) : degrés entiers + minutes à 4 décimales (0,2 m)
 function pilotDM(v) {
-  var s = v < 0 ? '-' : '',
-    a = Math.abs(v),
-    d = Math.floor(a),
-    m = (a - d) * 60;
+  const s = v < 0 ? '-' : '';
+  const a = Math.abs(v);
+  let d = Math.floor(a);
+  let m = (a - d) * 60;
   if (+m.toFixed(4) >= 60) {
     d += 1;
     m = 0;
@@ -50,7 +50,7 @@ function pilotDM(v) {
 }
 
 function render() {
-  var r = lastParse;
+  const r = lastParse;
   closeFix();
   if (!r || !r.ok) {
     state.current = null;
@@ -70,16 +70,16 @@ function render() {
     updateMap();
     return;
   }
-  var all = [r.best].concat(r.alts),
+  const all = [r.best].concat(r.alts),
     c = all[Math.min(chosen, all.length - 1)];
   state.current = c;
   // confiance : calculée par auto.js après une photo, sinon d'après les avertissements du texte saisi
   if (!r.trust || chosen !== 0) r.trust = confidence({ manual: true, notes: c.notes.length, alts: r.alts.length });
-  var ok = trusted(r),
+  const ok = trusted(r),
     warn = c.notes.length || r.alts.length;
-  var la = f6(c.lat),
+  const la = f6(c.lat),
     lo = f6(c.lon);
-  var h =
+  let h =
     '<div class="status"><span class="pill ' +
     (r.verified ? 'ok">Vérifié à la main' : ok ? 'ok">Lecture fiable' : 'check">À vérifier') +
     '</span><span class="pill fmt">' +
@@ -105,22 +105,14 @@ function render() {
   h += '<div class="seg1">Lu : ' + esc(c.seg) + '</div>';
   h += '<div class="place" id="place"></div>';
   if (ok) h += goBlock(c);
-  var notes = c.notes.slice();
+  const notes = c.notes.slice();
   if (r.alts.length) notes.push({ t: 'Plusieurs lectures possibles : comparez avec la photo.' });
   if (!ok && r.trust && r.trust.why.length && r.ocr)
     notes.push({ t: 'Confiance ' + r.trust.pct + ' % : ' + r.trust.why.join(', ') + '.' });
-  if (notes.length)
-    h +=
-      '<ul class="notes">' +
-      notes
-        .map(function (n) {
-          return '<li>' + esc(n.t) + '</li>';
-        })
-        .join('') +
-      '</ul>';
+  if (notes.length) h += '<ul class="notes">' + notes.map((n) => '<li>' + esc(n.t) + '</li>').join('') + '</ul>';
   if (r.alts.length) {
     h += '<div class="alts">';
-    all.forEach(function (a, i) {
+    all.forEach((a, i) => {
       if (a !== c)
         h +=
           '<button type="button" data-alt="' +
@@ -162,12 +154,12 @@ function render() {
   }
 
   // DJI Pilot 2 : longitude d'abord, puis latitude
-  var PL = pilotDM(c.lon),
+  const PL = pilotDM(c.lon),
     PA = pilotDM(c.lat);
-  var cell = function (v, u) {
+  const cell = function (v, u) {
     return '<button class="pv" type="button" data-copy="' + v + '"><b>' + v + '</b><i>' + u + '</i></button>';
   };
-  var line = function (n, P) {
+  const line = function (n, P) {
     return (
       '<div class="prow"><div class="pl">' +
       n +
@@ -200,8 +192,8 @@ function render() {
 
   // autres formats : chaque ligne se copie d'un toucher, le tout se partage
   $('eq').innerHTML = eqRows(c)
-    .map(function (x) {
-      return (
+    .map(
+      (x) =>
         '<button class="eqr" type="button" data-copy="' +
         esc(x[1].join(' ')) +
         '"><span class="eqk">' +
@@ -209,8 +201,7 @@ function render() {
         '</span><span class="eqv">' +
         x[1].map(esc).join('<br>') +
         '</span></button>'
-      );
-    })
+    )
     .join('');
   $('eqCard').hidden = false;
   $('shareCard').hidden = false;
@@ -225,8 +216,8 @@ function render() {
 }
 // AirOps et Itinéraire, sous le point. c : point sûr (contrôlé ici), ou null avec why : boutons désactivés
 function goBlock(c, why) {
-  var chk = c ? checkPoint(c.lat, c.lon) : { ok: false, msg: why };
-  var help =
+  const chk = c ? checkPoint(c.lat, c.lon) : { ok: false, msg: why };
+  const help =
     '<ol class="go-help" id="goHelp" hidden>' +
     '<li>Touchez <b>AirOps</b> : les coordonnées sont copiées et la carte s\u2019ouvre centrée sur le point.</li>' +
     '<li>Dans AirOps, touchez la <b>loupe</b> (Adresse, coordonnées ou zone), <b>collez</b>, puis choisissez le résultat : un repère rouge se pose.</li>' +
@@ -234,7 +225,7 @@ function goBlock(c, why) {
     '<li class="go-note">Page d\u2019accueil AirOps à la première visite : touchez Accès à la carte dynamique, puis reprenez à l\u2019étape 2 (la recherche trouve le point même si la carte n\u2019est pas centrée).</li>' +
     '<li class="go-note"><b>Itinéraire</b> : trajet en voiture dans Google Maps depuis votre position. <b>Autre appli GPS</b> : OsmAnd, Waze, Organic Maps...</li>' +
     '</ol>';
-  var qm =
+  const qm =
     '<button class="go-q" type="button" data-gohelp="1" aria-expanded="false" aria-controls="goHelp" aria-label="Aide AirOps et Itinéraire">?</button>';
   if (!chk.ok)
     return (
@@ -273,7 +264,7 @@ function goBlock(c, why) {
 }
 // Message AirOps : reste affiché 15 s une fois l'appli revenue au premier plan (AirOps s'ouvre dans un autre onglet)
 function goSay(t) {
-  var m = $('goMsg');
+  const m = $('goMsg');
   if (!m) return;
   m.textContent = t;
   m.hidden = false;
@@ -282,19 +273,19 @@ function goSay(t) {
 function goArm() {
   clearTimeout(goTimer);
   if (document.hidden) return;
-  goTimer = setTimeout(function () {
-    var m = $('goMsg');
+  goTimer = setTimeout(() => {
+    const m = $('goMsg');
     if (m) m.hidden = true;
   }, 15000);
 }
-document.addEventListener('visibilitychange', function () {
-  var m = $('goMsg');
+document.addEventListener('visibilitychange', () => {
+  const m = $('goMsg');
   if (m && !m.hidden) goArm();
 });
 // AirOps : copie « lat, lon » pour sa recherche (le lien s'ouvre de lui-même dans un nouvel onglet)
 function airopsGo(a) {
-  var t = a.dataset.airops;
-  clip(t).then(function (done) {
+  const t = a.dataset.airops;
+  clip(t).then((done) => {
     if (done) {
       $('goManual').hidden = true;
       goSay(
@@ -303,7 +294,7 @@ function airopsGo(a) {
       return;
     }
     // copie refusée : coordonnées en gros, copie à la main
-    var g = $('goManual');
+    const g = $('goManual');
     g.innerHTML =
       '<p class="flush">Copie automatique impossible. Copiez ces coordonnées, puis collez-les dans la recherche AirOps :</p>' +
       '<div class="go-big">' +
@@ -319,10 +310,10 @@ function airopsGo(a) {
 
 // Bouton d'ajout au suivi, sous le point : gros, avec le nom de l'animal ; « déjà dans le suivi » si le point y est
 function trackButton() {
-  var c = state.current,
+  const c = state.current,
     el = $('trk');
   if (!c || !el) return;
-  var i = indexOf(c),
+  const i = indexOf(c),
     n = trackName(),
     ti = trackInfo(c);
   el.innerHTML =
@@ -343,16 +334,12 @@ function eqRows(c) {
   ];
 }
 function eqText(c) {
-  var p = placeText(c);
+  const p = placeText(c);
   return (
     'Point ESAM\n' +
     eqRows(c)
-      .filter(function (x) {
-        return x[0] !== 'Lat' && x[0] !== 'Lon';
-      })
-      .map(function (x) {
-        return x[0] + ' : ' + x[1].join(' ');
-      })
+      .filter((x) => x[0] !== 'Lat' && x[0] !== 'Lon')
+      .map((x) => x[0] + ' : ' + x[1].join(' '))
       .join('\n') +
     (p ? '\n' + p : '')
   );
@@ -385,25 +372,25 @@ function setNet() {
 window.addEventListener('online', setNet);
 window.addEventListener('offline', setNet);
 setNet();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // ---------- Écran allumé pendant la recopie Pilot 2 ----------
 // Tuile à l'écran : l'écran ne se met pas en veille, 2 minutes au plus ; toucher une valeur relance les 2 minutes.
-var WAKE_MS = 120000,
+const WAKE_MS = 120000,
   wake = { lock: null, asking: false, until: 0, timer: 0 };
 function wakeGet() {
   if (wake.lock || wake.asking || document.hidden || Date.now() >= wake.until) return;
   wake.asking = true;
   navigator.wakeLock.request('screen').then(
-    function (l) {
+    (l) => {
       wake.asking = false;
       wake.lock = l;
-      l.addEventListener('release', function () {
+      l.addEventListener('release', () => {
         if (wake.lock === l) wake.lock = null;
       });
       if (Date.now() >= wake.until) wakeOff();
     },
-    function () {
+    () => {
       wake.asking = false;
     }
   );
@@ -418,13 +405,13 @@ function wakeOn() {
 function wakeOff() {
   clearTimeout(wake.timer);
   wake.until = 0;
-  if (wake.lock) wake.lock.release().catch(function () {});
+  if (wake.lock) wake.lock.release().catch(() => {});
   wake.lock = null;
 }
 if ('IntersectionObserver' in window)
   new IntersectionObserver(
-    function (es) {
-      var e = es[es.length - 1];
+    (es) => {
+      const e = es[es.length - 1];
       if (e.isIntersecting && $('pilotCard').open) wakeOn();
       else wakeOff();
     },
@@ -432,20 +419,20 @@ if ('IntersectionObserver' in window)
   ).observe($('pilot'));
 $('pilot').addEventListener('click', wakeOn);
 // le navigateur rend le verrou quand l'appli passe en arrière-plan : on le reprend au retour s'il reste du temps
-document.addEventListener('visibilitychange', function () {
+document.addEventListener('visibilitychange', () => {
   if (!document.hidden) wakeGet();
 });
 
 // ---------- Événements ----------
-src.addEventListener('input', function () {
+src.addEventListener('input', () => {
   update();
 });
 // champ quitté : le point affiché entre dans l'historique
 src.addEventListener('change', useCurrent);
-document.addEventListener('visibilitychange', function () {
+document.addEventListener('visibilitychange', () => {
   if (document.hidden) useCurrent();
 });
-$('clear').addEventListener('click', function () {
+$('clear').addEventListener('click', () => {
   src.value = '';
   fromPhoto = false;
   $('cropBox').hidden = true;
@@ -454,20 +441,20 @@ $('clear').addEventListener('click', function () {
   update();
   src.focus();
 });
-$('eqCopy').addEventListener('click', function () {
+$('eqCopy').addEventListener('click', () => {
   if (state.current) {
     copy(eqText(state.current), $('eqCopy'));
     useCurrent();
   }
 });
-$('eqShare').addEventListener('click', function () {
+$('eqShare').addEventListener('click', () => {
   if (state.current) {
     useCurrent();
     shareText(eqText(state.current), $('eqShare'));
   }
 });
-document.addEventListener('click', function (e) {
-  var a = e.target.closest('a[data-airops]');
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[data-airops]');
   if (a) {
     airopsGo(a);
     return;
@@ -476,10 +463,10 @@ document.addEventListener('click', function (e) {
     useCurrent();
     return;
   }
-  var t = e.target.closest('button');
+  const t = e.target.closest('button');
   if (!t) return;
   if (t.dataset.gohelp) {
-    var hb = $('goHelp');
+    const hb = $('goHelp');
     hb.hidden = !hb.hidden;
     t.setAttribute('aria-expanded', String(!hb.hidden));
     return;
@@ -492,7 +479,7 @@ document.addEventListener('click', function (e) {
   }
   // ligne d'autres formats : seule la valeur affiche « Copié », la ligne garde sa hauteur
   if (t.dataset.copy) {
-    var v = t.querySelector('.eqv');
+    const v = t.querySelector('.eqv');
     if (v) v.style.minHeight = v.offsetHeight + 'px';
     copy(t.dataset.copy, v || t);
     useCurrent();
@@ -504,7 +491,7 @@ document.addEventListener('click', function (e) {
     useCurrent();
   } else if (t.dataset.track) {
     // point lu sur une photo datée : daté de la photo
-    var n = addPoint(state.current, '', fromPhoto ? photoTime() : null);
+    const n = addPoint(state.current, '', fromPhoto ? photoTime() : null);
     batchChecked(photoFile(), state.current);
     trackButton();
     say('Point ' + n + ' ajouté au suivi');
@@ -513,7 +500,7 @@ document.addEventListener('click', function (e) {
     if (lastParse) lastParse.verified = false;
     render();
   } else if (t.dataset.hist) {
-    var x = loadHist()[+t.dataset.hist];
+    const x = loadHist()[+t.dataset.hist];
     if (x) {
       src.value = x.src;
       fromPhoto = false;
@@ -531,7 +518,7 @@ initMap();
 initShare(useCurrent);
 initAuto(show);
 initBatch();
-initFix(function (t) {
+initFix((t) => {
   src.value = t;
   update(true);
 });
@@ -540,10 +527,13 @@ initPlace();
 initCompass();
 $('ver').textContent = 'v' + VERSION;
 drawHist();
-var h0 = decodeURIComponent((location.hash || '').slice(1));
+let h0 = (location.hash || '').slice(1);
+try {
+  h0 = decodeURIComponent(h0);
+} catch (e) {} // lien mal encodé (« %E0 ») : pris tel quel, l'appli démarre quand même
 if (/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(h0)) src.value = h0.replace(',', ', ');
 // lien de suivi (partagé depuis un autre téléphone) : le suivi s'installe ici
-var tr0 = decodeTrack(location.hash);
+const tr0 = decodeTrack(location.hash);
 if (tr0) {
   $('trackMsg').hidden = false;
   $('trackMsg').textContent = importTrack(tr0);

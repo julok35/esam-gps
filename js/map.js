@@ -1,11 +1,10 @@
 /* Carte Leaflet (IGN, topo, photo aérienne, OSM), position du téléphone, distance et cap. */
-import { $, f6, esc, fmtDist, CARD, state } from './util.js';
-import { fmtWhen } from './track.js';
+import { $, f6, esc, fmtDist, fmtWhen, CARD, state } from './util.js';
 import { distM, bearing } from './parser.js';
 import { updateRelief, knownAlt, fmtAlt } from './place.js';
 import { updateCompass } from './compass.js';
 
-var map = null,
+let map = null,
   tMark = null,
   meMark = null,
   meCirc = null,
@@ -30,20 +29,20 @@ export function initMap() {
     $('map').innerHTML = '<p class="hint pad">Carte indisponible.</p>';
     return;
   }
-  var o = { maxZoom: 19 };
-  var ign = L.tileLayer(
+  const o = { maxZoom: 19 };
+  const ign = L.tileLayer(
     wmts('GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2', 'image/png'),
     Object.assign({ maxNativeZoom: 19, attribution: 'IGN Géoplateforme' }, o)
   );
-  var topo = L.tileLayer(
+  const topo = L.tileLayer(
     'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
     Object.assign({ subdomains: 'abc', maxNativeZoom: 17, attribution: 'OpenTopoMap, OpenStreetMap' }, o)
   );
-  var ortho = L.tileLayer(
+  const ortho = L.tileLayer(
     wmts('ORTHOIMAGERY.ORTHOPHOTOS', 'image/jpeg'),
     Object.assign({ maxNativeZoom: 19, attribution: 'IGN Géoplateforme' }, o)
   );
-  var osm = L.tileLayer(
+  const osm = L.tileLayer(
     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     Object.assign({ attribution: 'OpenStreetMap' }, o)
   );
@@ -67,27 +66,27 @@ export function initMap() {
   map.on('zoomend', drawPins);
 
   // carte dépliée : Leaflet recalcule sa taille (elle était nulle tant que la tuile était repliée)
-  $('mapCard').addEventListener('toggle', function () {
+  $('mapCard').addEventListener('toggle', () => {
     if ($('mapCard').open) {
       map.invalidateSize();
       fit();
     }
   });
   $('fitBoth').addEventListener('click', fit);
-  $('goTarget').addEventListener('click', function () {
+  $('goTarget').addEventListener('click', () => {
     if (state.current) map.setView([state.current.lat, state.current.lon], 16);
   });
-  $('goMe').addEventListener('click', function () {
+  $('goMe').addEventListener('click', () => {
     if (state.me) map.setView([state.me.lat, state.me.lon], 16);
   });
 }
 
 export function updateMap(recentre) {
-  var current = state.current,
+  const current = state.current,
     me = state.me;
   if (map) {
     // le point affiché est déjà un point du suivi : pas de repère jaune par-dessus, sa pastille est mise en évidence
-    var onTrack = current && markCurrent(current);
+    const onTrack = current && markCurrent(current);
     if (current && !onTrack) {
       tMark.setLatLng([current.lat, current.lon]).addTo(map);
       tMark.bindPopup('<b>' + f6(current.lat) + ', ' + f6(current.lon) + '</b>');
@@ -107,7 +106,7 @@ export function updateMap(recentre) {
     if (recentre) fit();
   }
   if (me && current) {
-    var d = distM(me, current),
+    const d = distM(me, current),
       b = bearing(me, current);
     $('dD').textContent = fmtDist(d);
     $('dB').textContent = Math.round(b) + '° ' + CARD[Math.round(b / 22.5) % 16];
@@ -125,26 +124,22 @@ export function updateMap(recentre) {
 // Suivi : points numérotés dans l'ordre (chien signalé le matin, puis le soir...), reliés par un trait plein.
 // Points trop proches à l'écran pour être distingués : une seule pastille « 2-3 » (ou « 2,5 »), détaillée au toucher ;
 // elle se sépare en zoomant.
-var GROUP_PX = 26;
+const GROUP_PX = 26;
 export function setTrack(pts) {
   trackPts = pts || [];
   if (!track) return;
   track.clearLayers();
   trackMarks = [];
   if (!trackPts.length) return;
-  var ll = trackPts.map(function (p) {
-    return [p.lat, p.lon];
-  });
+  const ll = trackPts.map((p) => [p.lat, p.lon]);
   if (ll.length > 1) L.polyline(ll, { color: '#1E6FD9', weight: 4, opacity: 0.8, interactive: false }).addTo(track);
   drawPins();
 }
 // Regroupe les points dont les pastilles se chevauchent au zoom courant (indices dans l'ordre du suivi)
 export function groupPins(px, minPx) {
-  var groups = [];
-  px.forEach(function (q, i) {
-    var g = groups.find(function (g) {
-      return Math.hypot(g.x - q.x, g.y - q.y) < minPx;
-    });
+  const groups = [];
+  px.forEach((q, i) => {
+    const g = groups.find((g) => Math.hypot(g.x - q.x, g.y - q.y) < minPx);
     if (g) g.ids.push(i);
     else groups.push({ x: q.x, y: q.y, ids: [i] });
   });
@@ -152,30 +147,24 @@ export function groupPins(px, minPx) {
 }
 // « 2-4 » pour des numéros qui se suivent, « 2,5 » sinon
 export function pinLabel(ids) {
-  var n = ids.map(function (i) {
-    return i + 1;
-  });
+  const n = ids.map((i) => i + 1);
   if (n.length === 1) return String(n[0]);
-  var seq = n.every(function (v, k) {
-    return !k || v === n[k - 1] + 1;
-  });
+  const seq = n.every((v, k) => !k || v === n[k - 1] + 1);
   return seq ? n[0] + '-' + n[n.length - 1] : n.join(',');
 }
-var pinLayer = null;
+let pinLayer = null;
 function drawPins() {
   if (!map || !track) return;
   if (pinLayer) track.removeLayer(pinLayer);
   pinLayer = L.layerGroup().addTo(track);
-  var px = trackPts.map(function (p) {
-    return map.latLngToLayerPoint([p.lat, p.lon]);
-  });
-  trackMarks = groupPins(px, GROUP_PX).map(function (g) {
-    var lab = pinLabel(g.ids),
+  const px = trackPts.map((p) => map.latLngToLayerPoint([p.lat, p.lon]));
+  trackMarks = groupPins(px, GROUP_PX).map((g) => {
+    const lab = pinLabel(g.ids),
       p0 = trackPts[g.ids[0]],
       w = Math.max(24, 10 + lab.length * 8),
       pop = g.ids
-        .map(function (i) {
-          var p = trackPts[i];
+        .map((i) => {
+          const p = trackPts[i];
           return (
             '<b>Point ' +
             (i + 1) +
@@ -191,7 +180,7 @@ function drawPins() {
           );
         })
         .join('<hr>');
-    var m = L.marker([p0.lat, p0.lon], {
+    const m = L.marker([p0.lat, p0.lon], {
       icon: L.divIcon({
         className: '',
         html: '<div class="pin-n' + (g.ids.length > 1 ? ' multi' : '') + '">' + lab + '</div>',
@@ -208,11 +197,9 @@ function drawPins() {
 }
 // Pastille du suivi qui porte le point affiché (à moins de 3 m) mise en évidence ; vrai s'il y en a une
 function markCurrent(c) {
-  var hit = false;
-  trackMarks.forEach(function (m) {
-    var is = m.ids.some(function (i) {
-        return distM(trackPts[i], c) < 3;
-      }),
+  let hit = false;
+  trackMarks.forEach((m) => {
+    const is = m.ids.some((i) => distM(trackPts[i], c) < 3),
       el = m.getElement();
     if (el && el.firstChild) el.firstChild.classList.toggle('cur', is);
     m.setZIndexOffset(is ? 1000 : 0);
@@ -221,7 +208,7 @@ function markCurrent(c) {
   return hit;
 }
 // Repère du profil du relief : endroit lu au doigt sur le profil (q : { lat, lon } ou null pour le retirer)
-var probeMark = null;
+let probeMark = null;
 export function probe(q) {
   if (!map) return;
   if (!probeMark)
@@ -239,16 +226,14 @@ export function probe(q) {
 export function fitTrack() {
   if (!map || !trackPts.length) return;
   map.invalidateSize();
-  var ll = trackPts.map(function (p) {
-    return [p.lat, p.lon];
-  });
+  const ll = trackPts.map((p) => [p.lat, p.lon]);
   if (state.current) ll.push([state.current.lat, state.current.lon]);
   if (ll.length === 1) map.setView(ll[0], 15);
   else map.fitBounds(L.latLngBounds(ll), { padding: [40, 40], maxZoom: 16 });
 }
 
 function fit() {
-  var current = state.current,
+  const current = state.current,
     me = state.me;
   if (!map) return;
   if (me && current)
@@ -266,13 +251,13 @@ function fit() {
 function watch() {
   if (watchId !== null) return;
   watchId = navigator.geolocation.watchPosition(
-    function (p) {
+    (p) => {
       state.me = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy };
       $('geoMsg').hidden = true;
       updateMap(firstFix);
       firstFix = false;
     },
-    function (e) {
+    (e) => {
       $('geoMsg').hidden = false;
       $('geoMsg').textContent =
         e.code === 1
@@ -291,7 +276,7 @@ export function startGeo() {
   }
   watch();
   // GPS coupé quand l'appli passe en arrière-plan (batterie), relancé au retour
-  document.addEventListener('visibilitychange', function () {
+  document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);

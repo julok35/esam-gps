@@ -44,6 +44,7 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `js/place.js` | Commune (geo.api.gouv.fr, Nominatim hors de France), lieux proches (Overpass, OpenStreetMap), altitude du terrain (IGN RGE ALTI, Copernicus via Open-Meteo hors de France) et dénivelé |
 | `js/compass.js` | Bandeau boussole (capteurs d'orientation, déclinaison magnétique approchée) |
 | `js/go.js` | AirOps et Itinéraire : contrôle du point (France métropolitaine, ordre lat / lon) et liens (sans DOM, testé sous Node) |
+| `js/profile.js` | Relief du suivi : échantillons le long du parcours, dénivelés, profil en SVG (sans DOM, testé sous Node) |
 | `js/share.js`, `js/history.js`, `js/util.js` | Partage et QR, historique, outils communs |
 | `sw.js` | Service worker : appli hors ligne, moteur de lecture et tuiles en cache |
 | `test/` | Tests Node (`node --test`), dont une vraie photo d'écran Garmin en niveaux de gris |
@@ -93,12 +94,15 @@ Photo ─► auto.js : 1. redressement  warp.findQuad (bords de l'écran) ─►
 ### Qualité du code
 
 ```
-npm install          # une fois : ESLint et Prettier (outils de développement seulement, Node 20 ou plus)
+npm install          # une fois : ESLint et Prettier (outils de développement seulement, Node 20.19 ou plus)
 npm run lint         # règles ESLint
 npm run format       # mise en forme Prettier (format:check pour vérifier sans modifier)
+npm run check        # tout ce que vérifie la CI : lint, mise en forme, tests
 ```
 
 La CI refuse un push qui ne passe pas le lint ou la mise en forme. Le site lui-même n'a aucune dépendance ni étape de build.
+
+Conventions, vérifiées par ESLint : `const` / `let` (jamais `var`), fonctions fléchées pour les rappels, `===`, pas d'import en double. Tout texte venu de l'extérieur (lecture, fichier GPX, lien, réponse d'un service) passe par `esc()` avant d'entrer dans du HTML ; la page n'accepte ni script ni style en ligne (Content-Security-Policy de `index.html`). Dependabot propose chaque mois les mises à jour des outils et des actions de la CI.
 
 ## Tests
 
@@ -106,8 +110,8 @@ La CI refuse un push qui ne passe pas le lint ou la mise en forme. Le site lui-m
 npm test
 ```
 
-Node 18 ou plus ; les tests n'ont besoin d'aucune dépendance. Ils tournent aussi à chaque push (GitHub Actions). Tout nouveau piège de lecture rencontré sur le terrain doit devenir un cas dans `test/parser.test.js`. Le barème du parser a été réglé sur ces cas : après toute modification d'un poids, relancer les tests.
+Les tests n'ont besoin d'aucune dépendance. Ils tournent aussi à chaque push et à chaque pull request (GitHub Actions). Tout nouveau piège de lecture rencontré sur le terrain doit devenir un cas dans `test/parser.test.js`. Le barème du parser a été réglé sur ces cas : après toute modification d'un poids, relancer les tests.
 
 ## Mise en ligne
 
-Après une modification des fichiers de l'appli, changer la version `V` en tête de `sw.js` (et la liste `SHELL` si un fichier est ajouté) pour que les téléphones récupèrent la nouvelle version, et la même version dans `VERSION` de `js/util.js` (affichée dans le bandeau). Les tests vérifient que les deux concordent.
+Après une modification des fichiers de l'appli, changer la version `V` en tête de `sw.js` (et la liste `SHELL` si un fichier est ajouté) pour que les téléphones récupèrent la nouvelle version, et la même version dans `VERSION` de `js/util.js` (affichée dans le bandeau). Les tests vérifient que les deux concordent, que chaque module de `js/` et chaque fichier appelé par `index.html` est dans `SHELL`, et que chaque fichier de `SHELL` existe.

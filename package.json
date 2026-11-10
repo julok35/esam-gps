@@ -3,16 +3,20 @@
   "private": true,
   "description": "Convertisseur de coordonnées GPS de l'ESAM (site statique, sans build).",
   "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
   "scripts": {
     "test": "node --test",
     "lint": "eslint .",
     "format": "prettier --write \"js/**/*.js\" sw.js \"test/**/*.js\" eslint.config.js",
-    "format:check": "prettier --check \"js/**/*.js\" sw.js \"test/**/*.js\" eslint.config.js"
+    "format:check": "prettier --check \"js/**/*.js\" sw.js \"test/**/*.js\" eslint.config.js",
+    "check": "npm run lint && npm run format:check && npm test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "eslint": "10.0.1",
-    "globals": "17.13.0",
+    "eslint": "10.14.0",
+    "globals": "17.14.0",
     "prettier": "3.9.10"
   }
 }

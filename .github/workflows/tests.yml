@@ -1,10 +1,20 @@
 name: Tests
 on: [push, pull_request]
+# le jeton du workflow ne sert qu'à lire le dépôt
+permissions:
+  contents: read
+# un nouveau push sur la même branche remplace la vérification en cours
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22

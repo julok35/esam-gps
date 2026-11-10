@@ -7,35 +7,35 @@ import { distM } from './parser.js';
  * selon la longueur des étapes (k = -1). d : distance cumulée depuis le point 1 (m).
  */
 export function samplePath(points, n) {
-  var out = [],
-    lens = [],
-    total = 0;
-  for (var i = 1; i < points.length; i++) {
+  const out = [];
+  const lens = [];
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
     lens.push(distM(points[i - 1], points[i]));
     total += lens[i - 1];
   }
-  var extra = Math.max(0, (n || 100) - points.length),
-    d = 0;
-  points.forEach(function (p, i) {
+  const extra = Math.max(0, (n || 100) - points.length);
+  let d = 0;
+  points.forEach((p, i) => {
     if (i) {
-      var a = points[i - 1],
+      const a = points[i - 1],
         m = total > 0 ? Math.round((extra * lens[i - 1]) / total) : 0;
-      for (var j = 1; j <= m; j++) {
-        var f = j / (m + 1);
+      for (let j = 1; j <= m; j++) {
+        const f = j / (m + 1);
         out.push({ lat: a.lat + (p.lat - a.lat) * f, lon: a.lon + (p.lon - a.lon) * f, d: d + lens[i - 1] * f, k: -1 });
       }
       d += lens[i - 1];
     }
-    out.push({ lat: p.lat, lon: p.lon, d: d, k: i });
+    out.push({ lat: p.lat, lon: p.lon, d, k: i });
   });
   return out;
 }
 
 // Altitudes des points du suivi, prises dans les échantillons (null si inconnue)
 export function pointAlts(samples, zs, n) {
-  var out = [];
-  for (var i = 0; i < n; i++) out.push(null);
-  samples.forEach(function (s, i) {
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(null);
+  samples.forEach((s, i) => {
     if (s.k >= 0 && typeof zs[i] === 'number') out[s.k] = zs[i];
   });
   return out;
@@ -43,15 +43,15 @@ export function pointAlts(samples, zs, n) {
 
 // Montées et descentes cumulées d'un point au suivant (altitudes des points seulement)
 export function climbs(alts) {
-  var up = 0,
+  let up = 0,
     down = 0;
-  for (var i = 1; i < alts.length; i++) {
+  for (let i = 1; i < alts.length; i++) {
     if (alts[i] === null || alts[i - 1] === null) continue;
-    var dz = alts[i] - alts[i - 1];
+    const dz = alts[i] - alts[i - 1];
     if (dz > 0) up += dz;
     else down -= dz;
   }
-  return { up: up, down: down };
+  return { up, down };
 }
 
 // Pente moyenne d'une étape en % (null si distance trop courte pour avoir un sens)
@@ -61,18 +61,12 @@ export function slope(dz, d) {
 
 // Pas de graduation « rond » (10, 20, 50, 100, 200, 500 m...) pour environ 4 lignes
 function step(range) {
-  var raw = range / 4,
+  const raw = range / 4,
     p = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
-  return [1, 2, 5, 10]
-    .map(function (k) {
-      return k * p;
-    })
-    .find(function (s) {
-      return s >= raw;
-    });
+  return [1, 2, 5, 10].map((k) => k * p).find((s) => s >= raw);
 }
 
-export var PW = 600,
+export const PW = 600,
   PH = 200,
   PAD = { l: 60, r: 26, t: 22, b: 26 };
 
@@ -81,38 +75,34 @@ export var PW = 600,
  * Retour : { svg, x(d), y(z) } ou null si pas assez d'altitudes.
  */
 export function profileSvg(samples, zs, fmtDist) {
-  var ok = samples.filter(function (s, i) {
-    return typeof zs[i] === 'number';
-  });
+  const ok = samples.filter((s, i) => typeof zs[i] === 'number');
   if (ok.length < 2) return null;
-  var zv = zs.filter(function (z) {
-      return typeof z === 'number';
-    }),
-    zmin = Math.min.apply(null, zv),
-    zmax = Math.max.apply(null, zv);
+  const zv = zs.filter((z) => typeof z === 'number');
+  let zmin = Math.min.apply(null, zv);
+  let zmax = Math.max.apply(null, zv);
   if (zmax - zmin < 20) {
-    var mid = (zmax + zmin) / 2;
+    const mid = (zmax + zmin) / 2;
     zmin = mid - 10;
     zmax = mid + 10;
   }
-  var st = step(zmax - zmin),
-    y0 = Math.floor(zmin / st) * st,
-    y1 = Math.ceil(zmax / st) * st,
-    dmax = samples[samples.length - 1].d || 1,
-    w = PW - PAD.l - PAD.r,
-    h = PH - PAD.t - PAD.b,
-    x = function (d) {
-      return PAD.l + (d / dmax) * w;
-    },
-    y = function (z) {
-      return PAD.t + (1 - (z - y0) / (y1 - y0)) * h;
-    },
-    r1 = function (v) {
-      return Math.round(v * 10) / 10;
-    },
-    s = '';
+  const st = step(zmax - zmin);
+  const y0 = Math.floor(zmin / st) * st;
+  const y1 = Math.ceil(zmax / st) * st;
+  const dmax = samples[samples.length - 1].d || 1;
+  const w = PW - PAD.l - PAD.r;
+  const h = PH - PAD.t - PAD.b;
+  const x = function (d) {
+    return PAD.l + (d / dmax) * w;
+  };
+  const y = function (z) {
+    return PAD.t + (1 - (z - y0) / (y1 - y0)) * h;
+  };
+  const r1 = function (v) {
+    return Math.round(v * 10) / 10;
+  };
+  let s = '';
   // graduations d'altitude
-  for (var z = y0; z <= y1 + 0.1; z += st)
+  for (let z = y0; z <= y1 + 0.1; z += st)
     s +=
       '<line class="pf-g" x1="' +
       PAD.l +
@@ -129,11 +119,7 @@ export function profileSvg(samples, zs, fmtDist) {
       '" text-anchor="end">' +
       Math.round(z).toLocaleString('fr-FR') +
       '</text>';
-  var line = ok
-    .map(function (p) {
-      return r1(x(p.d)) + ',' + r1(y(zs[samples.indexOf(p)]));
-    })
-    .join(' ');
+  const line = ok.map((p) => r1(x(p.d)) + ',' + r1(y(zs[samples.indexOf(p)]))).join(' ');
   s +=
     '<polygon class="pf-a" points="' +
     r1(x(ok[0].d)) +
@@ -163,19 +149,19 @@ export function profileSvg(samples, zs, fmtDist) {
     '</text>';
   // points du suivi : pastille numérotée ; points trop proches réunis en une pastille « 2-3 » ;
   // altitude écrite au-dessus si elle ne chevauche pas la précédente
-  var groups = [];
-  samples.forEach(function (p, i) {
+  const groups = [];
+  samples.forEach((p, i) => {
     if (p.k < 0 || typeof zs[i] !== 'number') return;
-    var px = x(p.d),
+    const px = x(p.d),
       g = groups[groups.length - 1];
     if (g && px - g.px < 22) {
       g.ks.push(p.k);
       g.zs.push(zs[i]);
-    } else groups.push({ px: px, py: y(zs[i]), ks: [p.k], zs: [zs[i]] });
+    } else groups.push({ px, py: y(zs[i]), ks: [p.k], zs: [zs[i]] });
   });
-  var lastX = -99;
-  groups.forEach(function (g) {
-    var n = g.ks.length,
+  let lastX = -99;
+  groups.forEach((g) => {
+    const n = g.ks.length,
       lab = n === 1 ? String(g.ks[0] + 1) : g.ks[0] + 1 + '-' + (g.ks[n - 1] + 1),
       w = Math.max(18, 8 + lab.length * 8),
       px = r1(Math.min(Math.max(g.px, PAD.l + w / 2 - 9), PW - PAD.r + 9 - w / 2)),
@@ -221,8 +207,8 @@ export function profileSvg(samples, zs, fmtDist) {
       '" role="img" aria-label="Profil du terrain le long du suivi">' +
       s +
       '</svg>',
-    x: x,
-    y: y,
-    dmax: dmax
+    x,
+    y,
+    dmax
   };
 }
