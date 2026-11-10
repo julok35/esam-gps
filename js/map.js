@@ -13,6 +13,7 @@ let map = null,
   trackPts = [],
   trackMarks = [],
   firstFix = true,
+  focus = null, // points lus par le dernier lot : la carte se centre sur eux tant qu'aucun autre point n'est affiché
   watchId = null;
 
 function wmts(layer, fmt) {
@@ -79,6 +80,7 @@ export function initMap() {
 }
 
 export function updateMap(recentre) {
+  if (recentre) focus = null; // nouveau point affiché : le centrage revient au point et à moi
   const current = state.current,
     me = state.me;
   if (map) {
@@ -221,10 +223,29 @@ export function fitTrack() {
   else map.fitBounds(L.latLngBounds(ll), { padding: [40, 40], maxZoom: 16 });
 }
 
+// Ce que la carte doit montrer pour un lot lu : plusieurs points → eux seuls ; un seul → lui et moi
+export function focusView(pts, me) {
+  const ll = (pts || []).map((p) => [p.lat, p.lon]);
+  if (ll.length === 1 && me) ll.push([me.lat, me.lon]);
+  return ll;
+}
+// Lot lu : centre la carte sur ses points (et le garde comme centrage par défaut, « Les deux » compris)
+export function focusPoints(pts) {
+  focus = pts && pts.length ? pts.map((p) => ({ lat: p.lat, lon: p.lon })) : null;
+  fit();
+}
+
 function fit() {
   const current = state.current,
     me = state.me;
   if (!map) return;
+  if (focus) {
+    const ll = focusView(focus, me);
+    map.invalidateSize();
+    if (ll.length === 1) map.setView(ll[0], 15);
+    else map.fitBounds(L.latLngBounds(ll), { padding: [40, 40], maxZoom: 16 });
+    return;
+  }
   if (me && current)
     map.fitBounds(
       L.latLngBounds([
@@ -243,7 +264,8 @@ function watch() {
     (p) => {
       state.me = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy };
       $('geoMsg').hidden = true;
-      updateMap(firstFix);
+      updateMap();
+      if (firstFix) fit(); // première position : centrage par défaut (sur le lot lu s'il y en a un)
       firstFix = false;
     },
     (e) => {
