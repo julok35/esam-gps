@@ -11,7 +11,10 @@ const THUMB = 96; // vignette de la liste (pixels)
 // photos : [{ id, file, name, t, exif, moved, thumb, st : wait | run | ok | check | fail, msg, p, text }]
 let photos = [],
   seq = 0,
-  running = false;
+  running = false,
+  // point de la victime : rappel de app.js (texte, lecture), et photo du lot qui y est affichée
+  showCb = null,
+  shownId = 0;
 
 function thumbOf(file) {
   return ocr.loadCanvas(file, THUMB).then(
@@ -69,13 +72,19 @@ function paint() {
               : st === 'fail'
                 ? p.msg
                 : 'en attente';
+      // photo lue : un toucher affiche son point dans « Point de la victime » (copie, Pilot 2, AirOps)
+      const on = st === 'ok' && p.id === shownId,
+        pick =
+          st === 'ok'
+            ? ` role="button" tabindex="0" data-show="${i}" aria-label="Afficher le point de la photo ${i + 1}"`
+            : '';
       return (
-        `<li class="bp st-${st}" data-i="${i}">` +
+        `<li class="bp st-${st}${on ? ' on' : ''}" data-i="${i}">` +
         `<span class="bh" data-h="${i}" aria-label="Glisser pour déplacer la photo ${i + 1}">⋮⋮</span>${
           p.thumb ? `<img class="bt" alt="" src="${p.thumb}">` : '<span class="bt"></span>'
-        }<div class="bb"><div class="bn"><b>${i + 1}</b> ${esc(fmtWhen(p.t))} <small>${
+        }<div class="bb"${pick}><div class="bn"><b>${i + 1}</b> ${esc(fmtWhen(p.t))} <small>${
           p.moved ? 'date déplacée' : p.exif ? 'photo' : 'fichier'
-        }</small></div>` +
+        }${on ? ' · affiché' : ''}</small></div>` +
         `<div class="bm">${esc(line)}</div></div>` +
         `<div class="ba">${
           st === 'check' || st === 'fail'
@@ -108,6 +117,18 @@ function moveTo(from, to) {
     p.moved = true;
   }
   paint();
+}
+
+// Point d'une photo lue, affiché dans « Point de la victime » ; scroll : la tuile vient à l'écran
+function showPhoto(ph, scroll) {
+  if (!showCb || !ph || ph.st !== 'ok') return;
+  shownId = ph.id;
+  // lecture complète (confiance comprise) ; photo vérifiée à la main : ses coordonnées retenues
+  if (ph.p.ok) showCb(ph.text, ph.p);
+  else showCb(`${f6(ph.p.best.lat)}, ${f6(ph.p.best.lon)}`, null);
+  paint();
+  openTile('resCard');
+  if (scroll) $('resCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ---------- Lecture d'une photo, sans écran ----------
@@ -183,6 +204,9 @@ function runAll() {
       added = addPoints(pts);
     // carte centrée sur les points lus (plusieurs), ou sur le point lu et moi (un seul)
     if (pts.length) focusPoints(pts);
+    // point de la victime : le plus récent des points sûrs (dernier du lot), prêt à copier vers la RC du drone
+    const last = sure[sure.length - 1];
+    if (last) showPhoto(last, false);
     $('batchMsg').textContent = `${
       (sure.length
         ? `${added} point${added > 1 ? 's' : ''} ajouté${added > 1 ? 's' : ''} au suivi${
@@ -193,6 +217,9 @@ function runAll() {
         ? ` · ${doubt.length} photo${
             doubt.length > 1 ? 's' : ''
           } à vérifier (bouton Vérifier : la photo s’ouvre pour la reprendre à la main)`
+        : '') +
+      (last
+        ? ` · Point de la victime : photo ${photos.indexOf(last) + 1}, la plus récente (touchez une autre photo lue pour l’afficher)`
         : '')
     }.`;
     paint();
@@ -256,6 +283,7 @@ export function batchChecked(file, c) {
   ph.st = 'ok';
   ph.p = { best: { lat: c.lat, lon: c.lon } };
   ph.msg = 'vérifiée à la main';
+  shownId = ph.id; // son point est celui affiché dans « Point de la victime »
   const left = photos.filter((p) => p.st === 'check' || p.st === 'fail').length;
   $('batchMsg').hidden = false;
   $('batchMsg').textContent = left
@@ -264,7 +292,9 @@ export function batchChecked(file, c) {
   paint();
 }
 
-export function initBatch() {
+// show(texte, lecture) : affiche un point dans « Point de la victime » (lecture null : texte à analyser)
+export function initBatch(show) {
+  showCb = show;
   setFilesHandler((files) => {
     if (!files.length || (files.length < 2 && !photos.length)) return false;
     addFiles(files).then(() => {
@@ -274,6 +304,11 @@ export function initBatch() {
     return true;
   });
   $('batchList').addEventListener('click', (e) => {
+    const sh = e.target.closest('[data-show]');
+    if (sh && !e.target.closest('button')) {
+      showPhoto(photos[+sh.dataset.show], true);
+      return;
+    }
     const b = e.target.closest('button');
     if (!b || running) return;
     if (b.dataset.up !== undefined) moveTo(+b.dataset.up, +b.dataset.up - 1);
@@ -287,10 +322,17 @@ export function initBatch() {
       ocr.loadFile(p.file, p.t);
     }
   });
+  $('batchList').addEventListener('keydown', (e) => {
+    const sh = e.target.closest('[data-show]');
+    if (!sh || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    showPhoto(photos[+sh.dataset.show], true);
+  });
   $('batchGo').addEventListener('click', runAll);
   $('batchClear').addEventListener('click', () => {
     if (running) return;
     photos = [];
+    shownId = 0;
     $('batchMsg').hidden = true;
     paint();
   });
