@@ -553,6 +553,7 @@ export function initTrack(onChange) {
     pts.splice(+b.dataset.tdel, 1);
     save(pts);
     drawTrack();
+    onName(); // sous le point affiché, « Point N du suivi » suit
   });
   $('trackList').addEventListener('change', (e) => {
     const el = e.target,

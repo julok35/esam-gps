@@ -5,6 +5,7 @@ import { $, esc, f6, fmtWhen, openTile } from './util.js';
 import * as ocr from './ocr.js';
 import { setFilesHandler, runShot, openShot, noPoint } from './auto.js';
 import { newShot, readShot, sendShot, pointOf, shown, watch, busyWith, setBusy } from './shot.js';
+import { putPoint, findPoint } from './track.js';
 import { focusPoints } from './map.js';
 
 const THUMB = 96; // vignette de la liste (pixels)
@@ -113,6 +114,9 @@ function moveTo(from, to) {
     else if (b) p.t = b.t - 60000;
     p.src = 'moved';
   }
+  // son point déjà au suivi prend la même date : la liste et le suivi disent la même chose
+  const c = p.st === 'ok' && pointOf(p);
+  if (c && findPoint(null, p.key)) putPoint({ lat: c.lat, lon: c.lon, t: p.t, key: p.key }, false, true);
   paint();
 }
 function say(t) {
