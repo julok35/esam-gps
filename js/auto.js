@@ -213,7 +213,9 @@ export async function openShot(shot, o) {
 // Lecture reprise à la main sur la photo affichée (cadre, relecture, perspective, contraste) : la fiche la garde, la
 // photo se rouvrira telle quelle ; son point sûr va au suivi, comme après une lecture automatique
 function keep(rd, tr) {
-  const steps = {};
+  const steps = {},
+    size = ocr.photoSize();
+  set('photo', 'ok', `${size.w} × ${size.h} px`); // la photo a pu être pivotée depuis son chargement
   STEPS.slice(1).forEach((s) => {
     steps[s[0]] = state[s[0]];
   });
