@@ -30,9 +30,10 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `js/app.js` | Point d'entrée : résultat, liens, événements |
 | `js/parser.js` | Détection et conversion des coordonnées (sans DOM, testé sous Node) |
 | `js/pipeline.js` | Chaîne de lecture d'une photo, de la perspective à la confiance : la même pour une photo seule et pour un lot |
-| `js/auto.js` | Photo seule : étapes de la chaîne affichées, reprise à la main de chacune |
+| `js/shot.js` | Fiche d'une photo, seule ou d'un lot : date, lecture gardée, état, point retenu, versement au suivi (règles sans DOM testées sous Node) |
+| `js/auto.js` | Photo affichée : la lire (`runShot`), l'afficher telle que lue (`openShot`), étapes de la chaîne, reprise à la main de chacune |
 | `js/ocr.js` | Photo, zoom, cadre et coins de perspective, lecture Tesseract (pleine photo puis cadre, plusieurs moteurs) et vote entre lectures |
-| `js/batch.js` | Lot de photos : ordre, glisser-déposer, chaque photo lue par la même chaîne (plusieurs moteurs en parallèle), points versés au suivi |
+| `js/batch.js` | Lot de photos : la liste (ordre, glisser-déposer, retrait) et une boucle de lecture sur les fonctions d'une photo seule (plusieurs moteurs en parallèle) |
 | `js/exif.js` | Date de prise de vue dans les métadonnées JPEG (sans DOM, testé sous Node) |
 | `js/skew.js` | Mesure de l'inclinaison du texte (sans DOM, testé sous Node) |
 | `js/warp.js` | Perspective : bords de l'écran (Hough), homographie, redressement (sans DOM, testé sous Node) |
@@ -49,6 +50,7 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `js/share.js`, `js/history.js`, `js/util.js` | Partage et QR, historique, outils communs |
 | `sw.js` | Service worker : appli hors ligne, moteur de lecture et tuiles en cache |
 | `test/` | Tests Node (`node --test`), dont une vraie photo d'écran Garmin en niveaux de gris |
+| `e2e/` | Scénario de bout en bout dans un navigateur (Playwright, hors dépôt) : photo seule et lot de photos, étape par étape |
 | `eslint.config.js`, `.prettierrc.json`, `.editorconfig` | Règles de qualité et de mise en forme |
 | `vendor/` | Leaflet 1.9.4, qrcode-generator 1.4.4, tesseract.js 7.0.0 (bibliothèque, worker, moteur WebAssembly et langue), polices (licence OFL) |
 
@@ -91,6 +93,9 @@ Photo(s) ─► pipeline.js, la même chaîne pour une photo seule (auto.js l'af
 ```
 
 - `js/parser.js` est le cœur : son en-tête décrit l'algorithme, le barème des candidats (`SCORE`, `PEN`) et les structures de données (`Candidate`, `ParseResult`).
+- Une photo, seule ou dans un lot, a une fiche (`js/shot.js`) et passe par les mêmes fonctions à chaque étape : `newShot` (date : EXIF, sinon fichier), `readShot` (chaîne de `pipeline.js`), `auto.openShot` (photo affichée telle que lue), `app.showShot` (point de la victime, ou `clearPoint` si rien n'est lu), `fixShot` (correction, confirmation), `sendShot` (suivi). Le lot n'ajoute qu'une liste et une boucle. Toute évolution d'une étape se fait dans sa fonction, jamais dans un seul des deux parcours.
+- Le point affiché est effacé dès qu'une lecture commence et chaque fois qu'elle ne donne rien : le point d'une photo précédente ne reste jamais à l'écran.
+- Au suivi, le point d'une photo porte la clé de sa photo (`track.placePoint`) : une correction le remplace sur place, une relecture ne le double pas. Sans clé (texte saisi), un même signalement (moins de 3 m, même minute) n'est pas ajouté deux fois.
 - Un résultat de `parse()` porte en plus `trust` ({ pct, level, why }, calculé par `auto.js` après une photo, par `app.js` pour un texte saisi), `ocr` (vient d'une photo) et `verified` (vérifié à la main). `trust.trusted()` décide de ce qui peut être transmis.
 - `state` (`js/util.js`) est le seul état partagé : point affiché et position du téléphone. Après un changement, `updateMap()` met à jour la carte, le dénivelé et la boussole.
 - Les bibliothèques de `vendor/` (Leaflet, qrcode, Tesseract) sont chargées en scripts classiques et utilisées comme variables globales (`L`, `qrcode`, `Tesseract`).
@@ -115,6 +120,14 @@ npm test
 ```
 
 Les tests n'ont besoin d'aucune dépendance. Ils tournent aussi à chaque push et à chaque pull request (GitHub Actions). Tout nouveau piège de lecture rencontré sur le terrain doit devenir un cas dans `test/parser.test.js`. Le barème du parser a été réglé sur ces cas : après toute modification d'un poids, relancer les tests.
+
+### Scénario de bout en bout
+
+```
+npm run e2e                    # option : -- --shots dossier, pour garder des captures au format téléphone
+```
+
+`e2e/parcours.js` ouvre l'appli dans Chromium et vérifie que la même photo, lue seule puis dans un lot, donne la même chose (point, étapes, zone lue, date, suivi), et que les règles de sécurité tiennent dans les deux parcours : aucun point affiché pendant une lecture ni après une photo sans coordonnées, lecture douteuse jamais transmise, correction faite sur place au suivi, relance sans doublon. Playwright n'est pas une dépendance du dépôt (`npm i -g playwright`) : le scénario n'est pas lancé par la CI, il est à rejouer à la main après toute modification de `js/shot.js`, `js/auto.js`, `js/batch.js`, `js/app.js` ou `js/track.js`.
 
 ## Mise en ligne
 

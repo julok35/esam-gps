@@ -9,9 +9,10 @@
   },
   "scripts": {
     "test": "node --test",
+    "e2e": "node e2e/parcours.js",
     "lint": "eslint .",
-    "format": "prettier --write \"js/**/*.js\" sw.js \"test/**/*.js\" eslint.config.js",
-    "format:check": "prettier --check \"js/**/*.js\" sw.js \"test/**/*.js\" eslint.config.js",
+    "format": "prettier --write \"js/**/*.js\" sw.js \"test/**/*.js\" \"e2e/**/*.js\" eslint.config.js",
+    "format:check": "prettier --check \"js/**/*.js\" sw.js \"test/**/*.js\" \"e2e/**/*.js\" eslint.config.js",
     "check": "npm run lint && npm run format:check && npm test"
   },
   "devDependencies": {

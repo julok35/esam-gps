@@ -1,5 +1,5 @@
 /* Service worker GPS ESAM : appli en cache, moteur de lecture gardé une fois téléchargé, tuiles de carte gardées une fois vues. */
-const V = 'esam-gps-v1.37';
+const V = 'esam-gps-v1.38';
 const TILES = 'esam-tiles';
 const LIBS = 'esam-libs';
 const SHELL = [

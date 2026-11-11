@@ -34,5 +34,11 @@ export default [
     }
   },
   { files: ['sw.js'], languageOptions: { sourceType: 'script', globals: globals.serviceworker } },
-  { files: ['test/**/*.js', 'eslint.config.js'], languageOptions: { globals: globals.node } }
+  { files: ['test/**/*.js', 'eslint.config.js'], languageOptions: { globals: globals.node } },
+  // scénario de bout en bout : script Node qui rend compte dans la console, et code exécuté dans la page
+  {
+    files: ['e2e/**/*.js'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+    rules: { 'no-console': 'off' }
+  }
 ];
