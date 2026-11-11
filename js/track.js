@@ -333,10 +333,17 @@ function save(pts) {
     localStorage.setItem(KEY, JSON.stringify(pts));
   } catch (e) {}
 }
+// Question du démarrage (continuer le suivi déjà sur ce téléphone, ou repartir de zéro) encore sans réponse : rien
+// n'entre au suivi d'ici là, pour ne pas mêler les points d'un animal à ceux d'un autre
+export function resumePending() {
+  return !$('resume').hidden;
+}
 // Le point p ({ lat, lon, t, label, key }, voir placePoint) entre dans le suivi, ou y corrige le point de la même
 // photo. scroll : l'écran va à la tuile du suivi (ajout demandé par le bouton). date : la date suit aussi.
-// Retour : { n : numéro du point dans le suivi, how : voir placePoint }
+// Retour : { n : numéro du point dans le suivi, how : voir placePoint }, ou { n : 0, how : 'held' } tant que la
+// question du démarrage attend sa réponse
 export function putPoint(p, scroll, date) {
+  if (resumePending()) return { n: 0, how: 'held' };
   const r = placePoint(loadTrack(), p, date);
   save(r.pts);
   drawTrack();
@@ -642,6 +649,7 @@ export function initTrack(onChange) {
   });
   $('resumeGo').addEventListener('click', () => {
     $('resume').hidden = true;
+    onName(); // les points lus en attendant la réponse entrent dans le suivi continué
     openTile('trackCard');
     openTile('map');
     fitTrack();

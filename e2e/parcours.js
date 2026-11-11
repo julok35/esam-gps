@@ -166,14 +166,19 @@ const IMG = {};
 }
 
 // ---------- Outils ----------
-// Appli ouverte sur un téléphone neuf (stockage vide), sans réseau extérieur
-async function open(geo) {
+// Appli ouverte sur un téléphone neuf (stockage vide), sans réseau extérieur. track : suivi déjà sur le téléphone
+async function open(geo, track) {
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     serviceWorkers: 'block',
     ...(geo ? { geolocation: geo, permissions: ['geolocation'] } : {})
   });
+  if (track)
+    await ctx.addInitScript((t) => {
+      localStorage.setItem('esam-gps-track', JSON.stringify(t.points));
+      localStorage.setItem('esam-gps-track-name', t.name);
+    }, track);
   const page = await ctx.newPage();
   page.on('dialog', (d) => d.accept());
   page.on('pageerror', (e) => failures.push(`erreur dans la page : ${e.message}`));
@@ -281,8 +286,8 @@ async function shot(page, name) {
 }
 async function scene(title, fn) {
   const pages = [],
-    op = async (geo) => {
-      const p = await open(geo);
+    op = async (geo, track) => {
+      const p = await open(geo, track);
       pages.push(p);
       return p;
     };
@@ -593,6 +598,43 @@ await scene(
       'des photos restent en attente'
     );
     assert.equal(v.points.length, v.rows.filter((r) => /^st-ok/.test(r)).length);
+  }
+);
+
+await scene(
+  'suivi déjà sur le téléphone : rien n’y entre avant la réponse « continuer ou repartir de zéro »',
+  async (op) => {
+    const old = {
+        name: 'Pirate',
+        points: [{ lat: 45.2, lon: 6.2, t: new Date(2026, 9, 30, 10, 0).getTime(), label: '' }]
+      },
+      OLD = '45.200000, 6.200000 @ 10-30T10:00';
+    // photo seule, puis lot : les points sûrs attendent, et restent transmissibles
+    const go = await op(null, old);
+    await readOne(go, 'a');
+    let v = await view(go);
+    assert.ok(v.copy && v.pilot, 'le point reste copiable');
+    assert.match(v.track, /choisir d’abord/);
+    assert.deepEqual(v.points, [OLD], 'photo seule : rien au suivi avant la réponse');
+    await readLot(go, ['b', 'c']);
+    v = await view(go);
+    await shot(go, 'suivi-en-attente');
+    assert.deepEqual(v.points, [OLD], 'lot : rien au suivi avant la réponse');
+    assert.match(v.msg, /2 points sûrs en attente/);
+    // « Continuer ce suivi » : les trois points lus y entrent, à leur date
+    await tap(go, '#resumeGo');
+    await pause(go);
+    v = await view(go);
+    assert.deepEqual(v.points, [OLD, `${PC} @ 11-01T07:00`, `${PA} @ 11-01T08:00`, `${PB} @ 11-01T09:00`]);
+    assert.match(v.track, /Point \d du suivi · Pirate/);
+    // « Repartir de zéro » : l'ancien suivi est effacé, le point lu entre dans le nouveau
+    const fresh = await op(null, old);
+    await readOne(fresh, 'a');
+    await tap(fresh, '#resumeNew');
+    await pause(fresh);
+    v = await view(fresh);
+    assert.deepEqual(v.points, [`${PA} @ 11-01T08:00`]);
+    assert.match(v.track, /Point 1 du suivi/);
   }
 );
 

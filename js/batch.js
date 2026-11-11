@@ -177,6 +177,7 @@ function done(sent) {
     todo = photos.filter((p) => p.st === 'check' || p.st === 'none' || p.st === 'bad').length,
     left = photos.filter(toRead).length,
     added = sent.filter((r) => r.how === 'added').length,
+    held = sent.filter((r) => r.how === 'held').length,
     last = sure[sure.length - 1];
   say(
     `${
@@ -185,11 +186,13 @@ function done(sent) {
         : left
           ? `${plural(left, 'photo', 'photos')} à relire (lecture impossible : touchez « Lire tout ») · `
           : '') +
-      (sent.length
-        ? `${plural(added, 'point ajouté', 'points ajoutés')} au suivi${
-            added < sent.length ? ` (${sent.length - added} déjà au suivi)` : ''
-          }`
-        : 'Aucun point sûr dans cette lecture') +
+      (held
+        ? `${plural(held, 'point sûr', 'points sûrs')} en attente : ils entreront au suivi quand vous aurez choisi, en haut, de continuer le suivi en cours ou de repartir de zéro`
+        : sent.length
+          ? `${plural(added, 'point ajouté', 'points ajoutés')} au suivi${
+              added < sent.length ? ` (${sent.length - added} déjà au suivi)` : ''
+            }`
+          : 'Aucun point sûr dans cette lecture') +
       (todo
         ? ` · ${plural(todo, 'photo', 'photos')} à vérifier (un toucher ouvre la photo, pour la reprendre à la main)`
         : '') +

@@ -4,7 +4,7 @@
 import * as ocr from './ocr.js';
 import { readPhoto, deg, NO_ZONE, NO_READ } from './pipeline.js';
 import { exifDate } from './exif.js';
-import { putPoint } from './track.js';
+import { putPoint, resumePending } from './track.js';
 
 /**
  * Fiche : { id, key : identifiant de la photo dans le suivi, file, name, t : date (ms), src : origine de la date
@@ -194,13 +194,30 @@ export function unfixShot(shot) {
 }
 
 // Le point sûr de la photo entre dans le suivi, ou y corrige le point de cette même photo (voir track.placePoint).
-// scroll : l'écran va au suivi. Retour : { n, how }, ou null si la photo n'a pas de point sûr
+// scroll : l'écran va au suivi. Retour : { n, how }, ou null si la photo n'a pas de point sûr.
+// Tant que la question du démarrage (continuer le suivi en cours ou repartir de zéro) attend sa réponse, rien n'est
+// versé : la photo est mise en attente (how : 'held') et son point entrera au suivi une fois la réponse donnée.
+const held = new Set();
 export function sendShot(shot, scroll) {
   const c = shot && shot.st === 'ok' ? pointOf(shot) : null;
   if (!c) return null;
-  const res = putPoint({ lat: c.lat, lon: c.lon, t: shot.t, key: shot.key }, scroll);
+  let res;
+  if (resumePending()) {
+    held.add(shot);
+    res = { n: 0, how: 'held' };
+  } else {
+    held.delete(shot);
+    res = putPoint({ lat: c.lat, lon: c.lon, t: shot.t, key: shot.key }, scroll);
+  }
   touch(shot);
   return res;
+}
+// Réponse donnée à la question du démarrage : les points sûrs lus entre-temps entrent au suivi. Retour : leur nombre
+export function flushHeld() {
+  if (resumePending()) return 0;
+  const list = Array.from(held);
+  held.clear();
+  return list.filter((shot) => sendShot(shot)).length;
 }
 
 // ---------- État partagé par les deux parcours ----------

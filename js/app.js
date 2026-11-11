@@ -10,10 +10,20 @@ import { initFix, openFix, closeFix } from './fix.js';
 import { initPlace, showPlace, placeText } from './place.js';
 import { initCompass } from './compass.js';
 import { confidence, trusted, carryDoubt } from './trust.js';
-import { initTrack, putPoint, findPoint, trackInfo, trackName, decodeTrack, importTrack, askResume } from './track.js';
+import {
+  initTrack,
+  putPoint,
+  findPoint,
+  resumePending,
+  trackInfo,
+  trackName,
+  decodeTrack,
+  importTrack,
+  askResume
+} from './track.js';
 import { initBatch } from './batch.js';
 import { clearZone } from './ocr.js';
-import { shotPoint, fixShot, unfixShot, sendShot, shown, setShown, watch, SRC } from './shot.js';
+import { shotPoint, fixShot, unfixShot, sendShot, flushHeld, shown, setShown, watch, SRC } from './shot.js';
 
 const src = $('src'),
   out = $('result');
@@ -277,6 +287,13 @@ function trackButton() {
   const c = state.current,
     el = $('trk');
   if (!c || !el) return;
+  // question du démarrage sans réponse : rien n'entre au suivi, le point attend
+  if (resumePending()) {
+    el.innerHTML =
+      '<button class="btn sec wide" type="button" data-resume="1">Suivi : choisir d\u2019abord</button>' +
+      '<p class="flush">Un suivi est déjà sur ce téléphone. Choisissez en haut de le continuer ou de repartir de zéro : le point y entrera ensuite.</p>';
+    return;
+  }
   const sh = shown(),
     i = findPoint({ lat: c.lat, lon: c.lon, t: sh ? sh.t : Date.now() }, sh && sh.key),
     n = trackName(),
@@ -292,11 +309,13 @@ function trackButton() {
 function sayTrack(res) {
   if (!res) return;
   say(
-    res.how === 'added'
-      ? `Point ${res.n} ajouté au suivi`
-      : res.how === 'moved'
-        ? `Point ${res.n} du suivi corrigé`
-        : `Point ${res.n} déjà au suivi`
+    res.how === 'held'
+      ? 'Point en attente : choisissez d\u2019abord de continuer le suivi en cours ou de repartir de zéro'
+      : res.how === 'added'
+        ? `Point ${res.n} ajouté au suivi`
+        : res.how === 'moved'
+          ? `Point ${res.n} du suivi corrigé`
+          : `Point ${res.n} déjà au suivi`
   );
 }
 function eqRows(c) {
@@ -498,6 +517,10 @@ document.addEventListener('click', (e) => {
     render();
     useCurrent();
     sayTrack(res);
+  } else if (t.dataset.resume) {
+    // la question du suivi en cours est en haut de l'écran
+    $('dogCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('resumeGo').focus({ preventScroll: true });
   } else if (t.dataset.track) {
     // point d'une photo : par sa fiche (corrigé sur place s'il y est déjà) ; texte saisi : daté de maintenant
     const sh = shown(),
@@ -546,7 +569,12 @@ initFix((t) => {
 });
 // fiche modifiée (point versé au suivi, autre photo affichée) : l'état sous le point suit
 watch(trackButton);
-initTrack(trackButton);
+// suivi modifié par sa tuile, ou question du démarrage répondue : les points lus en attendant y entrent
+initTrack(() => {
+  const n = flushHeld();
+  trackButton();
+  if (n) say(`${n} point${n > 1 ? 's' : ''} versé${n > 1 ? 's' : ''} au suivi`);
+});
 initPlace();
 initCompass();
 $('ver').textContent = `v${VERSION}`;
