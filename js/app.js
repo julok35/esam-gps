@@ -9,7 +9,7 @@ import { initAuto, hideSteps } from './auto.js';
 import { initFix, openFix, closeFix } from './fix.js';
 import { initPlace, showPlace, placeText } from './place.js';
 import { initCompass } from './compass.js';
-import { confidence, trusted } from './trust.js';
+import { confidence, trusted, carryDoubt } from './trust.js';
 import { initTrack, addPoint, trackInfo, trackName, indexOf, decodeTrack, importTrack, askResume } from './track.js';
 import { initBatch, batchChecked } from './batch.js';
 import { clearZone, photoTime, photoFile } from './ocr.js';
@@ -296,7 +296,8 @@ function eqText(c) {
 // verified : texte vérifié à la main (molettes validées) : transmissible même avec un avertissement
 function update(verified) {
   chosen = 0;
-  lastParse = parse(src.value);
+  // texte retouché après une lecture de photo douteuse : il reste à vérifier
+  lastParse = carryDoubt(lastParse, parse(src.value));
   if (verified && lastParse.ok) lastParse.verified = true;
   render();
 }
@@ -307,8 +308,10 @@ function show(text, p) {
   fromPhoto = !!(p && p.ocr);
   render();
 }
+// Le point affiché entre dans l'historique dès qu'on s'en sert : jamais un point douteux, qui en ressortirait
+// comme un texte saisi, sans son doute
 function useCurrent() {
-  if (state.current) {
+  if (state.current && trusted(lastParse)) {
     scheduleHist(state.current, src.value);
     flushHist();
   }
@@ -453,6 +456,7 @@ document.addEventListener('click', (e) => {
     if (x) {
       src.value = x.src;
       fromPhoto = false;
+      lastParse = null; // point repris de l'historique : sans lien avec la lecture affichée avant
       clearZone();
       update();
       openTile('resCard');
