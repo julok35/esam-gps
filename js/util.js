@@ -1,6 +1,6 @@
 /* Petits outils partagés : DOM, échappement, formats, copie. */
 // Version affichée dans le bandeau ; doit suivre le cache V de sw.js (vérifié par les tests)
-export const VERSION = '1.36';
+export const VERSION = '1.37';
 
 export const $ = function (id) {
   return document.getElementById(id);

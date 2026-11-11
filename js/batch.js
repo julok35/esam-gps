@@ -2,13 +2,14 @@
    l'enchaînement automatique (plusieurs moteurs en parallèle), points sûrs versés au suivi datés de la photo. */
 import { $, esc, f6, fmtWhen, openTile } from './util.js';
 import * as ocr from './ocr.js';
-import { setFilesHandler } from './auto.js';
+import { setFilesHandler, openRead } from './auto.js';
 import { readPhoto, deg } from './pipeline.js';
-import { addPoints } from './track.js';
+import { addPoints, movePoint } from './track.js';
 import { focusPoints } from './map.js';
 
 const THUMB = 96; // vignette de la liste (pixels)
-// photos : [{ id, file, name, t, exif, moved, thumb, st : wait | run | ok | check | fail, msg, p, text }]
+// photos : [{ id, file, name, t, exif, moved, thumb, st : wait | run | ok | check | fail, msg, p, text,
+//   r : lecture gardée pour rouvrir la photo sans la relire (voir auto.openRead), fix : point vérifié à la main }]
 let photos = [],
   seq = 0,
   running = false,
@@ -73,7 +74,7 @@ function paint() {
                 ? p.msg
                 : 'en attente';
       // photo lue : un toucher affiche son point dans « Point de la victime » (copie, Pilot 2, AirOps)
-      const on = st === 'ok' && p.id === shownId,
+      const on = p.id === shownId && (st === 'ok' || st === 'check' || st === 'fail'),
         pick =
           st === 'ok'
             ? ` role="button" tabindex="0" data-show="${i}" aria-label="Afficher le point de la photo ${i + 1}"`
@@ -119,16 +120,24 @@ function moveTo(from, to) {
   paint();
 }
 
-// Point d'une photo lue, affiché dans « Point de la victime » ; scroll : la tuile vient à l'écran
-function showPhoto(ph, scroll) {
-  if (!showCb || !ph || ph.st !== 'ok') return;
+// Photo du lot ouverte comme une photo seule, avec sa lecture (étapes, zone lue, résultat, Corriger, confirmer),
+// sans la relire. scroll : l'écran va au point (photo lue) ou au cadrage (coordonnées non trouvées)
+async function showPhoto(ph, scroll) {
+  if (!ph) return;
   shownId = ph.id;
-  // lecture complète (confiance comprise) ; photo vérifiée à la main : ses coordonnées retenues
-  if (ph.p.ok) showCb(ph.text, ph.p);
-  else showCb(`${f6(ph.p.best.lat)}, ${f6(ph.p.best.lon)}`, null);
   paint();
-  openTile('resCard');
-  if (scroll) $('resCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // lecture interrompue (réseau au premier usage…) : rien de gardé, la photo est relue comme une photo seule
+  if (!ph.r) {
+    ocr.loadFile(ph.file, ph.t);
+    return;
+  }
+  if (!(await openRead(ph.file, ph.t, ph.r)) || shownId !== ph.id) return;
+  // photo vérifiée à la main : ses coordonnées retenues remplacent la lecture
+  if (ph.fix && showCb) showCb(`${f6(ph.fix.lat)}, ${f6(ph.fix.lon)}`, null);
+  const read = ph.r.found && !ph.r.res.none,
+    tile = read ? 'resCard' : 'inCard';
+  openTile(tile);
+  if (scroll) $(tile).scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ---------- Lecture d'une photo, sans écran ----------
@@ -139,17 +148,23 @@ const never = function () {
 async function readOne(ph, wi) {
   ph.st = 'run';
   ph.msg = 'redressement…';
+  ph.r = null;
+  ph.fix = null;
   paint();
-  const orig = await ocr.loadCanvas(ph.file),
+  const steps = {},
+    orig = await ocr.loadCanvas(ph.file),
     out = await readPhoto(orig, {
       stale: never,
       wi,
       onStep(k, st, msg) {
+        steps[k] = { st, msg };
         if (st !== 'run') return;
         ph.msg = msg;
         paint();
       }
     });
+  // de quoi rouvrir la photo telle que lue : géométrie, cadre, lecture, étapes
+  ph.r = { quad: out.quad, angle: out.angle, box: out.box, found: out.found, res: out.res, steps };
   if (!out.found) {
     ph.st = 'fail';
     ph.msg = 'coordonnées non trouvées : à cadrer à la main';
@@ -176,6 +191,8 @@ function runAll() {
   const queue = photos.filter((p) => p.st === 'wait' || p.st === 'fail');
   if (!queue.length) return;
   running = true;
+  // réglages de contraste par défaut, comme à l'ouverture d'une photo seule
+  ocr.setEnh({ contrast: 1, sharp: null });
   paint();
   $('batchMsg').hidden = false;
   $('batchMsg').textContent = `Lecture de ${queue.length} photo${queue.length > 1 ? 's' : ''}…`;
@@ -276,10 +293,13 @@ function initDrag() {
   list.addEventListener('pointercancel', end);
 }
 
-// Photo du lot reprise à la main (bouton Vérifier) puis ajoutée au suivi : elle passe en lue, avec le point retenu
+// Photo du lot reprise à la main (Corriger, confirmer) puis ajoutée au suivi : elle passe en lue, avec le point
+// retenu. Son point déjà au suivi est corrigé sur place. Retour : son numéro dans le suivi, 0 s'il reste à ajouter
 export function batchChecked(file, c) {
   const ph = file && c && photos.find((p) => p.file === file);
-  if (!ph) return;
+  if (!ph) return 0;
+  const n = ph.st === 'ok' && ph.p ? movePoint(ph.fix || ph.p.best, c) : 0;
+  ph.fix = { lat: c.lat, lon: c.lon };
   ph.st = 'ok';
   ph.p = { best: { lat: c.lat, lon: c.lon } };
   ph.msg = 'vérifiée à la main';
@@ -290,6 +310,7 @@ export function batchChecked(file, c) {
     ? `Encore ${left} photo${left > 1 ? 's' : ''} à vérifier.`
     : 'Toutes les photos du lot sont au suivi.';
   paint();
+  return n;
 }
 
 // show(texte, lecture) : affiche un point dans « Point de la victime » (lecture null : texte à analyser)
@@ -305,7 +326,7 @@ export function initBatch(show) {
   });
   $('batchList').addEventListener('click', (e) => {
     const sh = e.target.closest('[data-show]');
-    if (sh && !e.target.closest('button')) {
+    if (sh && !e.target.closest('button') && !running) {
       showPhoto(photos[+sh.dataset.show], true);
       return;
     }
@@ -317,14 +338,14 @@ export function initBatch(show) {
       photos.splice(+b.dataset.del, 1);
       paint();
     } else if (b.dataset.chk !== undefined) {
-      // la photo s'ouvre seule, avec ses étapes reprenables à la main ; le point ajouté au suivi sera daté de la photo
-      const p = photos[+b.dataset.chk];
-      ocr.loadFile(p.file, p.t);
+      // la photo s'ouvre comme une photo seule, telle que lue : étapes reprenables à la main, zone lue, Corriger ;
+      // le point ajouté au suivi sera daté de la photo
+      showPhoto(photos[+b.dataset.chk], true);
     }
   });
   $('batchList').addEventListener('keydown', (e) => {
     const sh = e.target.closest('[data-show]');
-    if (!sh || (e.key !== 'Enter' && e.key !== ' ')) return;
+    if (!sh || running || (e.key !== 'Enter' && e.key !== ' ')) return;
     e.preventDefault();
     showPhoto(photos[+sh.dataset.show], true);
   });
