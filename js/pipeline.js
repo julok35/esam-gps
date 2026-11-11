@@ -8,6 +8,9 @@ import { autoParams } from './enhance.js';
 const ZONE_PAD = 0.35; // marge autour des mots trouvés (fraction de la hauteur de la zone)
 const TILT = 45; // inclinaison corrigée au plus (degrés)
 const MIDDLE = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
+// Textes des deux issues sans point, les mêmes à l'écran d'une photo seule et dans la liste d'un lot
+export const NO_ZONE = 'coordonnées non trouvées : cadrez-les à la main';
+export const NO_READ = 'aucune coordonnée lue dans le cadre : recadrez à la main';
 
 // « +1,5° », « −0,3° »
 export function deg(v) {
@@ -79,7 +82,7 @@ export function enhInfo(img) {
 export async function zone(base, angle, img, o) {
   const z = await ocr.findZone(img, o.stale || never, o.wi, o.onView);
   if (z === undefined) return undefined;
-  if (!z) return { found: false, st: 'warn', msg: 'coordonnées non trouvées : cadrez-les à la main' };
+  if (!z) return { found: false, st: 'warn', msg: NO_ZONE };
   const pad = (z.box.y1 - z.box.y0) * ZONE_PAD;
   let box = ocr.fitBox({
       x: (z.box.x0 - pad) / img.width,
@@ -130,7 +133,7 @@ export async function read(img, box, o) {
       res,
       box: used,
       st: 'fail',
-      msg: `aucune coordonnée lue dans le cadre${o.manual ? '' : ' : recadrez à la main'}`
+      msg: o.manual ? 'aucune coordonnée lue dans le cadre' : NO_READ
     };
   const a = res.p.agree || { n: 0, total: res.total };
   return {

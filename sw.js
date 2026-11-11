@@ -34,6 +34,7 @@ const SHELL = [
   'js/batch.js',
   'js/profile.js',
   'js/pipeline.js',
+  'js/shot.js',
   'vendor/leaflet/leaflet.js',
   'vendor/leaflet/leaflet.css',
   'vendor/leaflet/images/layers.png',
