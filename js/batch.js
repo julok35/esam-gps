@@ -10,7 +10,8 @@ import { focusPoints } from './map.js';
 const THUMB = 96; // vignette de la liste (pixels)
 // origine de la date, en un mot dans la liste
 const TAG = { exif: 'photo', file: 'fichier', now: 'lecture', moved: 'date déplacée' };
-let photos = []; // fiches du lot, dans l'ordre des dates
+let photos = [], // fiches du lot, dans l'ordre des dates
+  stopped = false; // arrêt demandé pendant la lecture
 
 function thumbOf(file) {
   return ocr.loadCanvas(file, THUMB).then(
@@ -19,7 +20,8 @@ function thumbOf(file) {
   );
 }
 // Photo prise ou photos choisies. Une seule : lue tout de suite, comme une photo seule, et inscrite au lot s'il y
-// en a un. Plusieurs : ajoutées au lot, à leur date, en attente de « Lire tout ».
+// en a un. Plusieurs : ajoutées au lot, à leur date, en attente de « Lire tout ». Pendant la lecture d'un lot, toute
+// photo ajoutée entre dans la file : une seule lecture à la fois.
 function take(files) {
   Promise.all(files.map(newShot)).then((shots) => {
     const one = shots.length === 1 && busyWith() !== 'lot';
@@ -89,7 +91,9 @@ function paint() {
       );
     })
     .join('');
-  $('batchGo').disabled = !!busyWith();
+  // pendant la lecture du lot, le bouton l'arrête ; pendant celle d'une photo seule, il attend
+  $('batchGo').textContent = busy ? 'Arrêter' : 'Lire tout';
+  $('batchGo').disabled = busyWith() === 'one' || (busy && stopped);
   $('batchClear').disabled = busy;
 }
 // Photo déplacée : si sa date d'origine (t0) convient à sa nouvelle place, elle la reprend ; sinon elle prend une
@@ -116,44 +120,67 @@ function say(t) {
   $('batchMsg').textContent = t || '';
 }
 const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
-const never = () => false;
+// Photos à lire : en attente, ou lecture impossible la fois d'avant (moteur). Une photo sans coordonnées n'est pas relue
+const toRead = (p) => p.st === 'wait' || p.st === 'fail';
 
 // ---------- Lecture : une boucle sur les photos à lire, réparties entre les moteurs ----------
 function runAll() {
   if (busyWith()) return;
-  const queue = photos.filter((p) => p.st === 'wait' || p.st === 'fail');
-  if (!queue.length) return;
+  const first = photos.filter(toRead).length;
+  if (!first) return;
+  stopped = false;
   setBusy('lot');
   // réglages de contraste par défaut, comme à l'ouverture d'une photo seule
   ocr.setEnh({ contrast: 1, sharp: null });
   // le point affiché avant n'est celui d'aucune photo en cours de lecture : effacé
   noPoint('Lecture du lot en cours…', true);
-  say(`Lecture de ${plural(queue.length, 'photo', 'photos')}…`);
+  const head = `Lecture de ${plural(first, 'photo', 'photos')}…`;
+  say(head);
+  // moteur chargé au premier usage : son avancement s'affiche, comme sur les étapes d'une photo seule
+  ocr.setProgress((t, f) => {
+    if (busyWith() === 'lot' && !stopped && /moteur|langue|Initialisation/.test(t))
+      say(`${head} ${t}${f ? ` ${Math.round(f * 100)} %` : ''}`);
+  });
   const sent = [],
+    seen = new Set(),
+    // prochaine photo à lire : la file suit la liste, photos ajoutées pendant la lecture comprises
     runner = function (wi) {
-      const shot = queue.shift();
+      const shot = stopped ? null : photos.find((p) => toRead(p) && !seen.has(p));
       if (!shot) return Promise.resolve();
-      return readShot(shot, { wi, stale: never }).then(() => {
+      seen.add(shot);
+      return readShot(shot, { wi, stale: () => stopped }).then(() => {
         const res = sendShot(shot);
         if (res) sent.push(res);
         return runner(wi);
       });
     },
     runners = [];
-  for (let i = 0; i < Math.min(ocr.workerCount(), queue.length); i++) runners.push(runner(i));
+  for (let i = 0; i < Math.min(ocr.workerCount(), first); i++) runners.push(runner(i));
   Promise.all(runners).then(() => {
     done(sent);
   });
+}
+// Arrêt demandé : les lectures en cours s'interrompent à leur prochaine étape, leurs photos restent à lire
+function stop() {
+  stopped = true;
+  say('Arrêt de la lecture…');
+  paint();
 }
 // Fin de lecture : bilan, et le point sûr le plus récent (dernier du lot) ouvert comme une photo seule
 function done(sent) {
   setBusy('');
   const sure = photos.filter((p) => p.st === 'ok'),
-    todo = photos.filter((p) => p.st !== 'ok' && p.st !== 'wait' && p.st !== 'run').length,
+    todo = photos.filter((p) => p.st === 'check' || p.st === 'none' || p.st === 'bad').length,
+    left = photos.filter(toRead).length,
     added = sent.filter((r) => r.how === 'added').length,
     last = sure[sure.length - 1];
   say(
     `${
+      (stopped
+        ? `Lecture arrêtée : ${plural(left, 'photo reste', 'photos restent')} à lire · `
+        : left
+          ? `${plural(left, 'photo', 'photos')} à relire (lecture impossible : touchez « Lire tout ») · `
+          : '') +
       (sent.length
         ? `${plural(added, 'point ajouté', 'points ajoutés')} au suivi${
             added < sent.length ? ` (${sent.length - added} déjà au suivi)` : ''
@@ -256,9 +283,16 @@ export function initBatch() {
     e.preventDefault();
     open(+sh.dataset.show);
   });
-  $('batchGo').addEventListener('click', runAll);
+  $('batchGo').addEventListener('click', () => {
+    if (busyWith() === 'lot') stop();
+    else runAll();
+  });
   $('batchClear').addEventListener('click', () => {
     if (busyWith() === 'lot') return;
+    // les points lus restent au suivi ; seules les photos pas encore sûres seraient perdues
+    const left = photos.filter((p) => p.st !== 'ok').length;
+    if (left && !confirm(`Vider le lot ? ${plural(left, 'photo reste', 'photos restent')} à lire ou à vérifier.`))
+      return;
     photos = [];
     say('');
     paint();

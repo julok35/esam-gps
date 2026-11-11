@@ -277,13 +277,6 @@ export function askResume() {
   $('resume').hidden = !pts.length;
   if (pts.length) $('resumeTxt').textContent = resumeText(trackName(), pts);
 }
-// Index du point du suivi qui est le point c (à moins de 3 m), sinon -1
-export function indexOf(c) {
-  const pts = loadTrack();
-  if (!c) return -1;
-  for (let i = 0; i < pts.length; i++) if (distM(pts[i], c) < 3) return i;
-  return -1;
-}
 function appUrl() {
   return location.origin + location.pathname;
 }
@@ -356,40 +349,6 @@ export function findPoint(c, key) {
   let i = key ? pts.findIndex((x) => x.k === key) : -1;
   if (i < 0 && c) i = pts.findIndex((x) => isDup(x, c));
   return i + 1;
-}
-// Le point affiché entre dans le suivi, daté de la photo (t) ou de maintenant (la date se corrige dans la liste).
-// Retour : son numéro dans le suivi
-export function addPoint(c, label, t) {
-  if (!c) return 0;
-  const pts = loadTrack(),
-    p = { lat: c.lat, lon: c.lon, t: t || Date.now(), label: label || '' };
-  pts.push(p);
-  save(pts);
-  drawTrack();
-  openTrack(true);
-  return pts.indexOf(p) + 1;
-}
-// Point du suivi old corrigé à la main (photo d'un lot) : remplacé par c, date et étiquette gardées.
-// Retour : son numéro, ou 0 s'il n'est pas dans le suivi
-export function movePoint(old, c) {
-  const pts = loadTrack(),
-    i = indexOf(old);
-  if (i < 0 || !c) return 0;
-  pts[i].lat = c.lat;
-  pts[i].lon = c.lon;
-  save(pts);
-  drawTrack();
-  openTrack(true);
-  return pts.indexOf(pts[i]) + 1;
-}
-// Plusieurs points d'un coup (lot de photos), sans doublon. Retour : nombre ajouté
-export function addPoints(list) {
-  const cur = loadTrack(),
-    merged = mergeTracks(cur, list);
-  save(merged);
-  drawTrack();
-  if (merged.length) openTrack(true);
-  return merged.length - cur.length;
 }
 // Tuile du suivi dépliée ; scroll : l'écran y va
 function openTrack(scroll) {
