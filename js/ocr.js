@@ -6,7 +6,6 @@ import { skewAngle } from './skew.js';
 import { toGray, stretchBounds, enhance, autoParams, flatten, screenBox } from './enhance.js';
 import { coordZone } from './zone.js';
 import { findQuad, homography, invert, warp, rectFor, grow } from './warp.js';
-import { exifDate } from './exif.js';
 
 // Tout Tesseract est hébergé avec l'appli (vendor/tesseract) : aucun code ni donnée ne vient d'un autre site.
 // Bibliothèque et worker sont dans le cache de l'appli ; le moteur WebAssembly et la langue (7 Mo) ne sont téléchargés
@@ -47,7 +46,8 @@ export const QUAD_GAIN = 3; // perspective : cadre d'écran appliqué seulement 
 const TOL = 0.00002; // deux lectures à moins de ~2 m sur un axe votent ensemble
 const FULL_W = 1200; // largeur de la lecture pleine image (recherche de la zone des coordonnées)
 
-// orig : photo telle que prise (aux quarts de tour près) ; base : la même, redressée en perspective si demandé ;
+// orig : photo telle que prise (aux quarts de tour près : turns) ; base : la même, redressée en perspective si demandé
+// (applied : les coins appliqués, en pixels de orig) ;
 // work : base tournée de angle degrés, refaite à la demande ; zone : la zone lue, agrandie et contrastée
 // gen : numéro de la photo, incrémenté à chaque nouvelle photo, quart de tour ou perspective (une lecture en cours se sait périmée)
 // sel : cadre de lecture, en fractions (0 à 1) de la photo affichée ; quad : coins du cadre de perspective (pixels de base)
@@ -60,13 +60,14 @@ let orig = null,
   gen = 0,
   sel = { x: 0.1, y: 0.3, w: 0.8, h: 0.4 },
   quad = null,
+  applied = null,
+  turns = 0,
   enh = { contrast: 1, sharp: null },
   cv,
   stage,
   selEl,
   drag = null,
   progCb = function () {},
-  photoCb = function () {},
   filesCb = function () {};
 // Vue de la photo : zoom z (1 = photo entière) et décalage en pixels de l'écran ; doigts posés sur la photo
 let view = { z: 1, tx: 0, ty: 0 };
@@ -95,46 +96,21 @@ export function loadCanvas(file, max) {
       : viaImg(file)
   ).then(done);
 }
-// Date de prise de vue (EXIF), sinon date du fichier : { t, exif : vrai si lue dans la photo }
-export function photoDate(file) {
-  return (file.slice ? file.slice(0, 131072).arrayBuffer() : Promise.reject(new Error('fichier illisible'))).then(
-    (b) => {
-      const t = exifDate(b);
-      return t ? { t, exif: true } : { t: file.lastModified || Date.now(), exif: false };
-    },
-    () => ({ t: file.lastModified || Date.now(), exif: false })
-  );
-}
-let photoT = null, // date de la photo affichée (ms) ou null
-  photoF = null; // fichier de la photo affichée
-export function photoTime() {
-  return photoT;
-}
-export function photoFile() {
-  return photoF;
-}
 let loading = 0;
 function photoMsg(t) {
   $('photoMsg').textContent = t || '';
   $('photoMsg').hidden = !t;
 }
-// t : date de la photo déjà connue (lot), sinon lue dans ses métadonnées. quiet : photo déjà lue (lot), pas de
-// nouvelle lecture. Retour : promesse, vrai si la photo est affichée (faux : illisible, ou une autre photo choisie)
-export function loadFile(file, t, quiet) {
+// Photo chargée et affichée, sans la lire (la lecture et la fiche de la photo : auto.js, shot.js).
+// Retour : promesse, vrai si la photo est affichée (faux : illisible, ou une autre photo choisie entre-temps)
+export function loadFile(file) {
   if (!file) return Promise.resolve(false);
   const mine = ++loading;
   photoMsg('');
   return loadCanvas(file).then(
     (c) => {
-      if (mine !== loading) return false; // une autre photo a été choisie entre-temps
-      photoF = file;
-      photoT = t || null;
-      if (!t)
-        photoDate(file).then((d) => {
-          if (photoF === file) photoT = d.exif ? d.t : null;
-        });
+      if (mine !== loading) return false;
       showPhoto(c);
-      if (!quiet) photoCb(file);
       return true;
     },
     (err) => {
@@ -154,6 +130,8 @@ function showPhoto(c) {
   angle = 0;
   work = null;
   quad = null;
+  applied = null;
+  turns = 0;
   enh = { contrast: 1, sharp: null };
   gen++;
   showAngle();
@@ -492,6 +470,7 @@ export function applyQuad(q) {
   if (!c) return false;
   base = c;
   quad = q;
+  applied = q.map((p) => p.slice());
   angle = 0;
   work = null;
   gen++;
@@ -504,16 +483,47 @@ export function applyQuad(q) {
 export function hasQuad() {
   return base !== orig;
 }
+// Coins de la perspective appliquée (pixels de orig), ou null
+export function getApplied() {
+  return base !== orig ? applied : null;
+}
 // Retour à la photo d'origine (perspective annulée)
 export function resetQuad() {
   if (!orig || base === orig) return;
   base = orig;
+  applied = null;
   angle = 0;
   work = null;
   gen++;
   showAngle();
   sel = { x: 0.15, y: 0.35, w: 0.7, h: 0.35 };
   showWork();
+}
+
+// Quart de tour à droite de la photo d'origine : perspective, inclinaison et cadre repartent de zéro
+export function quarterTurn() {
+  if (!base) return;
+  const c = document.createElement('canvas');
+  c.width = orig.height;
+  c.height = orig.width;
+  const g = c.getContext('2d');
+  g.translate(c.width, 0);
+  g.rotate(Math.PI / 2);
+  g.drawImage(orig, 0, 0);
+  orig = base = c;
+  gen++;
+  angle = 0;
+  work = null;
+  quad = null;
+  applied = null;
+  turns = (turns + 1) % 4;
+  showAngle();
+  sel = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
+  setMode('frame');
+  showWork();
+}
+export function getTurns() {
+  return turns;
 }
 
 // Un doigt : coin = redimensionner, intérieur du cadre = déplacer, coin de perspective = le déplacer, ailleurs = faire
@@ -640,25 +650,7 @@ function initCrop() {
   window.addEventListener('resize', () => {
     if (base && !$('cropBox').hidden) applyView();
   });
-  $('rot').addEventListener('click', () => {
-    if (!base) return;
-    const c = document.createElement('canvas');
-    c.width = orig.height;
-    c.height = orig.width;
-    const g = c.getContext('2d');
-    g.translate(c.width, 0);
-    g.rotate(Math.PI / 2);
-    g.drawImage(orig, 0, 0);
-    orig = base = c;
-    gen++;
-    angle = 0;
-    work = null;
-    quad = null;
-    showAngle();
-    sel = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
-    setMode('frame');
-    showWork();
-  });
+  $('rot').addEventListener('click', quarterTurn);
   // réglette : rendu au plus une fois par image affichée ; boutons : pas d'un demi-degré
   let pend = null;
   $('tilt').addEventListener('input', (e) => {
@@ -694,15 +686,13 @@ function initCrop() {
   $('zoneClose').addEventListener('click', () => {
     $('cropBox').hidden = true;
   });
-  $('cam').addEventListener('change', (e) => {
-    loadFile(e.target.files[0]);
-    e.target.value = '';
-  });
-  $('gal').addEventListener('change', (e) => {
-    const fs = Array.from(e.target.files || []);
-    e.target.value = '';
-    // plusieurs photos (ou un lot déjà ouvert) : le lot les prend ; sinon la photo seule
-    if (!filesCb(fs)) loadFile(fs[0]);
+  // photo prise ou photos choisies : remises à qui les lit (une seule : lue tout de suite ; plusieurs : un lot)
+  ['cam', 'gal'].forEach((id) => {
+    $(id).addEventListener('change', (e) => {
+      const fs = Array.from(e.target.files || []);
+      e.target.value = '';
+      if (fs.length) filesCb(fs);
+    });
   });
 }
 // Scène visible, dans le mode demandé, cadrage à la place de la zone lue
@@ -739,6 +729,7 @@ export function adopt(o) {
   if (o.base) {
     base = o.base;
     quad = o.quad || null;
+    applied = quad && quad.map((p) => p.slice());
   }
   if (typeof o.angle === 'number') angle = o.angle;
   work = o.img || null;
@@ -1302,12 +1293,11 @@ function prepareOffline() {
     });
 }
 
-// onPhoto(file) : appelé à chaque nouvelle photo chargée (auto.js enchaîne les étapes)
-export function initOcr(onPhoto, onFiles) {
+// onFiles(fichiers) : appelé avec la photo prise ou les photos choisies
+export function initOcr(onFiles) {
   cv = $('cv');
   stage = $('stage');
   selEl = $('sel');
-  photoCb = onPhoto || photoCb;
   filesCb = onFiles || filesCb;
   initCrop();
   $('prepOff').addEventListener('click', prepareOffline);

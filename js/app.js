@@ -1,25 +1,36 @@
 /* GPS ESAM : point d'entrée. Lecture du texte, affichage du résultat, liens, événements. */
-import { $, esc, f6, copy, clip, state, VERSION, initTiles, openTile } from './util.js';
+import { $, esc, f6, fmtWhen, copy, clip, state, VERSION, initTiles, openTile } from './util.js';
 import { checkPoint, ddText, airopsUrl, routeUrl, geoUrl } from './go.js';
 import { parse, toDMM, toDMS, toUTM } from './parser.js';
 import { initMap, updateMap, startGeo } from './map.js';
 import { initShare, drawQR, shareText } from './share.js';
 import { loadHist, drawHist, scheduleHist, flushHist, cancelHist } from './history.js';
-import { initAuto, hideSteps } from './auto.js';
+import { initAuto, forget } from './auto.js';
 import { initFix, openFix, closeFix } from './fix.js';
 import { initPlace, showPlace, placeText } from './place.js';
 import { initCompass } from './compass.js';
-import { confidence, trusted } from './trust.js';
-import { initTrack, addPoint, trackInfo, trackName, indexOf, decodeTrack, importTrack, askResume } from './track.js';
-import { initBatch, batchChecked } from './batch.js';
-import { clearZone, photoTime, photoFile } from './ocr.js';
+import { confidence, trusted, carryDoubt } from './trust.js';
+import {
+  initTrack,
+  putPoint,
+  findPoint,
+  resumePending,
+  trackInfo,
+  trackName,
+  decodeTrack,
+  importTrack,
+  askResume
+} from './track.js';
+import { initBatch } from './batch.js';
+import { clearZone } from './ocr.js';
+import { shotPoint, fixShot, unfixShot, sendShot, flushHeld, shown, setShown, watch, SRC } from './shot.js';
 
 const src = $('src'),
   out = $('result');
+// Le point affiché vient d'une photo (sa fiche : shot.shown()) ou d'un texte saisi (aucune fiche)
 let chosen = 0,
   lastParse = null,
-  // texte issu d'une photo (lecture, puis corrections à la main) : le point du suivi garde la date de la photo
-  fromPhoto = false,
+  keepMap = false, // affichage du point sans recentrer la carte (fin d'un lot : elle montre tous ses points)
   sayTimer = null,
   goTimer = null;
 
@@ -58,16 +69,22 @@ function render() {
     $('resCard').classList.add('empty');
     out.innerHTML =
       r && r.empty
-        ? '<div class="status"><span class="pill none">En attente de coordonnées</span></div>'
+        ? r.why
+          ? `<div class="status"><span class="pill ${r.wait ? 'none">Lecture en cours' : 'check">Aucun point'}</span></div><p class="flush">${esc(
+              r.why
+            )}</p>`
+          : '<div class="status"><span class="pill none">En attente de coordonnées</span></div>'
         : `<div class="status"><span class="pill check">Aucune coordonnée trouvée</span></div><p class="flush">Corrigez le texte ou recadrez sur les coordonnées.</p>${goBlock(
             null,
             'Pas de coordonnées valides : AirOps et Itinéraire désactivés.'
           )}`;
-    $('resSum').textContent = r && r.empty ? '' : 'aucune coordonnée';
+    $('resSum').textContent =
+      r && r.empty ? (r.why ? (r.wait ? 'lecture en cours' : 'aucun point') : '') : 'aucune coordonnée';
     $('eqCard').hidden = true;
     $('shareCard').hidden = true;
     $('pilotCard').hidden = true;
     if (!(r && r.empty)) say('Aucune coordonnée trouvée');
+    else if (r.why) say(r.why);
     setHash('');
     updateMap();
     return;
@@ -95,6 +112,9 @@ function render() {
       }<small>Toucher pour copier</small></button>`
     : `<div class="big1 held">${la}, ${lo}<small>Douteux : à vérifier sur la photo</small></div>`;
   h += `<div class="seg1">Lu : ${esc(c.seg)}</div>`;
+  // point d'une photo : la date qu'il prendra au suivi, et d'où elle vient
+  const sh = shown();
+  if (sh) h += `<div class="seg1">Photo du ${esc(fmtWhen(sh.t))} (${SRC[sh.src]})</div>`;
   h += '<div class="place" id="place"></div>';
   if (ok) h += goBlock(c);
   const notes = c.notes.slice();
@@ -128,7 +148,7 @@ function render() {
     $('eqCard').hidden = true;
     $('shareCard').hidden = true;
     showPlace();
-    updateMap(true);
+    updateMap(!keepMap);
     cancelHist();
     say(`À vérifier : ${la}, ${lo}`);
     setHash('');
@@ -174,7 +194,7 @@ function render() {
   $('shareCard').hidden = false;
   drawQR();
   showPlace();
-  updateMap(true);
+  updateMap(!keepMap);
   // historique : pas pendant la frappe (valeurs partielles), seulement une fois le champ quitté
   if (document.activeElement !== src) scheduleHist(c, src.value);
   else cancelHist();
@@ -261,20 +281,42 @@ function airopsGo(a) {
   useCurrent();
 }
 
-// Bouton d'ajout au suivi, sous le point : gros, avec le nom de l'animal ; « déjà dans le suivi » si le point y est
+// Sous le point : sa place dans le suivi. Le point d'une photo y entre de lui-même dès qu'il est sûr ; le bouton sert
+// au texte saisi, et à un point de photo retiré du suivi.
 function trackButton() {
   const c = state.current,
     el = $('trk');
   if (!c || !el) return;
-  const i = indexOf(c),
+  // question du démarrage sans réponse : rien n'entre au suivi, le point attend
+  if (resumePending()) {
+    el.innerHTML =
+      '<button class="btn sec wide" type="button" data-resume="1">Suivi : choisir d\u2019abord</button>' +
+      '<p class="flush">Un suivi est déjà sur ce téléphone. Choisissez en haut de le continuer ou de repartir de zéro : le point y entrera ensuite.</p>';
+    return;
+  }
+  const sh = shown(),
+    i = findPoint({ lat: c.lat, lon: c.lon, t: sh ? sh.t : Date.now() }, sh && sh.key),
     n = trackName(),
     ti = trackInfo(c);
   el.innerHTML =
-    (i >= 0
-      ? `<div class="btn ok wide" role="status">Point ${i + 1} du suivi${n ? ` · ${esc(n)}` : ''}</div>`
+    (i
+      ? `<div class="btn ok wide" role="status">Point ${i} du suivi${n ? ` · ${esc(n)}` : ''}</div>`
       : `<button class="btn wide" type="button" data-track="1">Ajouter au suivi${
           n ? ` · ${esc(n)}` : ' des points'
-        }</button>`) + (ti && i < 0 ? `<p class="flush">${esc(ti)}</p>` : '');
+        }</button>`) + (ti && !i ? `<p class="flush">${esc(ti)}</p>` : '');
+}
+// Annonce de ce que le suivi a fait du point (voir track.placePoint)
+function sayTrack(res) {
+  if (!res) return;
+  say(
+    res.how === 'held'
+      ? 'Point en attente : choisissez d\u2019abord de continuer le suivi en cours ou de repartir de zéro'
+      : res.how === 'added'
+        ? `Point ${res.n} ajouté au suivi`
+        : res.how === 'moved'
+          ? `Point ${res.n} du suivi corrigé`
+          : `Point ${res.n} déjà au suivi`
+  );
 }
 function eqRows(c) {
   return [
@@ -296,19 +338,52 @@ function eqText(c) {
 // verified : texte vérifié à la main (molettes validées) : transmissible même avec un avertissement
 function update(verified) {
   chosen = 0;
-  lastParse = parse(src.value);
+  // texte retouché après une lecture de photo douteuse : il reste à vérifier
+  lastParse = carryDoubt(lastParse, parse(src.value));
   if (verified && lastParse.ok) lastParse.verified = true;
   render();
 }
-function show(text, p) {
-  src.value = text;
+/**
+ * Point d'une photo dans « Point de la victime » : sa correction à la main, sinon sa lecture. Photo sans rien de lu :
+ * le point est effacé (jamais celui d'une autre photo). La même fonction pour une photo seule et une photo d'un lot,
+ * appelée par auto.openShot. o.keepMap : la carte ne se recentre pas.
+ */
+function showShot(shot, o) {
+  const x = shotPoint(shot);
+  if (!x) {
+    // la raison est le texte de l'état de la photo, le même que dans la liste d'un lot
+    clearPoint(
+      shot.st === 'wait' ? 'Photo pas encore lue.' : `${shot.msg.charAt(0).toUpperCase()}${shot.msg.slice(1)}.`,
+      shot
+    );
+    return;
+  }
+  src.value = x.text;
+  chosen = x.chosen || 0;
+  lastParse = x.p;
+  setShown(shot);
+  keepMap = !!(o && o.keepMap);
+  render();
+  keepMap = false;
+}
+// Plus de point affiché : rien à copier, à partager ni à envoyer au drone. why : la raison, affichée ;
+// shot : la photo dont c'est la lecture ; wait : lecture en cours
+function clearPoint(why, shot, wait) {
+  src.value = '';
   chosen = 0;
-  lastParse = p;
-  fromPhoto = !!(p && p.ocr);
+  lastParse = { ok: false, empty: true, why: why || '', wait: !!wait };
+  setShown(shot || null);
   render();
 }
+// Texte saisi ou repris (frappe, historique, inversion) : le point n'est plus celui d'une photo
+function typed() {
+  setShown(null);
+  update();
+}
+// Le point affiché entre dans l'historique dès qu'on s'en sert : jamais un point douteux, qui en ressortirait
+// comme un texte saisi, sans son doute
 function useCurrent() {
-  if (state.current) {
+  if (state.current && trusted(lastParse)) {
     scheduleHist(state.current, src.value);
     flushHist();
   }
@@ -373,9 +448,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ---------- Événements ----------
-src.addEventListener('input', () => {
-  update();
-});
+src.addEventListener('input', typed);
 // champ quitté : le point affiché entre dans l'historique
 src.addEventListener('change', useCurrent);
 document.addEventListener('visibilitychange', () => {
@@ -383,11 +456,8 @@ document.addEventListener('visibilitychange', () => {
 });
 $('clear').addEventListener('click', () => {
   src.value = '';
-  fromPhoto = false;
-  $('cropBox').hidden = true;
-  clearZone();
-  hideSteps();
-  update();
+  forget();
+  typed();
   src.focus();
 });
 $('eqCopy').addEventListener('click', () => {
@@ -423,7 +493,7 @@ document.addEventListener('click', (e) => {
   if (t.dataset.swap && state.current) {
     // inversion proposée et choisie : la latitude passe en premier
     src.value = ddText(state.current.lon, state.current.lat);
-    update();
+    typed();
     return;
   }
   // ligne d'autres formats : seule la valeur affiche « Copié », la ligne garde sa hauteur
@@ -434,27 +504,43 @@ document.addEventListener('click', (e) => {
     useCurrent();
   } else if (t.dataset.fix) openFix(state.current);
   else if (t.dataset.verify) {
-    // l'utilisateur a comparé avec la photo : le point devient transmissible
-    if (lastParse && lastParse.ok) lastParse.verified = true;
+    // l'utilisateur a comparé avec la photo : le point devient transmissible, et celui d'une photo va au suivi
+    const sh = shown();
+    let res = null;
+    if (lastParse && lastParse.ok) {
+      lastParse.verified = true;
+      if (sh) {
+        fixShot(sh, src.value, lastParse, chosen, 'confirmée à la main');
+        res = sendShot(sh);
+      }
+    }
     render();
     useCurrent();
+    sayTrack(res);
+  } else if (t.dataset.resume) {
+    // la question du suivi en cours est en haut de l'écran
+    $('dogCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('resumeGo').focus({ preventScroll: true });
   } else if (t.dataset.track) {
-    // photo d'un lot dont le point est déjà au suivi : il y est corrigé ; sinon ajouté, daté de la photo
-    const m = fromPhoto ? batchChecked(photoFile(), state.current) : 0,
-      n = m || addPoint(state.current, '', fromPhoto ? photoTime() : null);
+    // point d'une photo : par sa fiche (corrigé sur place s'il y est déjà) ; texte saisi : daté de maintenant
+    const sh = shown(),
+      c = state.current,
+      res = sh ? sendShot(sh, true) : c && putPoint({ lat: c.lat, lon: c.lon, t: Date.now() }, true);
     trackButton();
-    say(m ? `Point ${n} du suivi corrigé` : `Point ${n} ajouté au suivi`);
+    sayTrack(res);
   } else if (t.dataset.alt) {
     chosen = +t.dataset.alt;
     if (lastParse) lastParse.verified = false;
+    // photo confirmée puis autre lecture choisie : elle redevient à vérifier
+    if (shown() && shown().fix) unfixShot(shown());
     render();
   } else if (t.dataset.hist) {
     const x = loadHist()[+t.dataset.hist];
     if (x) {
       src.value = x.src;
-      fromPhoto = false;
+      lastParse = null; // point repris de l'historique : sans lien avec la lecture affichée avant
       clearZone();
-      update();
+      typed();
       openTile('resCard');
       $('resCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -465,21 +551,30 @@ document.addEventListener('click', (e) => {
 initTiles();
 initMap();
 initShare(useCurrent);
-initAuto(show);
-// lot de photos : point d'une photo lue (lecture complète), ou coordonnées vérifiées à la main (lecture null)
-initBatch((text, p) => {
-  if (p) show(text, p);
-  else {
-    src.value = text;
-    fromPhoto = true; // point vérifié d'une photo du lot : daté de la photo
-    update(true);
-  }
-});
+initAuto(showShot, clearPoint);
+initBatch();
+// molettes validées : la photo affichée garde ce point, dans le format lu, et il va au suivi ; texte saisi : corrigé
 initFix((t) => {
+  const sh = shown(),
+    p = parse(t);
+  if (sh && p.ok) {
+    fixShot(sh, t, p, 0, 'corrigée à la main');
+    const res = sendShot(sh);
+    showShot(sh);
+    sayTrack(res);
+    return;
+  }
   src.value = t;
   update(true);
 });
-initTrack(trackButton);
+// fiche modifiée (point versé au suivi, autre photo affichée) : l'état sous le point suit
+watch(trackButton);
+// suivi modifié par sa tuile, ou question du démarrage répondue : les points lus en attendant y entrent
+initTrack(() => {
+  const n = flushHeld();
+  trackButton();
+  if (n) say(`${n} point${n > 1 ? 's' : ''} versé${n > 1 ? 's' : ''} au suivi`);
+});
 initPlace();
 initCompass();
 $('ver').textContent = `v${VERSION}`;

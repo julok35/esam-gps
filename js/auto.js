@@ -1,13 +1,15 @@
-/* Enchaînement automatique après une photo : redressement (perspective, inclinaison), contraste et netteté, zone des
-   coordonnées, lecture, confiance. Chaque étape s'affiche avec son résultat et peut être reprise à la main. */
+/* Photo affichée : enchaînement automatique après une photo (redressement, contraste et netteté, zone des coordonnées,
+   lecture, confiance), étapes affichées avec leur résultat, reprises à la main. Une photo seule et une photo d'un lot
+   passent par les mêmes fonctions : runShot (la lire), openShot (l'afficher telle que lue). */
 import { $, esc, openTile } from './util.js';
 import * as ocr from './ocr.js';
 import { autoParams } from './enhance.js';
-import { readPhoto, zone, read, trust, enhInfo } from './pipeline.js';
+import { zone, read, trust, enhInfo } from './pipeline.js';
+import { newShot, readShot, sendShot, stateOf, pointOf, touch, watch, busyWith, setBusy, BAD, FAIL } from './shot.js';
 
-// onFiles(fichiers) : plusieurs photos choisies ; vrai si le lot les prend (batch.js)
-let onFiles = function () {
-  return false;
+// onFiles(fichiers) : photo prise ou photos choisies. Sans lot (batch.js) : la première est lue seule
+let onFiles = function (files) {
+  newShot(files[0]).then(runShot);
 };
 export function setFilesHandler(fn) {
   onFiles = fn;
@@ -23,8 +25,11 @@ const STEPS = [
 const ICON = { wait: '·', run: '…', ok: '✓', warn: '!', fail: '✕', info: '-' };
 let state = {},
   job = 0,
+  cur = null, // fiche de la photo affichée
+  // rappels de app.js : showCb(fiche, options) affiche son point, clearCb(texte, fiche, en cours) l'efface
   showCb = function () {},
-  lastRead = null; // dernière lecture { img, box } pour la zone affichée
+  clearCb = function () {},
+  lastRead = null; // dernière lecture { img, box } de la photo affichée, pour l'aperçu du contraste
 
 function set(k, st, msg) {
   state[k] = { st, msg: msg || '' };
@@ -48,8 +53,9 @@ function paint() {
   }).join('');
   const running = STEPS.some((s) => state[s[0]] && state[s[0]].st === 'run');
   $('stepsStop').hidden = !running;
+  // rien ne se reprend à la main pendant une lecture, celle de cette photo ou celle d'un lot
   ol.querySelectorAll('button').forEach((b) => {
-    b.disabled = running;
+    b.disabled = running || busyWith() === 'lot';
   });
 }
 function reset() {
@@ -64,11 +70,9 @@ function stale(myJob, myGen) {
     return job !== myJob || ocr.photoGen() !== myGen;
   };
 }
-function fail(err) {
-  console.error('Lecture photo :', err);
+function fail() {
   STEPS.forEach((s) => {
-    if (state[s[0]].st === 'run')
-      set(s[0], 'fail', 'lecture impossible : vérifiez le réseau au premier usage, ou tapez le texte');
+    if (state[s[0]].st === 'run') set(s[0], 'fail', FAIL);
   });
 }
 // Chargement du moteur au premier usage : affiché sur l'étape en cours
@@ -78,48 +82,160 @@ function engineProgress() {
     if (run && /moteur|langue|Initialisation/.test(t)) set(run[0], 'run', t + (f ? ` ${Math.round(f * 100)} %` : ''));
   });
 }
+// Début d'une lecture de la photo affichée : une seule lecture à la fois, la précédente s'arrête.
+// Retour : isStale(), avec done() à appeler en fin de lecture
 function begin() {
   const myJob = ++job;
+  setBusy('one');
   $('cropBox').hidden = true;
   engineProgress();
-  return stale(myJob, ocr.photoGen());
+  const isStale = stale(myJob, ocr.photoGen());
+  isStale.done = function () {
+    if (job === myJob) setBusy('');
+  };
+  return isStale;
 }
-// Lecture terminée : zone lue affichée, résultat transmis à l'appli
-function finish(img, box, res, manual) {
-  lastRead = { img, box };
-  ocr.showZoneOf(img, box);
-  showCb(res.text, res.p);
-  if (res.none) {
-    if (!manual) ocr.openStage('frame');
+function scrollTo(id) {
+  openTile(id);
+  $(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/**
+ * Lire une photo : elle est affichée, lue par la chaîne commune (étapes à l'écran), son point sûr versé au suivi, puis
+ * ouverte telle que lue. Le point affiché avant est effacé dès le début : il n'est plus celui de la photo en cours.
+ */
+export async function runShot(shot) {
+  const myJob = ++job;
+  setBusy('one');
+  cur = null;
+  lastRead = null;
+  hideSteps();
+  clearCb('Lecture de la photo en cours…', null, true);
+  const loaded = await ocr.loadFile(shot.file);
+  if (job !== myJob) return; // une autre photo a été choisie entre-temps
+  if (!loaded) {
+    setBusy('');
+    lost(shot);
     return;
   }
-  openTile('result');
-  $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-function waitFrame() {
-  set('read', 'wait', 'en attente du cadre');
-  set('trust', 'wait', '');
-  ocr.openStage('frame');
-}
-// Après une photo : tout, de la perspective à la confiance
-async function runAll() {
-  const isStale = begin(),
+  cur = shot;
+  const isStale = stale(myJob, ocr.photoGen()),
     s = ocr.photoSize();
+  $('cropBox').hidden = true;
+  engineProgress();
   reset();
   set('photo', 'ok', `${s.w} × ${s.h} px`);
-  openTile('steps');
-  $('steps').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  try {
-    const out = await readPhoto(ocr.getOrig(), { stale: isStale, wi: 0, onStep: set });
-    if (!out || isStale()) return;
-    // redressement, inclinaison et cadre repris à l'écran : chaque étape se reprend à la main
-    ocr.adopt(out);
-    $('cropBox').hidden = true;
-    if (!out.found) waitFrame();
-    else finish(out.img, out.box, out.res, false);
-  } catch (err) {
-    if (!isStale()) fail(err);
+  scrollTo('steps');
+  const out = await readShot(shot, { stale: isStale, wi: 0, onStep: set, orig: ocr.getOrig() });
+  if (job !== myJob) return;
+  setBusy('');
+  if (!out) {
+    // lecture impossible (moteur) ; abandonnée (photo pivotée entre-temps) : rien à dire de plus
+    if (shot.st === 'fail') {
+      fail();
+      clearCb('Lecture impossible : aucun point à transmettre.', shot);
+    }
+    return;
   }
+  sendShot(shot);
+  await openShot(shot, { fresh: out, scroll: true });
+}
+// Photo illisible : rien à afficher, le point est effacé
+function lost(shot) {
+  shot.st = 'bad';
+  shot.msg = BAD;
+  touch(shot);
+  cur = null;
+  hideSteps();
+  $('cropBox').hidden = true;
+  clearCb('Photo illisible : aucun point à transmettre.', shot);
+}
+
+/**
+ * Afficher une lecture : la photo devient la photo affichée, telle que lue (étapes, redressement, cadre, zone lue),
+ * et son point va dans « Point de la victime », ou l'efface si rien n'a été lu. La même fonction en fin de lecture
+ * d'une photo seule (o.fresh : résultat tout juste rendu par readShot, avec ses canevas) et pour une photo d'un lot
+ * (rechargée et remise dans la géométrie de sa lecture, sans la relire).
+ * o.scroll : l'écran va au point ; o.keepMap : la carte ne se recentre pas. Retour : promesse, vrai si affichée.
+ */
+export async function openShot(shot, o) {
+  o = o || {};
+  let out = o.fresh;
+  const r = shot.r;
+  if (!out) {
+    const myJob = ++job; // une lecture de photo seule en cours s'arrête
+    if (busyWith() === 'one') setBusy('');
+    const loaded = await ocr.loadFile(shot.file);
+    if (job !== myJob) return false;
+    if (!loaded) {
+      lost(shot);
+      return false;
+    }
+    if (!r) {
+      // photo pas (encore) lue : affichée, à cadrer à la main
+      cur = shot;
+      lastRead = null;
+      reset();
+      set('photo', 'ok', `${ocr.photoSize().w} × ${ocr.photoSize().h} px`);
+      showCb(shot, o);
+      ocr.openStage('frame');
+      return true;
+    }
+    for (let i = 0; i < (r.turns || 0); i++) ocr.quarterTurn();
+    if (r.enh) ocr.setEnh(r.enh);
+    const orig = ocr.getOrig(),
+      base = (r.quad && ocr.warpCanvas(orig, r.quad)) || orig;
+    out = {
+      base,
+      quad: base === orig ? null : r.quad,
+      angle: r.angle || 0,
+      img: r.angle ? ocr.rotateCanvas(base, r.angle) : base,
+      box: r.box
+    };
+  }
+  cur = shot;
+  reset();
+  Object.assign(state, r.steps);
+  state.photo = { st: 'ok', msg: `${ocr.photoSize().w} × ${ocr.photoSize().h} px` };
+  if (!r.found) state.read = { st: 'wait', msg: 'en attente du cadre' };
+  paint();
+  // redressement, inclinaison et cadre repris à l'écran : chaque étape se reprend à la main
+  ocr.adopt(out);
+  $('cropBox').hidden = true;
+  lastRead = r.found && r.res ? { img: out.img, box: r.box } : null;
+  if (lastRead) ocr.showZoneOf(out.img, r.box);
+  showCb(shot, o);
+  if (!pointOf(shot)) ocr.openStage('frame');
+  else if (o.scroll) scrollTo('resCard');
+  return true;
+}
+
+// Lecture reprise à la main sur la photo affichée (cadre, relecture, perspective, contraste) : la fiche la garde, la
+// photo se rouvrira telle quelle ; son point sûr va au suivi, comme après une lecture automatique
+function keep(rd, tr) {
+  const steps = {},
+    size = ocr.photoSize();
+  set('photo', 'ok', `${size.w} × ${size.h} px`); // la photo a pu être pivotée depuis son chargement
+  STEPS.slice(1).forEach((s) => {
+    steps[s[0]] = state[s[0]];
+  });
+  cur.r = {
+    turns: ocr.getTurns(),
+    quad: ocr.getApplied(),
+    angle: ocr.getAngle(),
+    box: rd.box,
+    enh: ocr.getEnh(),
+    found: true,
+    res: rd.res,
+    steps
+  };
+  cur.fix = null;
+  Object.assign(
+    cur,
+    stateOf({ found: true, res: rd.res, trust: tr && tr.t, quad: cur.r.quad, angle: cur.r.angle }, steps)
+  );
+  sendShot(cur);
+  touch(cur);
 }
 // Lecture et confiance, cadre et réglages tels qu'à l'écran. manual : cadre posé à la main
 async function readThenTrust(isStale, manual) {
@@ -134,32 +250,50 @@ async function readThenTrust(isStale, manual) {
   });
   if (!rd || isStale()) return;
   set('read', rd.st, rd.msg);
+  let tr = null;
   if (rd.res.none) set('trust', 'fail', 'rien à transmettre');
   else {
-    const tr = trust(rd.res);
+    tr = trust(rd.res);
     if (tr) set('trust', tr.st, tr.msg);
     ocr.adopt({ img, box: rd.box });
     $('cropBox').hidden = true;
   }
-  finish(img, rd.box, rd.res, manual);
+  // zone lue affichée, lecture gardée par la fiche, point transmis à l'appli
+  lastRead = { img, box: rd.box };
+  ocr.showZoneOf(img, rd.box);
+  keep(rd, tr);
+  showCb(cur);
+  if (rd.res.none) {
+    if (!manual) ocr.openStage('frame');
+    return;
+  }
+  scrollTo('resCard');
+}
+// Reprise à la main possible : une photo affichée, et pas de lot en cours de lecture
+function canRun() {
+  return ocr.hasPhoto() && cur && busyWith() !== 'lot';
 }
 // Depuis la lecture (cadre et réglages tels qu'à l'écran)
 async function runRead(manual) {
-  if (!ocr.hasPhoto()) return;
+  if (!canRun()) return;
   const isStale = begin();
+  clearCb('Lecture de la photo en cours…', cur, true);
   if (state.zone.st === 'wait' || manual) set('zone', 'ok', 'cadre posé à la main');
   set('read', 'wait', '');
   set('trust', 'wait', '');
   try {
     await readThenTrust(isStale, manual);
   } catch (err) {
-    if (!isStale()) fail(err);
+    console.error('Lecture photo :', err);
+    if (!isStale()) fail();
   }
+  isStale.done();
 }
 // Depuis la zone (après un changement de géométrie à la main : perspective)
 async function runFromZone() {
-  if (!ocr.hasPhoto()) return;
+  if (!canRun()) return;
   const isStale = begin();
+  clearCb('Lecture de la photo en cours…', cur, true);
   set('read', 'wait', '');
   set('trust', 'wait', '');
   try {
@@ -171,24 +305,32 @@ async function runFromZone() {
       wi: 0,
       onView: (name, i) => i > 1 && set('zone', 'run', `nouvel essai : ${name}…`)
     });
-    if (z === undefined || isStale()) return;
-    set('zone', z.st, z.msg);
-    if (!z.found) {
-      waitFrame();
-      return;
+    if (z !== undefined && !isStale()) {
+      set('zone', z.st, z.msg);
+      if (!z.found) {
+        set('read', 'wait', 'en attente du cadre');
+        ocr.openStage('frame');
+      } else {
+        ocr.adopt({ angle: z.angle, img: z.img, box: z.box });
+        $('cropBox').hidden = true;
+        await readThenTrust(isStale, false);
+      }
     }
-    ocr.adopt({ angle: z.angle, img: z.img, box: z.box });
-    $('cropBox').hidden = true;
-    await readThenTrust(isStale, false);
   } catch (err) {
-    if (!isStale()) fail(err);
+    console.error('Lecture photo :', err);
+    if (!isStale()) fail();
   }
+  isStale.done();
 }
 function stop() {
   job++;
+  setBusy('');
   STEPS.forEach((s) => {
     if (state[s[0]].st === 'run') set(s[0], 'info', 'arrêtée : reprise à la main');
   });
+  // la lecture gardée de cette photo, s'il y en a une, revient ; sinon aucun point
+  if (cur && cur.r) showCb(cur);
+  else clearCb('Lecture arrêtée : cadrez les coordonnées à la main.', cur);
   ocr.openStage('frame');
 }
 
@@ -221,15 +363,23 @@ function readEnh() {
   previewEnh();
 }
 
-export function initAuto(show) {
+// show(fiche, options) : affiche le point de la photo ; clear(texte, fiche, en cours) : efface le point (app.js)
+export function initAuto(show, clear) {
   showCb = show;
-  ocr.initOcr(
-    () => {
-      runAll();
-    },
-    (files) => onFiles(files)
-  );
+  clearCb = clear;
+  ocr.initOcr((files) => onFiles(files));
   reset();
+  // lot en cours de lecture : les reprises à la main attendent
+  let lot = false;
+  watch(() => {
+    const now = busyWith() === 'lot';
+    if (now === lot) return;
+    lot = now;
+    ['ocrGo', 'enhGo', 'pApply'].forEach((id) => {
+      $(id).disabled = lot;
+    });
+    if (!$('steps').hidden) paint();
+  });
   $('steps').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-adj]');
     if (!b) return;
@@ -238,10 +388,7 @@ export function initAuto(show) {
     else if (k === 'enh') openEnh();
     else if (k === 'zone') ocr.openStage('frame');
     else if (k === 'read') runRead(true);
-    else if (k === 'trust') {
-      openTile('result');
-      $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    else if (k === 'trust') scrollTo('resCard');
   });
   $('stepsStop').addEventListener('click', stop);
   $('ocrGo').addEventListener('click', () => {
@@ -264,7 +411,7 @@ export function initAuto(show) {
     }
   });
   $('pApply').addEventListener('click', () => {
-    if (ocr.applyQuad(ocr.getQuad())) {
+    if (canRun() && ocr.applyQuad(ocr.getQuad())) {
       set('level', 'ok', 'perspective redressée à la main');
       runFromZone();
     }
@@ -288,6 +435,7 @@ export function initAuto(show) {
     openEnh();
   });
   $('enhGo').addEventListener('click', () => {
+    if (!canRun()) return;
     readEnh();
     $('enhBox').hidden = true;
     set('enh', 'ok', enhInfo(ocr.getWork()));
@@ -297,36 +445,23 @@ export function initAuto(show) {
     $('enhBox').hidden = true;
   });
 }
-/**
- * Photo d'un lot, déjà lue par la même chaîne (pipeline.js) : elle devient la photo affichée, exactement comme
- * après une lecture de photo seule (étapes, cadre, zone lue, résultat), sans la relire.
- * r : { quad, angle, box, found, res, steps : { étape : { st, msg } } }. Retour : promesse, vrai si affichée.
- */
-export async function openRead(file, t, r) {
-  if (!(await ocr.loadFile(file, t, true))) return false;
-  job++; // une lecture de photo seule en cours s'arrête
-  const orig = ocr.getOrig(),
-    base = (r.quad && ocr.warpCanvas(orig, r.quad)) || orig,
-    img = r.angle ? ocr.rotateCanvas(base, r.angle) : base;
-  reset();
-  Object.assign(state, r.steps);
-  state.photo = { st: 'ok', msg: `${orig.width} × ${orig.height} px` };
-  paint();
-  ocr.adopt({ base, quad: base === orig ? null : r.quad, angle: r.angle || 0, img, box: r.box });
-  if (!r.found) {
-    waitFrame();
-    return true;
-  }
-  $('cropBox').hidden = true;
-  lastRead = { img, box: r.box };
-  ocr.showZoneOf(img, r.box);
-  showCb(r.res.text, r.res.p);
-  if (r.res.none) ocr.openStage('frame');
-  return true;
-}
-// Photo oubliée (texte effacé) : étapes masquées
-export function hideSteps() {
+function hideSteps() {
   $('steps').hidden = true;
   $('stepsStop').hidden = true;
   $('enhBox').hidden = true;
+}
+// Photo oubliée (texte effacé, lot lancé) : sa lecture en cours s'arrête, étapes et cadrage masqués
+export function forget() {
+  job++;
+  if (busyWith() === 'one') setBusy('');
+  cur = null;
+  lastRead = null;
+  hideSteps();
+  $('cropBox').hidden = true;
+  ocr.clearZone();
+}
+// Aucun point à afficher (lot en cours de lecture, lot sans point sûr) : la photo affichée est oubliée, le point effacé
+export function noPoint(why, wait) {
+  forget();
+  clearCb(why, null, wait);
 }

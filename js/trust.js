@@ -59,3 +59,21 @@ export function confidence(info) {
 export function trusted(r) {
   return !!(r && r.ok && (r.verified || (r.trust && r.trust.level === 'ok')));
 }
+
+/**
+ * Texte retouché à la main après une lecture de photo douteuse : le doute reste. prev : résultat affiché avant la
+ * retouche, next : résultat du texte retouché (voir parser.parse). Sans cela, une simple frappe dans le texte ferait
+ * d'une lecture douteuse un point transmissible ; seules la correction aux molettes et la confirmation le lèvent.
+ * Retour : next.
+ */
+export function carryDoubt(prev, next) {
+  if (prev && prev.ocr && prev.ok && !trusted(prev) && next && next.ok) {
+    next.ocr = true;
+    next.trust = {
+      pct: prev.trust ? prev.trust.pct : 0,
+      level: 'check',
+      why: ['texte retouché après une lecture douteuse']
+    };
+  }
+  return next;
+}

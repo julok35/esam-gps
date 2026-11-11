@@ -12,7 +12,9 @@ import {
   toGPX,
   parseGPX,
   mergeTracks,
-  resumeText
+  resumeText,
+  isDup,
+  placePoint
 } from '../js/track.js';
 
 const H = 3600000;
@@ -154,4 +156,78 @@ test('GPX : étiquette décodée une seule fois, points auto-fermants lus, posit
 test('choix au démarrage : rappelle le nom de l’animal et le nombre de points', () => {
   assert.match(resumeText('Pirate', pts), /^Suivi en cours : « Pirate » · 3 points, dernier le /);
   assert.match(resumeText('', pts.slice(0, 1)), /^Suivi en cours sans nom · 1 point, dernier le /);
+});
+
+// ---------- Un point dans le suivi : la même règle pour une photo seule, un lot de photos et un texte saisi ----------
+const A = { lat: 45.103317, lon: 5.9139 },
+  near = { lat: 45.103322, lon: 5.913905 }, // à moins d'un mètre de A
+  B = { lat: 45.141667, lon: 5.968333 };
+
+test('doublon : même position à 3 m près et même minute, pas au-delà', () => {
+  assert.ok(isDup({ ...A, t: 8 * H }, { ...near, t: 8 * H + 30000 }));
+  assert.ok(!isDup({ ...A, t: 8 * H }, { ...near, t: 8 * H + 5 * 60000 }));
+  assert.ok(!isDup({ ...A, t: 8 * H }, { ...B, t: 8 * H }));
+});
+
+test('point ajouté, trié par date, avec la clé de sa photo', () => {
+  const r = placePoint([{ ...B, t: 9 * H, label: '' }], { ...A, t: 8 * H, key: 'a.jpg|1|2' });
+  assert.equal(r.how, 'added');
+  assert.deepEqual(
+    r.pts.map((p) => p.t),
+    [8 * H, 9 * H]
+  );
+  assert.equal(r.pts.indexOf(r.p), 0);
+  assert.equal(r.p.k, 'a.jpg|1|2');
+});
+
+test('même signalement : rien n’est ajouté ; même position à une autre heure : ajoutée', () => {
+  const cur = [{ ...A, t: 8 * H, label: '' }];
+  assert.equal(placePoint(cur, { ...near, t: 8 * H + 20000 }).how, 'dup');
+  assert.equal(placePoint(cur, { ...near, t: 8 * H + 20000 }).pts.length, 1);
+  const later = placePoint(cur, { ...near, t: 18 * H });
+  assert.equal(later.how, 'added');
+  assert.equal(later.pts.length, 2);
+});
+
+test('photo corrigée : son point du suivi est remplacé sur place, date et étiquette gardées', () => {
+  const cur = [{ ...A, t: 8 * H, label: 'collier', k: 'p1' }],
+    r = placePoint(cur, { lat: 45.103167, lon: 5.9139, t: 12 * H, key: 'p1' });
+  assert.equal(r.how, 'moved');
+  assert.equal(r.pts.length, 1);
+  assert.deepEqual(r.pts[0], { lat: 45.103167, lon: 5.9139, t: 8 * H, label: 'collier', k: 'p1' });
+  assert.equal(cur[0].lat, A.lat); // le suivi d'entrée n'est pas modifié
+});
+
+test('deux photos au même endroit : la correction de la seconde ne touche pas le point de la première', () => {
+  const cur = [
+      { ...A, t: 8 * H, label: '', k: 'p1' },
+      { ...A, t: 8 * H + 5 * 60000, label: '', k: 'p2' }
+    ],
+    r = placePoint(cur, { lat: 45.103167, lon: 5.9139, t: 0, key: 'p2' });
+  assert.equal(r.how, 'moved');
+  assert.equal(r.pts[0].lat, A.lat);
+  assert.equal(r.pts[1].lat, 45.103167);
+});
+
+test('photo déjà au suivi relue ou reversée : jamais de second point, même si sa date a été changée', () => {
+  const cur = [{ ...A, t: 7.5 * H, label: '', k: 'p1' }], // date corrigée à la main dans le suivi
+    r = placePoint(cur, { ...A, t: 8 * H, key: 'p1' });
+  assert.equal(r.how, 'same');
+  assert.equal(r.pts.length, 1);
+  assert.equal(r.pts[0].t, 7.5 * H);
+});
+
+test('photo déplacée dans le lot : la date de son point suit si on le demande', () => {
+  const r = placePoint([{ ...A, t: 8 * H, label: '', k: 'p1' }], { ...A, t: 10 * H, key: 'p1' }, true);
+  assert.equal(r.how, 'moved');
+  assert.equal(r.pts[0].t, 10 * H);
+});
+
+test('photo dont le signalement est déjà au suivi sans clé : elle l’adopte, puis le corrige sur place', () => {
+  const r1 = placePoint([{ ...A, t: 8 * H, label: '' }], { ...near, t: 8 * H, key: 'p1' });
+  assert.equal(r1.how, 'dup');
+  assert.equal(r1.pts[0].k, 'p1');
+  const r2 = placePoint(r1.pts, { ...B, t: 8 * H, key: 'p1' });
+  assert.equal(r2.how, 'moved');
+  assert.equal(r2.pts.length, 1);
 });

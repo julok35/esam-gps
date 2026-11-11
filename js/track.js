@@ -202,14 +202,46 @@ export function parseGPX(text) {
     points: pts
   };
 }
-// Fusion : points de b ajoutés à a sans doublon (même position à 3 m près et même minute), triés par date
+// Même signalement : même position à 3 m près et même minute. La règle unique, pour une photo seule, un lot de photos,
+// un texte saisi et un suivi reçu.
+export function isDup(p, q) {
+  return distM(p, q) < 3 && Math.abs(p.t - q.t) < 60000;
+}
+// Fusion : points de b ajoutés à a sans doublon, triés par date
 export function mergeTracks(a, b) {
   const out = a.slice();
   b.forEach((p) => {
-    const dup = out.some((q) => distM(p, q) < 3 && Math.abs(p.t - q.t) < 60000);
-    if (!dup) out.push({ lat: p.lat, lon: p.lon, t: p.t, label: p.label || '' });
+    if (!out.some((q) => isDup(p, q))) out.push({ lat: p.lat, lon: p.lon, t: p.t, label: p.label || '' });
   });
   return out.sort((x, y) => x.t - y.t);
+}
+/**
+ * Point p placé dans le suivi pts (sans DOM) : { lat, lon, t, label, key }. key : identifiant de la photo dont vient
+ * le point (absent pour un texte saisi), gardé sur le point du suivi (champ k).
+ * Photo déjà au suivi (même clé) : son point est corrigé sur place, date et étiquette gardées (date : vrai pour que
+ * la date suive aussi). Sinon, même signalement déjà présent (isDup) : rien n'est ajouté. Sinon le point est ajouté.
+ * Retour : { pts : suivi trié par date, p : le point du suivi, how : 'added' | 'moved' | 'same' | 'dup' }.
+ */
+export function placePoint(pts, p, date) {
+  const out = pts.map((x) => ({ ...x }));
+  let q = p.key ? out.find((x) => x.k === p.key) : null,
+    how;
+  if (q) {
+    how = distM(q, p) < 0.5 && !(date && q.t !== p.t) ? 'same' : 'moved';
+    q.lat = p.lat;
+    q.lon = p.lon;
+    if (date) q.t = p.t;
+  } else if ((q = out.find((x) => isDup(x, p)))) {
+    how = 'dup';
+    if (p.key && !q.k) q.k = p.key; // le signalement déjà présent est celui de cette photo : elle le corrigera sur place
+  } else {
+    how = 'added';
+    q = { lat: p.lat, lon: p.lon, t: p.t, label: p.label || '' };
+    if (p.key) q.k = p.key;
+    out.push(q);
+  }
+  out.sort((x, y) => x.t - y.t);
+  return { pts: out, p: q, how };
 }
 
 // ---------- Tuile « Suivi des points » ----------
@@ -245,13 +277,6 @@ export function askResume() {
   $('resume').hidden = !pts.length;
   if (pts.length) $('resumeTxt').textContent = resumeText(trackName(), pts);
 }
-// Index du point du suivi qui est le point c (à moins de 3 m), sinon -1
-export function indexOf(c) {
-  const pts = loadTrack();
-  if (!c) return -1;
-  for (let i = 0; i < pts.length; i++) if (distM(pts[i], c) < 3) return i;
-  return -1;
-}
 function appUrl() {
   return location.origin + location.pathname;
 }
@@ -285,7 +310,7 @@ export function importTrack(tr) {
   } else return `Suivi « ${curName} » gardé, rien n\u2019a été importé.`;
   $('resume').hidden = true;
   drawTrack();
-  openTrack();
+  openTrack(true);
   return msg;
 }
 
@@ -308,45 +333,36 @@ function save(pts) {
     localStorage.setItem(KEY, JSON.stringify(pts));
   } catch (e) {}
 }
-// Le point affiché entre dans le suivi, daté de la photo (t) ou de maintenant (la date se corrige dans la liste).
-// Retour : son numéro dans le suivi
-export function addPoint(c, label, t) {
-  if (!c) return 0;
-  const pts = loadTrack(),
-    p = { lat: c.lat, lon: c.lon, t: t || Date.now(), label: label || '' };
-  pts.push(p);
-  save(pts);
-  drawTrack();
-  openTrack();
-  return pts.indexOf(p) + 1;
+// Question du démarrage (continuer le suivi déjà sur ce téléphone, ou repartir de zéro) encore sans réponse : rien
+// n'entre au suivi d'ici là, pour ne pas mêler les points d'un animal à ceux d'un autre
+export function resumePending() {
+  return !$('resume').hidden;
 }
-// Point du suivi old corrigé à la main (photo d'un lot) : remplacé par c, date et étiquette gardées.
-// Retour : son numéro, ou 0 s'il n'est pas dans le suivi
-export function movePoint(old, c) {
-  const pts = loadTrack(),
-    i = indexOf(old);
-  if (i < 0 || !c) return 0;
-  pts[i].lat = c.lat;
-  pts[i].lon = c.lon;
-  save(pts);
+// Le point p ({ lat, lon, t, label, key }, voir placePoint) entre dans le suivi, ou y corrige le point de la même
+// photo. scroll : l'écran va à la tuile du suivi (ajout demandé par le bouton). date : la date suit aussi.
+// Retour : { n : numéro du point dans le suivi, how : voir placePoint }, ou { n : 0, how : 'held' } tant que la
+// question du démarrage attend sa réponse
+export function putPoint(p, scroll, date) {
+  if (resumePending()) return { n: 0, how: 'held' };
+  const r = placePoint(loadTrack(), p, date);
+  save(r.pts);
   drawTrack();
-  openTrack();
-  return pts.indexOf(pts[i]) + 1;
+  openTrack(scroll);
+  return { n: r.pts.indexOf(r.p) + 1, how: r.how };
 }
-// Plusieurs points d'un coup (lot de photos), sans doublon. Retour : nombre ajouté
-export function addPoints(list) {
-  const cur = loadTrack(),
-    merged = mergeTracks(cur, list);
-  save(merged);
-  drawTrack();
-  if (merged.length) openTrack();
-  return merged.length - cur.length;
+// Numéro (à partir de 1) du point du suivi qui porte la photo key, sinon du même signalement que c (isDup), sinon 0
+export function findPoint(c, key) {
+  const pts = loadTrack();
+  let i = key ? pts.findIndex((x) => x.k === key) : -1;
+  if (i < 0 && c) i = pts.findIndex((x) => isDup(x, c));
+  return i + 1;
 }
-function openTrack() {
+// Tuile du suivi dépliée ; scroll : l'écran y va
+function openTrack(scroll) {
   const d = $('trackCard');
   d.hidden = false;
   d.open = true;
-  d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (scroll) d.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 // valeur d'un champ datetime-local (heure locale, sans secondes)
 function localVal(t) {
@@ -544,6 +560,7 @@ export function initTrack(onChange) {
     pts.splice(+b.dataset.tdel, 1);
     save(pts);
     drawTrack();
+    onName(); // sous le point affiché, « Point N du suivi » suit
   });
   $('trackList').addEventListener('change', (e) => {
     const el = e.target,
@@ -632,6 +649,7 @@ export function initTrack(onChange) {
   });
   $('resumeGo').addEventListener('click', () => {
     $('resume').hidden = true;
+    onName(); // les points lus en attendant la réponse entrent dans le suivi continué
     openTile('trackCard');
     openTile('map');
     fitTrack();
