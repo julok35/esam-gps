@@ -316,15 +316,20 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .bn small { color: var(--muted); font: 600 .68rem var(--f-label); letter-spacing: .06em; text-transform: uppercase; }
 .bm { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
 .bp.st-ok .bm { color: var(--ok); font-weight: 600; }
-.bp.st-ok .bb[data-show] { cursor: pointer; border-radius: 6px; }
-.bp.st-ok .bb[data-show]:focus-visible { outline: 2px solid var(--jaune); outline-offset: 2px; }
+.bb[data-show] { cursor: pointer; border-radius: 6px; }
+.bb[data-show]:focus-visible { outline: 2px solid var(--jaune); outline-offset: 2px; }
 .bp.on { border-color: var(--jaune); box-shadow: inset 3px 0 0 var(--jaune); }
-.bp.st-check .bm, .bp.st-fail .bm { color: var(--rouge); font-weight: 600; }
+.bp.st-check .bm, .bp.st-none .bm, .bp.st-fail .bm, .bp.st-bad .bm { color: var(--rouge); font-weight: 600; }
 .bp.st-run .bm { color: var(--fg); }
 .ba { display: grid; gap: 4px; justify-items: end; }
 .bx { width: 34px; height: 30px; border-radius: 6px; border: 1.5px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; font-size: .8rem; }
 .bx:disabled { opacity: .35; cursor: default; }
 .ba .chip { padding: 6px 10px; font-size: .74rem; }
+/* photo à vérifier : Vérifier sur toute la largeur, puis ▲ ▼, puis ✕ */
+.ba.v { grid-template-columns: auto auto; }
+.ba.v .chip { grid-column: 1 / -1; }
+.ba.v [data-del] { grid-column: 2; }
+.ba .chip:disabled { opacity: .35; cursor: default; }
 #batchCard { scroll-margin-top: 104px; }
 
 /* Relief du suivi : altitude de chaque point, montée / descente de l'étape, profil du terrain */

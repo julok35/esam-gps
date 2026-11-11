@@ -176,6 +176,23 @@ function free(...cs) {
   });
 }
 
+// Point de la photo corrigé (molettes) ou confirmé à la main : il devient son point sûr. text : texte dans le format
+// lu, p : son résultat, vérifié, chosen : lecture retenue, msg : texte de l'état
+export function fixShot(shot, text, p, chosen, msg) {
+  p.verified = true;
+  shot.fix = { text, p, chosen: chosen || 0 };
+  shot.st = 'ok';
+  shot.msg = msg;
+  touch(shot);
+}
+// Correction retirée (autre lecture choisie parmi les propositions) : la photo redevient à vérifier
+export function unfixShot(shot) {
+  shot.fix = null;
+  shot.st = 'check';
+  shot.msg = 'autre lecture choisie : à confirmer';
+  touch(shot);
+}
+
 // Le point sûr de la photo entre dans le suivi, ou y corrige le point de cette même photo (voir track.placePoint).
 // scroll : l'écran va au suivi. Retour : { n, how }, ou null si la photo n'a pas de point sûr
 export function sendShot(shot, scroll) {
@@ -197,7 +214,7 @@ export function touch(shot) {
     fn(shot);
   });
 }
-// Fiche dont le point est affiché dans « Point de la victime » (null : aucun, ou texte saisi)
+// Fiche dont la lecture est affichée dans « Point de la victime », avec ou sans point (null : aucune, ou texte saisi)
 let shownShot = null;
 export function shown() {
   return shownShot;
