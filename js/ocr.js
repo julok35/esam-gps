@@ -118,9 +118,9 @@ function photoMsg(t) {
   $('photoMsg').textContent = t || '';
   $('photoMsg').hidden = !t;
 }
-// t : date de la photo déjà connue (lot), sinon lue dans ses métadonnées.
-// Retour : promesse, vrai si la photo est affichée (faux : illisible, ou une autre photo choisie entre-temps)
-export function loadFile(file, t) {
+// t : date de la photo déjà connue (lot), sinon lue dans ses métadonnées. quiet : photo déjà lue (lot), pas de
+// nouvelle lecture. Retour : promesse, vrai si la photo est affichée (faux : illisible, ou une autre photo choisie)
+export function loadFile(file, t, quiet) {
   if (!file) return Promise.resolve(false);
   const mine = ++loading;
   photoMsg('');
@@ -134,7 +134,7 @@ export function loadFile(file, t) {
           if (photoF === file) photoT = d.exif ? d.t : null;
         });
       showPhoto(c);
-      photoCb(file);
+      if (!quiet) photoCb(file);
       return true;
     },
     (err) => {

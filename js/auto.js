@@ -297,6 +297,33 @@ export function initAuto(show) {
     $('enhBox').hidden = true;
   });
 }
+/**
+ * Photo d'un lot, déjà lue par la même chaîne (pipeline.js) : elle devient la photo affichée, exactement comme
+ * après une lecture de photo seule (étapes, cadre, zone lue, résultat), sans la relire.
+ * r : { quad, angle, box, found, res, steps : { étape : { st, msg } } }. Retour : promesse, vrai si affichée.
+ */
+export async function openRead(file, t, r) {
+  if (!(await ocr.loadFile(file, t, true))) return false;
+  job++; // une lecture de photo seule en cours s'arrête
+  const orig = ocr.getOrig(),
+    base = (r.quad && ocr.warpCanvas(orig, r.quad)) || orig,
+    img = r.angle ? ocr.rotateCanvas(base, r.angle) : base;
+  reset();
+  Object.assign(state, r.steps);
+  state.photo = { st: 'ok', msg: `${orig.width} × ${orig.height} px` };
+  paint();
+  ocr.adopt({ base, quad: base === orig ? null : r.quad, angle: r.angle || 0, img, box: r.box });
+  if (!r.found) {
+    waitFrame();
+    return true;
+  }
+  $('cropBox').hidden = true;
+  lastRead = { img, box: r.box };
+  ocr.showZoneOf(img, r.box);
+  showCb(r.res.text, r.res.p);
+  if (r.res.none) ocr.openStage('frame');
+  return true;
+}
 // Photo oubliée (texte effacé) : étapes masquées
 export function hideSteps() {
   $('steps').hidden = true;

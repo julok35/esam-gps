@@ -320,6 +320,19 @@ export function addPoint(c, label, t) {
   openTrack();
   return pts.indexOf(p) + 1;
 }
+// Point du suivi old corrigé à la main (photo d'un lot) : remplacé par c, date et étiquette gardées.
+// Retour : son numéro, ou 0 s'il n'est pas dans le suivi
+export function movePoint(old, c) {
+  const pts = loadTrack(),
+    i = indexOf(old);
+  if (i < 0 || !c) return 0;
+  pts[i].lat = c.lat;
+  pts[i].lon = c.lon;
+  save(pts);
+  drawTrack();
+  openTrack();
+  return pts.indexOf(pts[i]) + 1;
+}
 // Plusieurs points d'un coup (lot de photos), sans doublon. Retour : nombre ajouté
 export function addPoints(list) {
   const cur = loadTrack(),

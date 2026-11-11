@@ -439,11 +439,11 @@ document.addEventListener('click', (e) => {
     render();
     useCurrent();
   } else if (t.dataset.track) {
-    // point lu sur une photo datée : daté de la photo
-    const n = addPoint(state.current, '', fromPhoto ? photoTime() : null);
-    batchChecked(photoFile(), state.current);
+    // photo d'un lot dont le point est déjà au suivi : il y est corrigé ; sinon ajouté, daté de la photo
+    const m = fromPhoto ? batchChecked(photoFile(), state.current) : 0,
+      n = m || addPoint(state.current, '', fromPhoto ? photoTime() : null);
     trackButton();
-    say(`Point ${n} ajouté au suivi`);
+    say(m ? `Point ${n} du suivi corrigé` : `Point ${n} ajouté au suivi`);
   } else if (t.dataset.alt) {
     chosen = +t.dataset.alt;
     if (lastParse) lastParse.verified = false;
@@ -471,7 +471,7 @@ initBatch((text, p) => {
   if (p) show(text, p);
   else {
     src.value = text;
-    fromPhoto = false;
+    fromPhoto = true; // point vérifié d'une photo du lot : daté de la photo
     update(true);
   }
 });
