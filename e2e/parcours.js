@@ -876,6 +876,73 @@ await scene(
   }
 );
 
+await scene(
+  'molettes : toucher choisit, − et + font tourner la molette choisie, ◀ ▶ changent de molette',
+  async (op) => {
+    const page = await op();
+    await page.fill('#src', "N 45°06.199' O 001°54.834'");
+    await page.dispatchEvent('#src', 'change');
+    await pause(page);
+    await tap(page, '#result button[data-fix]');
+    await pause(page, 600);
+    const wheels = () =>
+      page.$$eval('#fixRows .wh', (l) =>
+        l.map((w) => `${w.classList.contains('on') ? '*' : ''}${w.getAttribute('aria-valuetext')}`).join('')
+      );
+    // au départ : le premier chiffre de la latitude est choisi ; les lettres N et O sont des molettes à part
+    assert.equal(await wheels(), 'N*4506199O00154834');
+    assert.equal(await page.$$eval('#fixRows .wh.hemi', (l) => l.length), 2);
+    await tap(page, '#fixPlus');
+    assert.match(await wheels(), /^N\*55/);
+    await tap(page, '#fixMinus');
+    await tap(page, '#fixPrev');
+    assert.equal(await wheels(), '*N4506199O00154834');
+    await tap(page, '#fixNext');
+    await tap(page, '#fixNext');
+    assert.match(await wheels(), /^N4\*5/);
+    // toucher une autre molette la choisit sans la faire tourner ; touchée à nouveau en haut : un cran
+    const last = page.locator('#fixRows .fix-row').first().locator('.wh').last(),
+      box = await last.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height - 8);
+    assert.equal(await wheels(), 'N450619*9O00154834');
+    await page.mouse.click(box.x + box.width / 2, box.y + 8);
+    assert.equal(await wheels(), 'N450619*8O00154834');
+    assert.match(await page.textContent('#fixOut'), /45\.103300, -1\.913900/);
+    // la valeur affichée reste douteuse tant que la correction n'est pas validée
+    await tap(page, '#fixCancel');
+    assert.ok(!(await view(page)).copy, 'correction annulée : toujours rien de transmissible');
+  }
+);
+
+await scene('terrain : commandes de 48 px au moins, aucun texte sous 13 px, en 390 et 360 de large', async (op) => {
+  const page = await op();
+  await page.fill('#src', '45.18756, 5.73412');
+  await page.dispatchEvent('#src', 'change');
+  await page.evaluate(() => document.querySelectorAll('details.tile:not([hidden])').forEach((d) => (d.open = true)));
+  for (const width of [390, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    await pause(page);
+    const bad = await page.evaluate(() => {
+      const shown = (e) => !e.closest('[hidden]') && e.getClientRects().length && e.getBoundingClientRect().width > 2;
+      const small = [
+        ...document.querySelectorAll('main button, main a[href], main summary, main input:not(.sr-only), main textarea')
+      ]
+        .filter((e) => shown(e) && !e.closest('.leaflet-control-attribution') && e.type !== 'file')
+        .filter((e) => {
+          const r = e.getBoundingClientRect();
+          return Math.min(r.width, r.height) < 47.5;
+        })
+        .map((e) => `${e.id || e.className || e.tagName} ${e.textContent.trim().slice(0, 20)}`);
+      const tiny = [...document.querySelectorAll('body *')]
+        .filter((e) => shown(e) && [...e.childNodes].some((n) => n.nodeType === 3 && n.nodeValue.trim()))
+        .filter((e) => !e.closest('svg') && parseFloat(getComputedStyle(e).fontSize) < 12.9)
+        .map((e) => `${e.className || e.tagName} ${getComputedStyle(e).fontSize}`);
+      return { small, tiny, wide: document.documentElement.scrollWidth > innerWidth };
+    });
+    assert.deepEqual(bad, { small: [], tiny: [], wide: false }, `en ${width} de large`);
+  }
+});
+
 // ---------- Bilan ----------
 await browser.close();
 server.close();

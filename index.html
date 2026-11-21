@@ -132,7 +132,13 @@
       <p class="hint flush">Faites tourner chaque chiffre vers le haut ou le bas pour retrouver ce qu'affiche la photo.</p>
     <canvas class="zone" id="fixZone" hidden aria-label="Zone lue sur la photo"></canvas>
     <div id="fixRows"></div>
-    <p class="fix-out" id="fixOut"></p>
+    <div class="fix-pm" role="group" aria-label="Chiffre choisi">
+      <button class="btn sec fix-nav" type="button" id="fixPrev" aria-label="Chiffre à gauche"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="btn sec" type="button" id="fixMinus" aria-label="Diminuer le chiffre choisi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+      <button class="btn sec" type="button" id="fixPlus" aria-label="Augmenter le chiffre choisi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
+      <button class="btn sec fix-nav" type="button" id="fixNext" aria-label="Chiffre à droite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+    <p class="fix-out" id="fixOut" aria-live="polite"></p>
     <div class="row3">
       <button class="btn" type="button" id="fixOk">Valider</button>
       <button class="btn sec" type="button" id="fixReset">Remettre</button>
