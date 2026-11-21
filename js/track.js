@@ -350,6 +350,14 @@ export function putPoint(p, scroll, date) {
   openTrack(scroll);
   return { n: r.pts.indexOf(r.p) + 1, how: r.how };
 }
+// Point n (à partir de 1, voir findPoint) retiré du suivi, comme par son bouton ✕ : vérification d'un point annulée
+export function dropPoint(n) {
+  const pts = loadTrack();
+  if (!(n >= 1 && n <= pts.length)) return;
+  pts.splice(n - 1, 1);
+  save(pts);
+  drawTrack();
+}
 // Numéro (à partir de 1) du point du suivi qui porte la photo key, sinon du même signalement que c (isDup), sinon 0
 export function findPoint(c, key) {
   const pts = loadTrack();
