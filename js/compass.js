@@ -1,4 +1,4 @@
-/* Boussole vers le point, dans le bandeau sous l'en-tête : on pointe le téléphone vers la victime comme pour la photographier.
+/* Boussole vers le point, dans le bandeau sous l'en-tête : on pointe le téléphone vers l'animal comme pour la photographier.
    Le repère jaune se place à gauche / droite selon le cap, en haut / bas selon la hauteur du point (altitudes du terrain) ;
    il entre dans le viseur central quand le téléphone vise le point.
    Capteurs d'orientation du téléphone ; écoutés seulement quand le point et la position sont connus. */

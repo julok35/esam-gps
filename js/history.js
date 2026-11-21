@@ -43,6 +43,18 @@ export function cancelHist() {
   pending = null;
 }
 
+// Point dont la vérification à la main est annulée : il redevient douteux, l'historique ne doit plus le proposer
+export function dropHist(c) {
+  cancelHist();
+  const key = `${f6(c.lat)}, ${f6(c.lon)}`;
+  const h = loadHist();
+  if (!h.some((x) => x.k === key)) return;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(h.filter((x) => x.k !== key)));
+  } catch (e) {}
+  drawHist();
+}
+
 export function drawHist() {
   const h = loadHist();
   $('histCard').hidden = !h.length;

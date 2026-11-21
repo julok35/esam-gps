@@ -54,28 +54,32 @@ export function fmtWhen(t) {
   })}`;
 }
 
-// Message bref à la place du contenu d'un bouton (« Copié »), 1,2 s. Un second message pendant le premier le
-// remplace : le contenu d'origine, gardé une seule fois, revient après le dernier.
+// Message bref sur un bouton (« Copié »), 1,6 s : une pastille posée sur son bord (attribut data-flash, voir
+// [data-flash]::after dans app.css), jamais à la place de son contenu. La valeur copiée reste lisible pendant qu'on la
+// recopie, et le bouton garde sa taille. bad : échec (pastille rouge). Un second message pendant le premier le
+// remplace. Le message est aussi dit aux lecteurs d'écran.
 const flashing = new WeakMap();
-export function flash(btn, txt) {
-  let f = flashing.get(btn);
-  if (f) clearTimeout(f.timer);
-  else {
-    f = { nodes: Array.from(btn.childNodes) };
-    flashing.set(btn, f);
-  }
-  btn.classList.add('done');
-  btn.textContent = txt || 'Copié';
-  f.timer = setTimeout(() => {
-    flashing.delete(btn);
-    btn.classList.remove('done');
-    btn.replaceChildren(...f.nodes);
-  }, 1200);
+export function flash(btn, txt, bad) {
+  clearTimeout(flashing.get(btn));
+  const t = txt || 'Copié';
+  btn.dataset.flash = t;
+  btn.classList.toggle('done', !bad);
+  btn.classList.toggle('flash-bad', !!bad);
+  const live = $('announce');
+  if (live) live.textContent = t;
+  flashing.set(
+    btn,
+    setTimeout(() => {
+      flashing.delete(btn);
+      delete btn.dataset.flash;
+      btn.classList.remove('done', 'flash-bad');
+    }, 1600)
+  );
 }
 // Copie puis message sur btn : « Copié », ou « Copie impossible » si le navigateur la refuse
 export function copy(text, btn) {
   return clip(text).then((done) => {
-    flash(btn, done ? 'Copié' : 'Copie impossible');
+    flash(btn, done ? 'Copié' : 'Copie impossible', !done);
     return done;
   });
 }
