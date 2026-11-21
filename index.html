@@ -31,10 +31,8 @@
 </header>
 
 <main>
-  <section class="block dog" id="dogCard">
-    <label class="lbl" for="trackName">Animal recherché</label>
-    <input class="tname" type="text" id="trackName" placeholder="Nom de l'animal (ex. Pirate)" maxlength="40" autocomplete="off" aria-describedby="nameMsg">
-    <p class="hint flush name-msg" id="nameMsg">Nom à renseigner : il accompagne le suivi, les partages et le GPX.</p>
+  <section class="block dog" id="dogCard" aria-labelledby="resumeH" hidden>
+    <h2 class="tt" id="resumeH">Suivi déjà sur ce téléphone</h2>
     <div class="resume" id="resume" role="group" aria-labelledby="resumeTxt" hidden>
       <p class="flush" id="resumeTxt"></p>
       <div class="row2">
@@ -44,14 +42,14 @@
     </div>
   </section>
   <details class="block tile" id="inCard" open>
-    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="tt">Lire les coordonnées</span></summary>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><h2 class="tt">Lire les coordonnées</h2></summary>
     <div class="tile-b">
       <div class="row2">
         <label class="btn big">Photographier<input class="sr-only" id="cam" type="file" accept="image/*" capture="environment"></label>
         <label class="btn big sec">Choisir des photos<input class="sr-only" id="gal" type="file" accept="image/*" multiple></label>
       </div>
     <p class="hint flush" id="photoMsg" role="alert" hidden></p>
-    <p class="hint flush">Photo ou capture d'écran : l'appli redresse, améliore, trouve les coordonnées, les lit et note sa confiance. Chaque étape se reprend à la main.</p>
+    <p class="hint flush">Photographiez l'écran du GPS de face et en entier : la lecture se fait seule.</p>
     <ol class="steps" id="steps" hidden></ol>
     <button class="btn sec wide" type="button" id="stepsStop" hidden>Arrêter et cadrer à la main</button>
 
@@ -111,13 +109,13 @@
     </div>
 
     <div class="srcwrap">
-      <textarea id="src" aria-label="Texte reçu" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Ou collez le texte reçu (SMS, lien Maps...)"></textarea>
-      <button class="clr" id="clear" type="button" aria-label="Effacer le texte">Effacer</button>
+      <div class="srchead"><label class="lbl" for="src">Ou collez le texte reçu</label><button class="clr" id="clear" type="button" aria-label="Effacer le texte">Effacer</button></div>
+      <textarea id="src" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="SMS, lien Google Maps, coordonnées…"></textarea>
     </div>
     </div>
   </details>
   <details class="block tile" id="batchCard" open hidden>
-    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="13" rx="2"/><path d="M8 4h11a2 2 0 0 1 2 2v11"/><circle cx="8" cy="12" r="1.6"/><path d="M3 17l4-4 3 3 2-2 4 4"/></svg><span class="tt">Lot de photos</span><small class="ts" id="batchSum"></small></summary>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="13" rx="2"/><path d="M8 4h11a2 2 0 0 1 2 2v11"/><circle cx="8" cy="12" r="1.6"/><path d="M3 17l4-4 3 3 2-2 4 4"/></svg><h2 class="tt">Lot de photos</h2><small class="ts" id="batchSum"></small></summary>
     <div class="tile-b">
       <p class="hint flush">Dans l'ordre de prise de vue (date de la photo, sinon du fichier). Glissez une photo par sa poignée ⋮⋮, ou ▲ ▼, pour changer l'ordre : sa date est alors replacée entre ses voisines. Chaque photo est lue séparément ; les points sûrs rejoignent le suivi datés de la photo, les autres sont à vérifier.</p>
       <ol class="blist" id="batchList"></ol>
@@ -130,7 +128,7 @@
     </div>
   </details>
   <details class="block tile fixer" id="fixCard" open hidden>
-    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg><span class="tt">Corriger la lecture</span></summary>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg><h2 class="tt">Corriger la lecture</h2></summary>
     <div class="tile-b">
       <p class="hint flush">Faites tourner chaque chiffre vers le haut ou le bas pour retrouver ce qu'affiche la photo.</p>
     <canvas class="zone" id="fixZone" hidden aria-label="Zone lue sur la photo"></canvas>
@@ -144,23 +142,47 @@
     </div>
   </details>
   <details class="block tile" id="resCard" open>
-    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-6.2-6-11a6 6 0 0 1 12 0c0 4.8-6 11-6 11z"/><circle cx="12" cy="10" r="2.3"/></svg><span class="tt">Point de la victime</span><small class="ts" id="resSum"></small></summary>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-6.2-6-11a6 6 0 0 1 12 0c0 4.8-6 11-6 11z"/><circle cx="12" cy="10" r="2.3"/></svg><h2 class="tt">Point de l'animal</h2><small class="ts" id="resSum"></small></summary>
     <div class="tile-b">
       <div class="result" id="result"></div>
     </div>
   </details>
   <p class="sr-only" id="announce" aria-live="polite"></p>
+  <details class="block tile" id="shareCard" open hidden>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></svg><h2 class="tt">Transmettre le point</h2><small class="ts" id="shareSum"></small></summary>
+    <div class="tile-b">
+      <div class="grid2">
+        <button class="btn" type="button" id="shareBtn">Partager le point</button>
+        <button class="btn wa" type="button" id="waBtn">WhatsApp</button>
+        <button class="btn sec" type="button" id="qrBtn" aria-expanded="false" aria-controls="qrBox">QR code du point</button>
+        <button class="btn sec" type="button" id="copyMsg">Copier le message</button>
+      </div>
+      <p class="sent" id="shareDone" role="status" hidden></p>
+    <div class="qr" id="qrBox" hidden>
+      <div class="seg3" role="group" aria-label="Contenu du QR code">
+        <button type="button" data-qr="app" class="on" aria-pressed="true">Appli ESAM</button>
+        <button type="button" data-qr="maps" aria-pressed="false">Google Maps</button>
+        <button type="button" data-qr="geo" aria-pressed="false">Autre appli GPS</button>
+      </div>
+      <div id="qrImg" class="qrimg"></div>
+      <p class="hint" id="qrTxt"></p>
+    </div>
+      <span class="lbl">Ouvrir le point dans</span>
+      <div class="links" id="links"></div>
+    </div>
+  </details>
   <details class="block tile" id="pilotCard" open hidden>
-    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="5.5" r="2.5"/><circle cx="18.5" cy="5.5" r="2.5"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/><path d="M7.5 7.5l2.5 2.5M16.5 7.5L14 10M7.5 16.5l2.5-2.5M16.5 16.5L14 14"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg><span class="tt">Saisie drone DJI Pilot 2</span></summary>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="5.5" r="2.5"/><circle cx="18.5" cy="5.5" r="2.5"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/><path d="M7.5 7.5l2.5 2.5M16.5 7.5L14 10M7.5 16.5l2.5-2.5M16.5 16.5L14 14"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg><h2 class="tt">Saisie drone DJI Pilot 2</h2></summary>
     <div class="tile-b">
       <p class="hint flush">Toucher une valeur pour la copier.</p>
       <div class="pilot" id="pilot"></div>
     </div>
   </details>
   <details class="block tile" id="mapCard" open>
-    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg><span class="tt">Carte et guidage</span><small class="ts" id="mapSum"></small></summary>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg><h2 class="tt">Carte et guidage</h2><small class="ts" id="mapSum"></small></summary>
     <div class="tile-b">
-      <div class="maphead">
+      <div class="maphead" role="group" aria-labelledby="mapCenter">
+        <span class="lbl" id="mapCenter">Centrer sur</span>
         <button class="chip" type="button" id="fitBoth">Les deux</button>
         <button class="chip" type="button" id="goTarget">Point</button>
         <button class="chip" type="button" id="goMe">Moi</button>
@@ -173,77 +195,75 @@
         <div><span>Dénivelé</span><b id="dZ">-</b><small id="dZme"></small></div>
         <div><span>Précision</span><b id="dA">-</b></div>
       </div>
-      <p class="hint" id="geoMsg" hidden></p>
+      <p class="hint" id="geoMsg" role="status" hidden></p>
     </div>
   </details>
   <details class="block tile" id="trackCard" hidden>
-    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="18" r="2.5"/><circle cx="12" cy="8" r="2.5"/><circle cx="19" cy="14" r="2.5"/><path d="M6.8 16.2l3.8-6M13.8 9.4l3.6 2.9"/></svg><span class="tt">Suivi des points</span><small class="ts" id="trackSum"></small></summary>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="18" r="2.5"/><circle cx="12" cy="8" r="2.5"/><circle cx="19" cy="14" r="2.5"/><path d="M6.8 16.2l3.8-6M13.8 9.4l3.6 2.9"/></svg><h2 class="tt">Suivi des points</h2><small class="ts" id="trackSum"></small></summary>
     <div class="tile-b">
-      <p class="hint flush">Signalements successifs d'un même animal : distance parcourue entre deux points, direction, vitesse. Corrigez la date et l'heure de chaque point si le signalement est plus ancien.</p>
-      <ol class="tlist" id="trackList"></ol>
-      <div class="dist tstats" id="trackStats"></div>
-      <div class="tprof" id="trackProfile"></div>
+      <div class="tp-name">
+        <label class="lbl" for="trackName">Nom de l'animal</label>
+        <input class="tname" type="text" id="trackName" placeholder="ex. Pirate" maxlength="40" autocomplete="off" aria-describedby="nameMsg">
+        <p class="hint flush name-msg" id="nameMsg">À saisir avant de partager : il accompagne le message de suivi et le fichier GPX.</p>
+      </div>
       <div class="grid2">
         <button class="btn" type="button" id="trackShare">Partager le suivi</button>
         <button class="btn sec" type="button" id="trackCopy">Copier le suivi</button>
       </div>
-      <span class="lbl">Poursuivre plus tard ou sur un autre téléphone</span>
-      <div class="grid2">
-        <button class="btn sec" type="button" id="trackLink">Partager le lien</button>
-        <button class="btn sec" type="button" id="trackLinkCopy">Copier le lien</button>
-        <button class="btn sec" type="button" id="trackGpx">Fichier GPX</button>
-        <label class="btn sec" for="trackFile">Importer</label>
-        <input id="trackFile" type="file" accept=".gpx,.txt,application/gpx+xml,text/plain" hidden>
-      </div>
-      <p class="hint flush">Le lien ouvert dans GPS ESAM sur un autre téléphone y installe le suivi. Le GPX s'ouvre aussi dans les applis de carte ; importer accepte un GPX ou un lien de suivi.</p>
-      <p class="hint flush" id="trackMsg" hidden></p>
+      <p class="hint flush" id="trackMsg" role="status" hidden></p>
+      <p class="hint flush">Corrigez la date d'un point si le signalement est plus ancien.</p>
+      <ol class="tlist" id="trackList"></ol>
+      <p class="hint flush" id="trackOne" hidden>Un seul point : ajoutez le signalement suivant pour mesurer le trajet.</p>
+      <div class="dist tstats" id="trackStats"></div>
+      <div class="tprof" id="trackProfile"></div>
+      <details class="tp-more" id="trackMore">
+        <summary>Poursuivre plus tard ou sur un autre téléphone</summary>
+        <div class="tp-more-b">
+          <p class="hint flush">Le lien, ouvert dans GPS ESAM, y installe le suivi ; le GPX (fichier de trace) s'ouvre dans les applis de carte et les GPS.</p>
+          <p class="hint flush name-msg" id="gpxName" hidden>Sans nom de l'animal (champ « Nom de l'animal » plus haut), le lien et le GPX partent sans.</p>
+          <div class="grid2">
+            <button class="btn sec" type="button" id="trackLink">Partager le lien du suivi</button>
+            <button class="btn sec" type="button" id="trackLinkCopy">Copier le lien du suivi</button>
+            <button class="btn sec" type="button" id="trackGpx">Exporter en GPX</button>
+            <label class="btn sec" for="trackFile">Importer GPX ou lien</label>
+            <input id="trackFile" type="file" accept=".gpx,.txt,application/gpx+xml,text/plain" hidden>
+          </div>
+        </div>
+      </details>
       <button class="btn sec wide" type="button" id="trackClear">Vider le suivi</button>
     </div>
   </details>
-  <details class="block tile" id="shareCard" hidden>
-    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></svg><span class="tt">Partager et ouvrir</span></summary>
-    <div class="tile-b">
-      <div class="grid2">
-        <button class="btn" type="button" id="shareBtn">Partager</button>
-        <button class="btn wa" type="button" id="waBtn">WhatsApp</button>
-        <button class="btn sec" type="button" id="qrBtn" aria-expanded="false" aria-controls="qrBox">QR code</button>
-        <button class="btn sec" type="button" id="copyMsg">Copier message</button>
-      </div>
-    <div class="qr" id="qrBox" hidden>
-      <div class="seg3" role="group" aria-label="Contenu du QR code">
-        <button type="button" data-qr="app" class="on" aria-pressed="true">Appli ESAM</button>
-        <button type="button" data-qr="maps" aria-pressed="false">Google Maps</button>
-        <button type="button" data-qr="geo" aria-pressed="false">geo:</button>
-      </div>
-      <div id="qrImg" class="qrimg"></div>
-      <p class="hint" id="qrTxt"></p>
-    </div>
-      <span class="lbl">Ouvrir dans</span>
-      <div class="links" id="links"></div>
-    </div>
-  </details>
   <details class="block tile" id="eqCard" hidden>
-    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 4L7.5 20M16.5 4l-2 16M4.5 9h16M3.5 15h16"/></svg><span class="tt">Autres formats</span><small class="ts" id="eqSum"></small></summary>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 4L7.5 20M16.5 4l-2 16M4.5 9h16M3.5 15h16"/></svg><h2 class="tt">Autres formats</h2><small class="ts" id="eqSum"></small></summary>
     <div class="tile-b">
-      <p class="hint flush">Toucher un format pour le copier.</p>
+      <p class="hint flush">Touchez un format pour le copier.</p>
       <div class="eq" id="eq"></div>
       <div class="grid2">
-        <button class="btn" type="button" id="eqShare">Partager</button>
-        <button class="btn sec" type="button" id="eqCopy">Copier tout</button>
+        <button class="btn" type="button" id="eqShare">Partager les formats</button>
+        <button class="btn sec" type="button" id="eqCopy">Copier les formats</button>
       </div>
+      <details class="eqhelp">
+        <summary>Que veulent dire DD, DMM, DMS, UTM ?</summary>
+        <dl>
+          <dt>DD</dt><dd>Degrés décimaux : 45.187560. Pour les cartes en ligne et DJI.</dd>
+          <dt>DMM</dt><dd>Degrés et minutes décimales : N 45°11.2536'. L'affichage habituel des GPS Garmin.</dd>
+          <dt>DMS</dt><dd>Degrés, minutes, secondes : N 45°11'15.2". Cartes papier.</dd>
+          <dt>UTM</dt><dd>Quadrillage en mètres : zone, puis distances est et nord. Cartes IGN au 1:25 000.</dd>
+        </dl>
+      </details>
     </div>
   </details>
   <details class="block tile" id="histCard" hidden>
-    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg><span class="tt">Historique des points</span></summary>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg><h2 class="tt">Historique des points</h2></summary>
     <div class="tile-b">
       <ul class="hist" id="hist"></ul>
     </div>
   </details>
   <details class="block tile" id="offCard">
-    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span class="tt">Hors ligne</span></summary>
+    <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><h2 class="tt">Hors ligne</h2></summary>
     <div class="tile-b">
       <button class="btn sec wide" type="button" id="prepOff">Préparer la lecture de photo sans réseau</button>
-      <p class="hint" id="prepMsg">Une fois, avec du réseau (7 Mo). La carte hors ligne n'affiche que les zones déjà vues.</p>
+      <p class="hint" id="prepMsg" role="status">À faire une fois, avec du réseau (7 Mo) ; la carte, elle, ne garde que les zones déjà vues.</p>
     </div>
   </details>
 </main>

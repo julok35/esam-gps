@@ -197,7 +197,7 @@ function done(sent) {
         ? ` · ${plural(todo, 'photo', 'photos')} à vérifier (un toucher ouvre la photo, pour la reprendre à la main)`
         : '') +
       (last
-        ? ` · Point de la victime : photo ${photos.indexOf(last) + 1}, la plus récente (touchez une autre photo pour l’afficher)`
+        ? ` · Point de l’animal : photo ${photos.indexOf(last) + 1}, la plus récente (touchez une autre photo pour l’afficher)`
         : '')
     }.`
   );

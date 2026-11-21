@@ -287,11 +287,13 @@ function trackButton() {
   const c = state.current,
     el = $('trk');
   if (!c || !el) return;
-  // question du démarrage sans réponse : rien n'entre au suivi, le point attend
+  // question du démarrage sans réponse : rien n'entre au suivi, le point attend ; la question est posée ici aussi
   if (resumePending()) {
+    const rn = trackName();
     el.innerHTML =
-      '<button class="btn sec wide" type="button" data-resume="1">Suivi : choisir d\u2019abord</button>' +
-      '<p class="flush">Un suivi est déjà sur ce téléphone. Choisissez en haut de le continuer ou de repartir de zéro : le point y entrera ensuite.</p>';
+      `<p class="flush">Suivi${rn ? ` « ${esc(rn)} »` : ''} déjà sur ce téléphone : le continuer ou repartir de zéro ? Le point y entrera ensuite.</p>` +
+      '<div class="row2"><button class="btn" type="button" data-resume="go">Continuer ce suivi</button>' +
+      '<button class="btn sec" type="button" data-resume="new">Repartir de zéro</button></div>';
     return;
   }
   const sh = shown(),
@@ -303,7 +305,11 @@ function trackButton() {
       ? `<div class="btn ok wide" role="status">Point ${i} du suivi${n ? ` · ${esc(n)}` : ''}</div>`
       : `<button class="btn wide" type="button" data-track="1">Ajouter au suivi${
           n ? ` · ${esc(n)}` : ' des points'
-        }</button>`) + (ti && !i ? `<p class="flush">${esc(ti)}</p>` : '');
+        }</button>`) +
+    (ti && !i ? `<p class="flush">${esc(ti)}</p>` : '') +
+    (n || i
+      ? ''
+      : '<p class="flush">Nom de l\u2019animal : à saisir dans « Suivi des points », avant de le partager.</p>');
 }
 // Annonce de ce que le suivi a fait du point (voir track.placePoint)
 function sayTrack(res) {
@@ -518,9 +524,8 @@ document.addEventListener('click', (e) => {
     useCurrent();
     sayTrack(res);
   } else if (t.dataset.resume) {
-    // la question du suivi en cours est en haut de l'écran
-    $('dogCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    $('resumeGo').focus({ preventScroll: true });
+    // réponse donnée sous le point : la même que par les boutons du haut
+    $(t.dataset.resume === 'new' ? 'resumeNew' : 'resumeGo').click();
   } else if (t.dataset.track) {
     // point d'une photo : par sa fiche (corrigé sur place s'il y est déjà) ; texte saisi : daté de maintenant
     const sh = shown(),

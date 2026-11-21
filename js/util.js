@@ -115,25 +115,42 @@ export function clip(text) {
   });
 }
 
-// Tuiles repliables : chacune garde son état (ouverte / repliée) sur ce téléphone
-const TILES = 'esam-gps-tiles';
+// Tuiles repliables : chacune garde son état (ouverte / repliée) sur ce téléphone, sous TILES : { id : ouverte, _v }.
+// _v : version de l'ordre de la page. Quand l'état par défaut d'une tuile change (TILES_RESET), l'état gardé par un
+// téléphone sous une version précédente est oublié pour cette tuile seulement : le nouveau défaut s'applique.
+// v2 : « Transmettre le point » ouvert par défaut, « Suivi des points » replié (il s'ouvrait à chaque point).
+const TILES = 'esam-gps-tiles',
+  TILES_V = 2,
+  TILES_RESET = ['shareCard', 'trackCard'];
+export function tilesFor(st) {
+  if (st && typeof st === 'object' && st._v === TILES_V) return st;
+  const out = { _v: TILES_V };
+  Object.keys(st && typeof st === 'object' ? st : {}).forEach((k) => {
+    if (k !== '_v' && !TILES_RESET.includes(k) && typeof st[k] === 'boolean') out[k] = st[k];
+  });
+  return out;
+}
 function tileState() {
   try {
-    return JSON.parse(localStorage.getItem(TILES) || '{}');
+    return tilesFor(JSON.parse(localStorage.getItem(TILES) || '{}'));
   } catch (e) {
-    return {};
+    return tilesFor({});
   }
+}
+function saveTiles(s) {
+  try {
+    localStorage.setItem(TILES, JSON.stringify(s));
+  } catch (e) {}
 }
 export function initTiles() {
   const st = tileState();
+  saveTiles(st);
   document.querySelectorAll('details.tile').forEach((d) => {
     if (d.id in st) d.open = st[d.id];
     d.addEventListener('toggle', () => {
       const s = tileState();
       s[d.id] = d.open;
-      try {
-        localStorage.setItem(TILES, JSON.stringify(s));
-      } catch (e) {}
+      saveTiles(s);
     });
   });
 }

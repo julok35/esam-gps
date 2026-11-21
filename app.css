@@ -31,9 +31,13 @@ main { max-width: 680px; margin: 0 auto; padding-inline: 12px; padding-block: 12
 .fold > summary::after { content: "+"; font-size: 1.2rem; color: var(--fg); }
 .fold[open] > summary::after { content: "-"; }
 .fold > :not(summary) { margin: 0 12px 12px; }
-.srcwrap { position: relative; margin-top: 10px; }
-.srcwrap textarea { min-height: 64px; padding-right: 76px; }
-.clr { position: absolute; top: 8px; right: 8px; font: 600 .72rem var(--f-label); letter-spacing: .05em; text-transform: uppercase; padding: 5px 8px; border-radius: 6px; border: 1.5px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; }
+.srcwrap { margin-top: 10px; display: grid; gap: 4px; }
+.srcwrap textarea { min-height: 64px; }
+/* « Effacer » au-dessus du champ, à droite de son libellé ; masqué tant que le champ est vide */
+.srchead { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; }
+.srchead .lbl { margin: 0; }
+.clr { flex: none; min-height: 36px; font: 700 .74rem var(--f-label); letter-spacing: .05em; text-transform: uppercase; padding: 6px 12px; border-radius: 8px; border: 2px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.srcwrap:has(textarea:placeholder-shown) .clr { visibility: hidden; }
 .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .row3 .btn { padding: 8px 4px; font-size: .8rem; }
 .big1 { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; color: var(--fg); cursor: pointer; font: 700 clamp(1.35rem, 6.4vw, 1.9rem)/1.15 var(--f-body); font-variant-numeric: tabular-nums; letter-spacing: -.01em; overflow-wrap: anywhere; }
@@ -106,13 +110,24 @@ button:focus-visible, a:focus-visible, label.btn:has(:focus-visible) { outline: 
 .alts { display: grid; gap: 6px; }
 .alts button { text-align: left; font: 500 .88rem var(--f-body); padding: 9px 12px; border-radius: 8px; border: 1.5px dashed var(--muted); background: transparent; color: var(--fg); cursor: pointer; font-variant-numeric: tabular-nums; }
 
-.maphead { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-#map { height: 52vh; min-height: 280px; max-height: 520px; border-radius: 10px; border: 1.5px solid var(--line); z-index: 0; }
+/* centrage de la carte : un groupe de boutons jointifs, comme le choix du QR code */
+.maphead { display: grid; grid-template-columns: auto repeat(4, minmax(0, 1fr)); align-items: center; gap: 0; }
+.maphead .lbl { margin: 0 8px 0 0; }
+.maphead .chip { min-height: 40px; border-radius: 0; border-width: 1.5px 0 1.5px 1.5px; background: var(--surface); padding-inline: 4px; }
+.maphead .chip:last-child { border-right-width: 1.5px; border-radius: 0 8px 8px 0; }
+.maphead .lbl + .chip { border-radius: 8px 0 0 8px; }
+.maphead .chip:active { background: var(--glacier); color: var(--noir); }
+.maphead .chip { white-space: nowrap; }
+@media (max-width: 400px) { .maphead { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 4px; } .maphead .lbl { grid-column: 1 / -1; } }
+/* carte : de quoi s'orienter sans occuper l'écran (40 % en portrait, la moitié à l'horizontale) */
+#map { height: 40vh; height: 40svh; min-height: 240px; max-height: 440px; border-radius: 10px; border: 1.5px solid var(--line); z-index: 0; }
+@media (orientation: landscape) and (max-height: 500px) { #map { height: 50vh; height: 50svh; min-height: 180px; } }
 .leaflet-container { font-family: var(--f-body); }
 .dist { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.dist:empty { display: none; }
 .dist div { background: var(--soft); border-radius: 8px; padding: 8px 10px; min-width: 0; }
 .dist b { display: block; font-size: 1.15rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dist span { font: 600 .68rem var(--f-label); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.dist span { font: 600 .72rem var(--f-label); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .hint { font-size: .82rem; color: var(--muted); margin: 8px 0 0; }
 .flush { margin: 0; }
 .pad { padding: 12px; }
@@ -136,8 +151,10 @@ button:focus-visible, a:focus-visible, label.btn:has(:focus-visible) { outline: 
 .eqv { font-weight: 500; overflow-wrap: anywhere; }
 .eqv.done { display: flex; align-items: center; color: var(--ok); font-weight: 700; }
 .eq + .grid2 { margin-top: 4px; }
-.links { display: flex; flex-wrap: wrap; gap: 6px; }
-.links a { font: 600 .78rem var(--f-label); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); text-decoration: none; padding: 7px 10px; border-radius: 8px; background: var(--soft); border: 1.5px solid var(--line); }
+/* « Ouvrir le point dans » : de vrais boutons (comme .btn.sec), la flèche dit qu'une autre appli s'ouvre */
+.links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.links a { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 8px 4px; font: 700 .85rem/1.15 var(--f-label); letter-spacing: .02em; text-transform: uppercase; text-align: center; color: var(--fg); text-decoration: none; border-radius: 8px; background: var(--surface); border: 2px solid var(--line); overflow-wrap: anywhere; }
+.links a::after { content: "↗"; font: 700 1rem/1 var(--f-body); }
 .hist { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 .hist button { width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font: 500 .88rem var(--f-body); font-variant-numeric: tabular-nums; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--fg); cursor: pointer; }
 .hist small { color: var(--muted); }
@@ -230,7 +247,7 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .tile[open] > summary::after { margin-bottom: -4px; transform: rotate(-135deg); }
 .tile > summary:focus-visible { outline: 3px solid var(--jaune); outline-offset: -3px; border-radius: 12px; }
 .ic { flex: none; width: 34px; height: 34px; padding: 6px; border-radius: 9px; background: var(--glacier); color: var(--noir); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.tt { flex: 1 1 auto; min-width: 0; font: 700 .9rem/1.2 var(--f-label); letter-spacing: .05em; text-transform: uppercase; }
+.tt { flex: 1 1 auto; min-width: 0; margin: 0; font: 700 .9rem/1.2 var(--f-label); letter-spacing: .05em; text-transform: uppercase; }
 .ts { flex: 0 1 auto; max-width: 52%; color: var(--muted); font: 500 .78rem var(--f-body); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile[open] > summary .ts { display: none; }
 .tile-b { padding: 0 12px 12px; display: grid; gap: 10px; min-width: 0; }
@@ -282,11 +299,14 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 /* nom de l'animal : demandé en tête de page, en rouge tant qu'il est vide */
 .dog { display: grid; gap: 6px; }
 .dog .lbl { margin: 0; }
-.tname.empty { border-color: var(--rouge); background: color-mix(in srgb, var(--rouge) 10%, var(--field)); }
-.tname.empty::placeholder { color: var(--rouge); opacity: .8; }
-.name-msg { color: var(--rouge); font-weight: 600; }
+/* nom de l'animal : dans la tuile du suivi, juste avant le partage ; champ neutre, rappel tant qu'il est vide
+   (le rouge reste réservé au doute sur des coordonnées) */
+.name-msg { color: var(--fg); }
 .tname:not(.empty) + .name-msg { display: none; }
-.resume { display: grid; gap: 8px; margin-top: 4px; padding: 10px 12px; background: var(--pale); border-left: 6px solid var(--jaune); border-radius: 0 10px 10px 0; font-size: .9rem; }
+/* suivi déjà sur le téléphone, au démarrage : la question en tête de page, teintée, bordure complète */
+.dog { background: var(--pale); border: 2px solid var(--jaune); }
+.dog .tt { display: block; margin-bottom: 6px; }
+.resume { display: grid; gap: 8px; font-size: .9rem; }
 /* suivi des points : liste numérotée, étapes, bilan */
 .tlist { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .tp { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); }
@@ -364,3 +384,28 @@ canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; objec
 .go-big { font: 700 clamp(1.35rem, 6.4vw, 1.9rem)/1.15 var(--f-body); font-variant-numeric: tabular-nums; user-select: all; overflow-wrap: anywhere; }
 .go-help { margin: 0; padding: 10px 12px 10px 30px; background: var(--soft); border-radius: 10px; display: grid; gap: 6px; font-size: .86rem; }
 .go-help .go-note { list-style: none; margin-left: -18px; color: var(--muted); }
+
+/* Lot 3 : ordre de la page, partage, suivi, aides */
+/* bandeau à l'horizontale : plus bas, la place va au contenu */
+@media (orientation: landscape) and (max-height: 500px) {
+  .band-in { padding-block: 3px; }
+  .band img { width: 30px; height: 30px; }
+  .band h1 { font-size: 1.2rem; }
+  .cmp canvas { height: 28px; }
+}
+/* point transmis : la fin du parcours, dite en clair */
+.sent { margin: 0; padding: 10px 12px; border: 2px solid var(--ok); border-radius: 10px; background: var(--ok-bg); color: var(--ok); font-weight: 700; font-size: .9rem; }
+/* suivi : nom de l'animal, puis le partage ; « poursuivre ailleurs » replié à part */
+.tp-name { display: grid; gap: 6px; }
+.tp-name .lbl { margin: 0; }
+.tp-more, .eqhelp { border: 1.5px solid var(--line); border-radius: 10px; }
+.tp-more > summary, .eqhelp > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 46px; padding: 8px 12px; font: 700 .8rem/1.2 var(--f-label); letter-spacing: .05em; text-transform: uppercase; }
+.tp-more > summary::-webkit-details-marker, .eqhelp > summary::-webkit-details-marker { display: none; }
+.tp-more > summary::after, .eqhelp > summary::after { content: ""; flex: none; width: 8px; height: 8px; margin: 0 4px 4px; border-right: 2.5px solid var(--fg); border-bottom: 2.5px solid var(--fg); transform: rotate(45deg); }
+.tp-more[open] > summary::after, .eqhelp[open] > summary::after { margin-bottom: -4px; transform: rotate(-135deg); }
+.tp-more > summary:focus-visible, .eqhelp > summary:focus-visible { outline: 3px solid var(--jaune); outline-offset: 2px; border-radius: 10px; }
+.tp-more-b { display: grid; gap: 8px; padding: 0 10px 10px; }
+.eqhelp > summary { text-transform: none; letter-spacing: 0; font: 600 .86rem/1.3 var(--f-body); }
+.eqhelp dl { margin: 0; padding: 0 12px 12px; display: grid; grid-template-columns: 3.4rem minmax(0, 1fr); gap: 6px 8px; font-size: .86rem; }
+.eqhelp dt { font: 700 .78rem/1.5 var(--f-label); letter-spacing: .08em; }
+.eqhelp dd { margin: 0; }

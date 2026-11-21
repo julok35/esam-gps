@@ -166,8 +166,9 @@ const IMG = {};
 }
 
 // ---------- Outils ----------
-// Appli ouverte sur un téléphone neuf (stockage vide), sans réseau extérieur. track : suivi déjà sur le téléphone
-async function open(geo, track) {
+// Appli ouverte sur un téléphone neuf (stockage vide), sans réseau extérieur. track : suivi déjà sur le téléphone ;
+// tiles : état des tuiles gardé par une version précédente
+async function open(geo, track, tiles) {
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
@@ -179,6 +180,10 @@ async function open(geo, track) {
       localStorage.setItem('esam-gps-track', JSON.stringify(t.points));
       localStorage.setItem('esam-gps-track-name', t.name);
     }, track);
+  if (tiles)
+    await ctx.addInitScript((t) => {
+      localStorage.setItem('esam-gps-tiles', JSON.stringify(t));
+    }, tiles);
   const page = await ctx.newPage();
   page.on('dialog', (d) => d.accept());
   page.on('pageerror', (e) => failures.push(`erreur dans la page : ${e.message}`));
@@ -286,8 +291,8 @@ async function shot(page, name) {
 }
 async function scene(title, fn) {
   const pages = [],
-    op = async (geo, track) => {
-      const p = await open(geo, track);
+    op = async (geo, track, tiles) => {
+      const p = await open(geo, track, tiles);
       pages.push(p);
       return p;
     };
@@ -512,6 +517,10 @@ await scene(
 await scene('relance du lot : ni doublon ni point revenu ; photo déplacée : sa date suit au suivi', async (op) => {
   const page = await op();
   await readLot(page, ['a', 'b', 'none']);
+  // le suivi reçoit les points sans s'ouvrir (son résumé les compte) : on l'ouvre pour le reprendre à la main
+  assert.ok(!(await page.$eval('#trackCard', (e) => e.open)), 'suivi replié par défaut');
+  assert.match(await page.$eval('#trackSum', (e) => e.textContent), /2 pts/);
+  await tap(page, '#trackCard > summary');
   // date du point 1 changée dans le suivi, photo 1 descendue, point de la photo b retiré à la main
   await page.fill('#trackList input[data-tt="0"]', '2026-11-01T07:30');
   await page.dispatchEvent('#trackList input[data-tt="0"]', 'change');
@@ -582,7 +591,7 @@ await scene(
       v.rows.some((r) => /^st-ok.*45\.141667/.test(r)),
       'la photo prise pendant le lot a été lue'
     );
-    assert.equal(v.point, PB, 'point de la victime : le plus récent des points sûrs');
+    assert.equal(v.point, PB, 'point de l’animal : le plus récent des points sûrs');
     // arrêt demandé dès le début : rien n'est lu de travers, les photos restent à lire
     const stop = await op();
     await addLot(stop, ['a', 'b', 'c']);
@@ -613,20 +622,21 @@ await scene(
     const go = await op(null, old);
     await readOne(go, 'a');
     let v = await view(go);
-    assert.ok(v.copy && v.pilot, 'le point reste copiable');
-    assert.match(v.track, /choisir d’abord/);
+    assert.ok(v.copy && v.pilot && v.share, 'le point reste copiable et transmissible');
+    assert.match(v.track, /le continuer ou repartir de zéro/, 'la question est posée sous le point');
     assert.deepEqual(v.points, [OLD], 'photo seule : rien au suivi avant la réponse');
     await readLot(go, ['b', 'c']);
     v = await view(go);
     await shot(go, 'suivi-en-attente');
     assert.deepEqual(v.points, [OLD], 'lot : rien au suivi avant la réponse');
     assert.match(v.msg, /2 points sûrs en attente/);
-    // « Continuer ce suivi » : les trois points lus y entrent, à leur date
-    await tap(go, '#resumeGo');
+    // « Continuer ce suivi », répondu sous le point : les trois points lus y entrent, à leur date
+    await tap(go, '#trk button[data-resume="go"]');
     await pause(go);
     v = await view(go);
     assert.deepEqual(v.points, [OLD, `${PC} @ 11-01T07:00`, `${PA} @ 11-01T08:00`, `${PB} @ 11-01T09:00`]);
     assert.match(v.track, /Point \d du suivi · Pirate/);
+    assert.ok(await go.$eval('#dogCard', (e) => e.hidden), 'question répondue : elle disparaît du haut de la page');
     // « Repartir de zéro » : l'ancien suivi est effacé, le point lu entre dans le nouveau
     const fresh = await op(null, old);
     await readOne(fresh, 'a');
@@ -652,10 +662,76 @@ await scene('carte : après un lot, tous ses points sont à l’écran, avec ou 
       });
     });
     assert.deepEqual(pins, [true, true, true], geo ? 'avec position' : 'sans position');
-    assert.ok((await view(page)).top < 300, 'fin du lot : l’écran est au point de la victime');
+    assert.ok((await view(page)).top < 300, 'fin du lot : l’écran est au point de l’animal');
     if (!geo) await shot(page, 'lot-lu');
   }
 });
+
+await scene(
+  'page : transmettre juste après le point, rien de rouge à l’ouverture, titres et zones annoncées',
+  async (op) => {
+    // téléphone qui avait gardé « Transmettre » replié, le suivi ouvert et la carte repliée (ancienne version)
+    const page = await op(null, null, { shareCard: false, trackCard: true, mapCard: false });
+    const first = await page.evaluate(() => {
+      const $ = (id) => document.getElementById(id),
+        red = [...document.querySelectorAll('main *')].filter((e) => {
+          if (!e.getClientRects().length) return false;
+          const c = getComputedStyle(e);
+          return [c.color, c.borderTopColor, c.backgroundColor].includes('rgb(230, 51, 42)');
+        });
+      return {
+        red: red.map((e) => e.id || e.className),
+        dog: $('dogCard').hidden,
+        h2: document.querySelectorAll('main h2').length,
+        live: ['geoMsg', 'prepMsg', 'trackMsg', 'shareDone'].map((id) => $(id).getAttribute('role')),
+        zoom: document.querySelector('.leaflet-control-zoom-in').title,
+        layers: document.querySelector('.leaflet-control-layers-toggle').getAttribute('aria-label'),
+        tiles: JSON.parse(localStorage.getItem('esam-gps-tiles')),
+        clear: getComputedStyle($('clear')).visibility
+      };
+    });
+    assert.deepEqual(first.red, [], 'écran vide : aucun rouge');
+    assert.ok(first.dog, 'aucun suivi enregistré : pas de question en tête de page');
+    assert.ok(first.h2 >= 10, `une structure de titres (${first.h2} h2)`);
+    assert.deepEqual(first.live, ['status', 'status', 'status', 'status']);
+    assert.equal(first.zoom, 'Zoomer');
+    assert.equal(first.layers, 'Choisir le fond de carte');
+    assert.deepEqual(first.tiles, { _v: 2, mapCard: false }, 'anciens défauts oubliés, choix gardé pour la carte');
+    assert.equal(first.clear, 'hidden', 'champ vide : pas de bouton Effacer');
+    // point douteux : rien à transmettre ; point sûr : « Transmettre » ouvert, à moins d'un écran du point
+    await page.fill('#src', '5.73412, 45.18756');
+    await pause(page);
+    nothingToSend({ ...(await view(page)), point: '' }, 'point douteux');
+    await page.fill('#src', '45.18756, 5.73412');
+    await pause(page);
+    const sure = await page.evaluate(() => {
+      const $ = (id) => document.getElementById(id),
+        res = $('resCard').getBoundingClientRect(),
+        sh = $('shareBtn').getBoundingClientRect(),
+        band = document.querySelector('.band').getBoundingClientRect();
+      return {
+        open: $('shareCard').open,
+        reach: sh.bottom - res.top,
+        room: innerHeight - band.height,
+        after: $('resCard').nextElementSibling.nextElementSibling.id,
+        pin: document.querySelector('.leaflet-marker-icon').getAttribute('aria-label')
+      };
+    });
+    assert.ok(sure.open, '« Transmettre le point » ouvert');
+    assert.equal(sure.after, 'shareCard', 'la transmission suit le point');
+    assert.ok(sure.reach <= sure.room, `partage à un écran du point (${sure.reach} px pour ${sure.room})`);
+    assert.match(sure.pin, /Point de l’animal/);
+    // transmis : la fin du parcours est dite
+    await tap(page, '#copyMsg');
+    await page.waitForFunction(() => !document.getElementById('shareDone').hidden);
+    assert.match(await page.$eval('#shareDone', (e) => e.textContent), /Message copié/);
+    await shot(page, 'point-transmis');
+    // autre point : le « transmis » du précédent disparaît
+    await page.fill('#src', '45.20000, 5.70000');
+    await pause(page);
+    assert.ok(await page.$eval('#shareDone', (e) => e.hidden), 'nouveau point : pas encore transmis');
+  }
+);
 
 // ---------- Bilan ----------
 await browser.close();
