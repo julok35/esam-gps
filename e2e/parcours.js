@@ -274,6 +274,21 @@ const view = (page) =>
       top: Math.round($('resCard').getBoundingClientRect().top)
     };
   });
+// Bloc de retenue d'un point douteux : vignette de la zone lue, lecture au format de la source, boutons
+const held = (page) =>
+  page.evaluate(() => {
+    const h = document.querySelector('#result .hold'),
+      z = document.getElementById('holdZone');
+    return {
+      text: h ? h.textContent : '',
+      zone: z ? z.width * z.height : 0,
+      lines: h ? [...h.querySelectorAll('.sl')].map((l) => l.lastChild.textContent) : [],
+      fix: document.querySelectorAll('#result [data-fix]').length,
+      go: [...document.querySelectorAll('#result .go-row .btn')].map((b) => b.disabled),
+      recrop: !!document.querySelector('#result [data-recrop]'),
+      state: document.getElementById('resCard').dataset.state
+    };
+  });
 // Rien de transmissible à l'écran : ni copie, ni drone, ni partage, ni lien
 function nothingToSend(v, what) {
   assert.equal(v.point, '', `${what} : aucun point affiché`);
@@ -411,6 +426,14 @@ await scene(
       assert.match(v.pills.join(' '), /À vérifier/, mode);
       assert.ok(!v.copy && !v.pilot && !v.share && v.hash === '', `${mode} : douteux, rien de transmissible`);
       assert.deepEqual(v.points, [], `${mode} : rien au suivi`);
+      // la preuve à côté de la confirmation : zone lue de la photo, lecture dans le format de l'écran, un seul « Corriger »
+      const hold = await held(page);
+      assert.ok(hold.zone > 0, `${mode} : zone lue de la photo dans le bloc de retenue`);
+      assert.deepEqual(hold.lines, ["N 45°06.199'", "O 001°54.834'"], `${mode} : lecture au format de l'écran`);
+      assert.match(hold.text, /la photo/);
+      assert.equal(hold.fix, 1, `${mode} : un seul bouton Corriger`);
+      assert.deepEqual(hold.go, [true, true], `${mode} : AirOps et Itinéraire grisés`);
+      assert.equal(hold.state, 'check');
       // l'appli passe en arrière-plan, puis une espace est tapée dans le texte
       await page.evaluate(() => {
         Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
@@ -435,7 +458,84 @@ await scene(
       assert.ok(v.copy && /Vérifié à la main/.test(v.pills.join(' ')), `${mode} : confirmé, transmissible`);
       assert.deepEqual(v.points, ['45.103317, -1.913900 @ 11-01T09:30'], `${mode} : confirmé, versé au suivi`);
       if (mode === 'lot') assert.match(v.rows[0], /^st-ok.*confirmée à la main/);
+      assert.match(
+        v.result,
+        /Confirmé à la main\. Signalé à la lecture : Longitude Ouest/,
+        `${mode} : alerte rappelée`
+      );
+      // retour possible : la vérification annulée, le point redevient douteux et sort du suivi
+      await tap(page, '#result button[data-unverify]');
+      await pause(page);
+      v = await view(page);
+      assert.ok(!v.copy && !v.pilot && !v.share && /À vérifier/.test(v.pills.join(' ')), `${mode} : annulé, retenu`);
+      assert.deepEqual(v.points, [], `${mode} : annulé, retiré du suivi`);
+      if (mode === 'lot') assert.match(v.rows[0], /^st-check.*vérification annulée/);
+      assert.ok((await held(page)).zone > 0, `${mode} : annulé, la zone lue revient`);
     }
+  }
+);
+
+await scene(
+  'texte saisi : pas d’erreur pendant la frappe, rien sans point, un texte douteux se compare à sa source',
+  async (op) => {
+    const page = await op(),
+      result = () => page.$eval('#result', (e) => e.textContent);
+    // frappe en cours : pas d'erreur ; une fois la saisie posée, l'erreur, sans conseil de recadrage
+    await page.focus('#src');
+    await page.keyboard.type('45.18');
+    assert.match(await result(), /Saisie en cours/);
+    assert.ok(!/Aucune coordonnée/.test(await result()), 'pas d’erreur pendant la frappe');
+    await pause(page, 1600);
+    assert.match(await result(), /Aucune coordonnée trouvée/);
+    assert.ok(!/recadr/i.test(await result()), 'pas de recadrage pour un texte tapé');
+    // aucun point : ni AirOps ni Itinéraire
+    await page.fill('#src', 'bonjour');
+    await page.dispatchEvent('#src', 'change');
+    await pause(page);
+    assert.equal(await page.$$eval('#result .go', (l) => l.length), 0, 'sans point : pas de AirOps ni Itinéraire');
+    // texte douteux : comparé à « votre source », sans photo ni recadrage
+    await page.fill('#src', "N 45°06.199' O 001°54.834'");
+    await page.dispatchEvent('#src', 'change');
+    await pause(page);
+    let v = await view(page);
+    const h = await held(page);
+    nothingToSend({ ...v, point: '' }, 'texte douteux');
+    assert.match(h.text, /votre source/);
+    assert.ok(!/photo/i.test(h.text) && h.zone === 0 && !h.recrop, 'texte : ni photo ni recadrage');
+    assert.deepEqual(h.lines, ["N 45°06.199'", "O 001°54.834'"]);
+    await tap(page, '#result button[data-verify]');
+    await pause(page);
+    assert.ok((await view(page)).copy, 'confirmé : transmissible');
+    await tap(page, '#result button[data-unverify]');
+    await pause(page);
+    v = await view(page);
+    assert.ok(!v.copy && /À vérifier/.test(v.pills.join(' ')), 'vérification annulée : de nouveau retenu');
+    // copie : la valeur et sa légende restent affichées, la hauteur ne bouge pas
+    await page.fill('#src', '45.103317, 5.913900');
+    await page.dispatchEvent('#src', 'change');
+    await pause(page);
+    const before = await page.$eval('#result .big1', (b) => b.offsetHeight);
+    await tap(page, '#result button.big1');
+    await pause(page, 200);
+    const during = await page.$eval('#result .big1', (b) => ({
+      text: b.textContent,
+      h: b.offsetHeight,
+      flash: b.dataset.flash || ''
+    }));
+    assert.match(during.text, /45\.103317, 5\.913900.*Toucher pour copier/);
+    assert.ok(during.flash, 'retour « Copié » affiché');
+    assert.equal(during.h, before, 'hauteur inchangée');
+    // tuile Pilot 2 : chaque valeur porte un nom complet ; copiée, elle reste lisible
+    const names = await page.$$eval('#pilot .pv', (l) => l.map((b) => b.getAttribute('aria-label')));
+    assert.deepEqual(names.slice(0, 4), [
+      'Longitude, degrés : 5',
+      'Longitude, minutes : 54.8340',
+      'Latitude, degrés : 45',
+      'Latitude, minutes : 6.1990'
+    ]);
+    await tap(page, '#pilot .pv');
+    assert.match(await page.$eval('#pilot .pv', (b) => b.textContent), /^5/, 'valeur Pilot lisible pendant « Copié »');
+    await shot(page, 'texte-copie');
   }
 );
 
