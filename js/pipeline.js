@@ -1,6 +1,8 @@
 /* Chaîne de lecture d'une photo, la même pour une photo seule (auto.js, étapes affichées) et pour un lot (batch.js) :
    redressement (perspective, inclinaison), contraste et netteté, zone des coordonnées, lecture, confiance.
-   Chaque étape prend la photo en entrée et rend son résultat : rien n'est gardé ici, rien n'est affiché ici. */
+   Chaque étape prend la photo en entrée et rend son résultat : rien n'est gardé ici, rien n'est affiché ici.
+   Chaque étape a deux textes : msg, en mots du terrain (ce qui a été fait, ce qu'il reste à faire), et det, les mesures
+   techniques, montrées seulement sous « Détail ». */
 import * as ocr from './ocr.js';
 import { confidence } from './trust.js';
 import { autoParams } from './enhance.js';
@@ -11,6 +13,23 @@ const MIDDLE = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
 // Textes des deux issues sans point, les mêmes à l'écran d'une photo seule et dans la liste d'un lot
 export const NO_ZONE = 'coordonnées non trouvées : cadrez-les à la main';
 export const NO_READ = 'aucune coordonnée lue dans le cadre : recadrez à la main';
+// Vues de la photo essayées pour trouver la zone (ocr.zoneViews), en mots du terrain
+const VIEW = {
+  'photo entière': 'photo entière',
+  'photo entière, fond égalisé': 'photo entière, éclairage égalisé',
+  'écran recadré': 'écran seul',
+  'écran recadré, fond égalisé': 'écran seul, éclairage égalisé'
+};
+export function viewWords(name) {
+  return VIEW[name] || name;
+}
+// Textes d'avancement, les mêmes à l'écran d'une photo seule et dans la liste d'un lot
+export const RUN = {
+  zone: 'recherche des coordonnées sur la photo…',
+  view: (name) => `nouvel essai (${viewWords(name)})…`,
+  pass: (i) => `lecture ${i}…`,
+  widen: 'pas d’accord net : nouvel essai, cadre élargi…'
+};
 
 // « +1,5° », « −0,3° »
 export function deg(v) {
@@ -29,7 +48,7 @@ const noop = () => {};
 /**
  * Redressement. orig : photo telle que prise. Retour : { base : photo redressée en perspective (orig sinon),
  * quad : coins de l'écran appliqués ou null, angle : inclinaison corrigée (degrés), img : base tournée de angle,
- * st, msg : état et texte de l'étape }.
+ * st, msg, det : état, texte et mesures de l'étape }.
  */
 export function level(orig) {
   const parts = [];
@@ -44,32 +63,44 @@ export function level(orig) {
       quad = q.quad;
       parts.push(`perspective corrigée (bords nets, ${deg(q.tilt)})`);
     }
-  } else if (q && q.gain >= ocr.QUAD_GAIN) parts.push('écran déjà droit');
+  } else if (q && q.gain >= ocr.QUAD_GAIN) parts.push('écran déjà de face');
   else parts.push('pas de bord d’écran net : perspective laissée');
   const r = ocr.leanIn(base, MIDDLE, TILT);
   let angle = 0;
   if (r.gain >= ocr.AUTO_GAIN && Math.abs(r.deg) >= 0.3) {
     angle = tilt(-r.deg);
-    parts.push(`inclinaison ${deg(angle)}`);
+    parts.push(`inclinaison corrigée de ${deg(angle)}`);
   } else if (r.gain >= ocr.AUTO_GAIN) parts.push('texte droit');
   else {
     parts.push('inclinaison non mesurable (texte peu net)');
     st = 'info';
   }
-  return { base, quad, angle, img: turned(base, angle), st, msg: parts.join(' · ') };
+  let msg;
+  if (st === 'info') msg = 'inclinaison non mesurée : redressez à la main si le texte penche';
+  else if (quad) msg = angle ? 'écran remis de face, photo redressée' : 'écran remis de face';
+  else msg = angle ? 'photo redressée' : 'photo déjà droite';
+  return { base, quad, angle, img: turned(base, angle), st, msg, det: parts.join(' · ') };
 }
 
-// Contraste et netteté appliqués à la lecture de img (réglages à la main compris) : texte de l'étape
+// Contraste et netteté appliqués à la lecture de img (réglages à la main compris) : { msg, det } de l'étape
 export function enhInfo(img) {
   const G = ocr.grayOf(img, null, 800),
     p = autoParams(G.g, G.w, G.h),
     e = ocr.getEnh(),
-    x = (v) => String(v).replace('.', ',');
-  let msg = `contraste étiré (${p.lo}-${p.hi} → 0-255)`;
-  if (e.sharp === null) msg += p.sharp ? `, netteté renforcée ×${x(p.sharp)}` : ', photo nette';
-  else msg += `, netteté ×${x(e.sharp)} (réglée à la main)`;
-  if (e.contrast !== 1) msg += `, contraste ×${x(e.contrast)}`;
-  return msg;
+    x = (v) => String(v).replace('.', ','),
+    hand = e.sharp !== null || e.contrast !== 1;
+  let det = `niveaux de gris étirés (${p.lo}-${p.hi} → 0-255)`;
+  if (e.sharp === null) det += p.sharp ? `, netteté renforcée ×${x(p.sharp)}` : ', photo nette';
+  else det += `, netteté ×${x(e.sharp)}`;
+  if (e.contrast !== 1) det += `, contraste ×${x(e.contrast)}`;
+  return {
+    msg: hand
+      ? 'réglés à la main'
+      : e.sharp === null && p.sharp
+        ? 'contraste renforcé, photo un peu floue rendue plus nette'
+        : 'contraste renforcé',
+    det
+  };
 }
 
 /**
@@ -82,7 +113,7 @@ export function enhInfo(img) {
 export async function zone(base, angle, img, o) {
   const z = await ocr.findZone(img, o.stale || never, o.wi, o.onView);
   if (z === undefined) return undefined;
-  if (!z) return { found: false, st: 'warn', msg: NO_ZONE };
+  if (!z) return { found: false, st: 'warn', msg: NO_ZONE, det: '' };
   const pad = (z.box.y1 - z.box.y0) * ZONE_PAD;
   let box = ocr.fitBox({
       x: (z.box.x0 - pad) / img.width,
@@ -94,23 +125,24 @@ export async function zone(base, angle, img, o) {
   // coordonnées mal lues à cette étape : souvent une seule des deux lignes a été cadrée, l'autre est juste à côté
   if (!z.clean) {
     box = ocr.fitBox(ocr.widen(box));
-    more = ', cadre élargi aux lignes voisines';
+    more = ' · cadre élargi aux lignes voisines';
   }
   const r = ocr.leanIn(img, box, 10),
     na = tilt(angle - r.deg);
   if (r.gain >= ocr.AUTO_GAIN && Math.abs(r.deg) >= 0.4 && na !== angle) {
     const img2 = turned(base, na);
     box = ocr.fitBox(ocr.turnBox(box, img, img2, na - angle));
-    more += `, inclinaison affinée ${deg(na - angle)}`;
+    more += ` · inclinaison affinée de ${deg(na - angle)}`;
     img = img2;
     angle = na;
   }
   return {
     found: true,
     st: 'ok',
-    msg: `trouvée : « ${z.text.replace(/\s+/g, ' ').slice(0, 40)} »${
-      z.conf !== null ? `, moteur sûr à ${z.conf} %` : ''
-    }${z.view !== 'photo entière' ? ` (${z.view})` : ''}${more}`,
+    msg: 'coordonnées repérées sur la photo',
+    det: `texte repéré : « ${z.text.replace(/\s+/g, ' ').slice(0, 40)} » · vue : ${viewWords(z.view)}${
+      z.conf !== null ? ` · reconnaissance ${z.conf} %` : ''
+    }${more}`,
     angle,
     img,
     box
@@ -133,20 +165,27 @@ export async function read(img, box, o) {
       res,
       box: used,
       st: 'fail',
-      msg: o.manual ? 'aucune coordonnée lue dans le cadre' : NO_READ
+      msg: o.manual ? 'aucune coordonnée lue dans ce cadre : placez-le sur les chiffres' : NO_READ,
+      det: `${res.total || 0} lecture${res.total > 1 ? 's' : ''}, aucune ne donne de coordonnées`
     };
   const a = res.p.agree || { n: 0, total: res.total };
   return {
     res,
     box: used,
     st: res.sure ? 'ok' : 'warn',
-    msg: `${a.n} lecture${a.n > 1 ? 's' : ''} sur ${a.total} concordante${a.n > 1 ? 's' : ''}${
+    msg: res.sure
+      ? 'coordonnées lues'
+      : res.rival
+        ? 'deux valeurs différentes lues : comparez avec la photo'
+        : 'lectures en désaccord : comparez avec la photo',
+    det: `${a.n} lecture${a.n > 1 ? 's' : ''} sur ${a.total} concordante${a.n > 1 ? 's' : ''}${
       res.rival ? ', valeurs concurrentes' : ''
-    }${o.manual ? ' (cadre manuel)' : ''}`
+    }${o.manual ? ' · cadre posé à la main' : ''}`
   };
 }
 
-// Confiance dans la lecture res : notée sur le résultat (p.trust, p.ocr). Retour : { t, st, msg }, ou null sans point
+// Confiance dans la lecture res : notée sur le résultat (p.trust, p.ocr). Retour : { t, st, msg, det }, ou null sans
+// point. msg porte la seule note de confiance de l'écran, sa raison et la conduite à tenir
 export function trust(res) {
   const p = res.p;
   if (!p.ok) return null;
@@ -161,17 +200,20 @@ export function trust(res) {
   });
   p.trust = t;
   p.ocr = true;
+  const why = t.why.length ? ` : ${t.why.join(', ')}` : '';
   return {
     t,
     st: t.level === 'ok' ? 'ok' : 'warn',
-    msg: `${t.pct} % · ${
-      t.level === 'ok' ? 'fiable' : 'douteux : vérifiez sur la photo avant de transmettre'
-    } (${t.why.join(', ')})`
+    msg:
+      t.level === 'ok'
+        ? `fiable, ${t.pct} %${why}. Point transmissible.`
+        : `douteux, ${t.pct} %${why}. Comparez avec la photo, puis corrigez ou confirmez.`,
+    det: typeof res.tess === 'number' ? `reconnaissance des chiffres : ${res.tess} %` : ''
   };
 }
 
 /**
- * Toute la chaîne sur une photo. o : { stale(), wi : moteur, onStep(étape, état, texte) : avancement, étapes
+ * Toute la chaîne sur une photo. o : { stale(), wi : moteur, onStep(étape, état, texte, mesures) : avancement, étapes
  * 'level', 'enh', 'zone', 'read', 'trust' ; états 'run', 'ok', 'warn', 'fail', 'info' }.
  * Retour : null si la photo a changé entre-temps ; sinon { base, quad, angle, img, found : zone trouvée,
  * box, res : lecture (voir ocr.readBox), trust : { pct, level, why } ou null }.
@@ -182,11 +224,11 @@ export async function readPhoto(orig, o) {
   let lv;
   try {
     lv = level(orig);
-    step('level', lv.st, lv.msg);
+    step('level', lv.st, lv.msg, lv.det);
   } catch (err) {
     console.error('Redressement :', err);
     lv = { base: orig, quad: null, angle: 0, img: orig };
-    step('level', 'info', 'redressement automatique impossible : réglez à la main');
+    step('level', 'info', 'pas de redressement automatique : redressez à la main si le texte penche', String(err));
   }
   const out = {
     base: lv.base,
@@ -198,29 +240,30 @@ export async function readPhoto(orig, o) {
     res: null,
     trust: null
   };
-  step('enh', 'ok', enhInfo(out.img));
-  step('zone', 'run', 'lecture de la photo entière…');
+  const e = enhInfo(out.img);
+  step('enh', 'ok', e.msg, e.det);
+  step('zone', 'run', RUN.zone);
   const z = await zone(out.base, out.angle, out.img, {
     stale,
     wi: o.wi,
     // au-delà de la première vue, l'étape dit ce qu'elle essaie
-    onView: (name, i) => i > 1 && step('zone', 'run', `nouvel essai : ${name}…`)
+    onView: (name, i) => i > 1 && step('zone', 'run', RUN.view(name))
   });
   if (z === undefined || stale()) return null;
-  step('zone', z.st, z.msg);
+  step('zone', z.st, z.msg, z.det);
   if (!z.found) return out;
   Object.assign(out, { found: true, angle: z.angle, img: z.img, box: z.box });
-  step('read', 'run', 'lecture 1…');
+  step('read', 'run', RUN.pass(1));
   const rd = await read(out.img, out.box, {
     stale,
     wi: o.wi,
-    onPass: (i) => step('read', 'run', `lecture ${i}…`),
-    onWiden: () => step('read', 'run', 'pas d’accord net : nouvel essai, cadre élargi aux lignes voisines…')
+    onPass: (i) => step('read', 'run', RUN.pass(i)),
+    onWiden: () => step('read', 'run', RUN.widen)
   });
   if (!rd || stale()) return null;
   out.res = rd.res;
   out.box = rd.box;
-  step('read', rd.st, rd.msg);
+  step('read', rd.st, rd.msg, rd.det);
   if (rd.res.none) {
     step('trust', 'fail', 'rien à transmettre');
     return out;
@@ -228,7 +271,7 @@ export async function readPhoto(orig, o) {
   const tr = trust(rd.res);
   if (tr) {
     out.trust = tr.t;
-    step('trust', tr.st, tr.msg);
+    step('trust', tr.st, tr.msg, tr.det);
   }
   return out;
 }

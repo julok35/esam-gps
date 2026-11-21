@@ -8,14 +8,15 @@ test('photo : lectures concordantes et moteur sûr : fiable', () => {
   const t = confidence({ tess: 92, agree: { n: 3, total: 3 }, firm: true, rival: false, notes: 0, alts: 0 });
   assert.equal(t.level, 'ok');
   assert.equal(t.pct, 93);
-  assert.ok(t.why.some((w) => /3 lectures sur 3/.test(w)));
+  assert.deepEqual(t.why, ['3 lectures sur 3 d’accord']);
 });
 
 test('photo Garmin réelle : 3 lectures sur 3 concordantes, moteur à 41 % sur les chiffres : fiable quand même', () => {
   const t = confidence({ tess: 41, agree: { n: 3, total: 3 }, firm: true, rival: false, notes: 0, alts: 0 });
   assert.equal(t.level, 'ok');
   assert.ok(t.pct >= 80, `pct ${t.pct}`);
-  assert.ok(t.why.some((w) => /hésitant/.test(w)));
+  // une seule note à l'écran : la raison d'un point fiable ne porte ni pourcentage ni doute sur le moteur
+  assert.deepEqual(t.why, ['3 lectures sur 3 d’accord']);
   // plus de lectures d'accord : un peu mieux encore, 95 au plus
   assert.equal(
     confidence({ tess: 90, agree: { n: 6, total: 6 }, firm: true, rival: false, notes: 0, alts: 0 }).pct,
@@ -27,7 +28,19 @@ test('photo : lectures discordantes, valeur concurrente : douteux, note basse', 
   const t = confidence({ tess: 90, agree: { n: 2, total: 8 }, firm: false, rival: true, notes: 1, alts: 1 });
   assert.equal(t.level, 'check');
   assert.ok(t.pct < 30, `pct ${t.pct}`);
-  assert.ok(t.why.some((w) => /concurrent|autre valeur/.test(w)));
+  // la raison la plus grave d'abord, en mots simples, sans pourcentage
+  assert.deepEqual(t.why, [
+    'une autre valeur a aussi été lue',
+    'seulement 2 lectures sur 8 d’accord',
+    'un avertissement sur le texte lu'
+  ]);
+  assert.ok(!t.why.some((w) => /%/.test(w)));
+});
+
+test('photo douteuse aux chiffres peu nets : seulement ce qui fait douter', () => {
+  const t = confidence({ tess: 30, agree: { n: 3, total: 3 }, firm: true, rival: false, notes: 1, alts: 0 });
+  assert.equal(t.level, 'check');
+  assert.deepEqual(t.why, ['un avertissement sur le texte lu', 'chiffres peu nets sur la photo']);
 });
 
 test('photo : concordante, moteur très hésitant ou muet : la concordance l\u2019emporte, avertissement en moins', () => {
@@ -47,6 +60,11 @@ test('texte saisi : fiable sans avertissement, douteux avec', () => {
   const t = confidence({ manual: true, notes: 1, alts: 0 });
   assert.equal(t.level, 'check');
   assert.equal(t.pct, 80);
+  assert.deepEqual(t.why, ['un avertissement sur le texte lu']);
+  assert.deepEqual(confidence({ manual: true, notes: 2, alts: 1 }).why, [
+    '2 avertissements sur le texte lu',
+    'plusieurs lectures possibles'
+  ]);
 });
 
 test('transmissible : fiable ou vérifié à la main', () => {

@@ -2,7 +2,7 @@
    photo seule et à un lot de photos : la dater, la lire, retenir son point, le verser au suivi. Les deux parcours
    n'ont que ces fonctions ; rien n'est affiché ici (la photo et ses étapes : auto.js ; le point : app.js). */
 import * as ocr from './ocr.js';
-import { readPhoto, deg, NO_ZONE, NO_READ } from './pipeline.js';
+import { readPhoto, NO_ZONE, NO_READ } from './pipeline.js';
 import { exifDate } from './exif.js';
 import { putPoint, resumePending } from './track.js';
 
@@ -12,7 +12,7 @@ import { putPoint, resumePending } from './track.js';
  * st : wait (à lire) | run | ok (point sûr) | check (douteux) | none (rien à transmettre) | fail (lecture
  * impossible) | bad (photo illisible), msg : texte de l'état,
  * r : lecture gardée pour rouvrir la photo telle que lue, reprises à la main comprises : { turns : quarts de tour,
- *   quad, angle, box, enh : réglages de contraste, found, res : voir ocr.readBox, steps : { étape : { st, msg } } },
+ *   quad, angle, box, enh : réglages de contraste, found, res : voir ocr.readBox, steps : { étape : { st, msg, det : mesures } } },
  * fix : point corrigé ou confirmé à la main, dans le format lu : { text, p : lecture vérifiée, chosen } }.
  */
 let seq = 0;
@@ -66,21 +66,16 @@ export function newShot(file) {
 }
 
 /**
- * État d'une photo d'après sa lecture. out : { found, res, trust, quad, angle } (voir pipeline.readPhoto),
- * steps : étapes de la lecture (leurs textes servent tels quels). Retour : { st, msg }.
+ * État d'une photo d'après sa lecture. out : { found, res, trust } (voir pipeline.readPhoto), steps : étapes de la
+ * lecture (leurs textes servent tels quels). Retour : { st, msg }, msg dans les mots du résumé des étapes à l'écran
+ * (« fiable », « à vérifier ») ; la note de confiance est dans « Point de la victime ».
  */
 export function stateOf(out, steps) {
   const s = steps || {};
   if (!out.found) return { st: 'none', msg: (s.zone && s.zone.msg) || NO_ZONE };
   if (!out.res || out.res.none || !out.trust) return { st: 'none', msg: (s.read && s.read.msg) || NO_READ };
-  const parts = [],
-    ok = out.trust.level === 'ok';
-  if (out.quad) parts.push('perspective');
-  if (out.angle) parts.push(`redressée ${deg(out.angle)}`);
-  return {
-    st: ok ? 'ok' : 'check',
-    msg: `${ok ? 'fiable' : 'douteux'} ${out.trust.pct} %${parts.length ? ` (${parts.join(', ')})` : ''}`
-  };
+  const ok = out.trust.level === 'ok';
+  return { st: ok ? 'ok' : 'check', msg: ok ? 'fiable' : 'à vérifier sur la photo' };
 }
 // Ce que la photo donne à afficher dans « Point de la victime » : sa correction à la main, sinon sa lecture.
 // Retour : { text, p : résultat (voir parser.parse), chosen : lecture retenue parmi p.best et p.alts }, ou null si
@@ -110,7 +105,7 @@ export async function readShot(shot, o) {
   const steps = {},
     own = !o.orig;
   shot.st = 'run';
-  shot.msg = 'redressement…';
+  shot.msg = 'lecture de la photo…';
   shot.r = null;
   shot.fix = null;
   touch(shot);
@@ -125,13 +120,13 @@ export async function readShot(shot, o) {
     out = await readPhoto(orig, {
       stale: o.stale,
       wi: o.wi,
-      onStep(k, st, msg) {
-        steps[k] = { st, msg };
+      onStep(k, st, msg, det) {
+        steps[k] = { st, msg, det: det || '' };
         if (st === 'run') {
           shot.msg = msg;
           touch(shot);
         }
-        if (o.onStep) o.onStep(k, st, msg);
+        if (o.onStep) o.onStep(k, st, msg, det);
       }
     });
   } catch (err) {
