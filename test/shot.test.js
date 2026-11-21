@@ -63,15 +63,16 @@ test('état d’une lecture : fiable, douteuse, zone non trouvée, rien lu : mê
   const ok = read(GOOD, 'ok');
   assert.deepEqual(stateOf({ found: true, res: ok, trust: ok.p.trust, quad: null, angle: 0 }), {
     st: 'ok',
-    msg: 'fiable 86 %'
+    msg: 'fiable'
   });
+  // redressement et note : à l'écran des étapes et dans « Point de la victime », pas dans la ligne du lot
   assert.deepEqual(stateOf({ found: true, res: ok, trust: ok.p.trust, quad: [[0, 0]], angle: -1.8 }), {
     st: 'ok',
-    msg: 'fiable 86 % (perspective, redressée −1,8°)'
+    msg: 'fiable'
   });
   const doubt = read(GOOD, 'check');
   assert.equal(stateOf({ found: true, res: doubt, trust: doubt.p.trust }).st, 'check');
-  assert.match(stateOf({ found: true, res: doubt, trust: doubt.p.trust }).msg, /^douteux 86 %/);
+  assert.equal(stateOf({ found: true, res: doubt, trust: doubt.p.trust }).msg, 'à vérifier sur la photo');
   assert.deepEqual(stateOf({ found: false }), { st: 'none', msg: NO_ZONE });
   assert.deepEqual(stateOf({ found: true, res: { none: true }, trust: null }), { st: 'none', msg: NO_READ });
   // le texte de l'étape affichée fait foi

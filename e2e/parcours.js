@@ -249,7 +249,9 @@ const view = (page) =>
       big = document.querySelector('#result .big1'),
       zone = $('zoneCv');
     let sig = 0;
-    if (shownEl('zoneView')) for (const ch of zone.toDataURL()) sig = (sig * 31 + ch.charCodeAt(0)) | 0;
+    // zone lue : gardée avec la lecture ; après une lecture fiable, elle se montre avec le détail des étapes
+    const zoneOn = !$('cropBox').hidden && !$('zoneView').hidden;
+    if (zoneOn) for (const ch of zone.toDataURL()) sig = (sig * 31 + ch.charCodeAt(0)) | 0;
     return {
       point: big ? big.firstChild.textContent : '',
       copy: !!document.querySelector('#result button.big1[data-copy]'),
@@ -257,8 +259,12 @@ const view = (page) =>
       lines: [...document.querySelectorAll('#result .seg1')].map(txt),
       result: txt($('result')),
       track: txt($('trk')),
-      steps: $('steps').hidden ? [] : [...document.querySelectorAll('#steps li .st-t')].map(txt),
-      zone: shownEl('zoneView') ? `${zone.width}x${zone.height}:${sig}` : '',
+      steps: $('steps').hidden ? [] : [...document.querySelectorAll('#stepsList li .st-t')].map(txt),
+      // résumé des étapes, replié (une ligne) ou non ; pourcentages lus au premier niveau des étapes
+      sum: $('steps').hidden ? '' : txt($('stepsSum')),
+      fold: !$('steps').hidden && $('stepsList').hidden && !shownEl('zoneView'),
+      pcts: [...document.querySelectorAll('#stepsList .st-msg')].map(txt).join(' ').split('%').length - 1,
+      zone: zoneOn ? `${zone.width}x${zone.height}:${sig}` : '',
       pilot: shownEl('pilotCard'),
       share: shownEl('shareCard'),
       hash: location.hash,
@@ -271,7 +277,9 @@ const view = (page) =>
       ),
       hist: [...document.querySelectorAll('#hist li span')].map(txt),
       photoMsg: $('photoMsg').hidden ? '' : txt($('photoMsg')),
-      top: Math.round($('resCard').getBoundingClientRect().top)
+      top: Math.round($('resCard').getBoundingClientRect().top),
+      // même mesure, la page remise en haut : ce qu'on voit sans défiler
+      top0: Math.round($('resCard').getBoundingClientRect().top + window.scrollY)
     };
   });
 // Rien de transmissible à l'écran : ni copie, ni drone, ni partage, ni lien
@@ -322,9 +330,31 @@ for (const [name, point] of [
     const l = await view(lot);
     await shot(lot, `lot-${name}`);
     assert.equal(s.point, point);
-    for (const k of ['point', 'copy', 'pills', 'lines', 'steps', 'zone', 'pilot', 'share', 'hash', 'track'])
+    for (const k of [
+      'point',
+      'copy',
+      'pills',
+      'lines',
+      'steps',
+      'sum',
+      'fold',
+      'zone',
+      'pilot',
+      'share',
+      'hash',
+      'track'
+    ])
       assert.deepEqual(l[k], s[k], `« ${k} » diffère entre la photo seule et le lot`);
-    assert.ok(s.zone, 'zone lue affichée');
+    assert.ok(s.zone, 'zone lue gardée');
+    // lecture fiable : les étapes et la zone lue se replient en une ligne, une seule note de confiance
+    assert.equal(s.sum, 'Photo lue · fiable');
+    assert.ok(s.fold, 'lecture fiable : étapes repliées');
+    assert.equal(s.pcts, 1, 'une seule note en pourcentage au premier niveau des étapes');
+    assert.ok(s.top0 < 844 - 160, `« Point de la victime » à l’écran sans défilement (${s.top0})`);
+    // « Détail » déplie les étapes, leurs mesures et la zone lue
+    await tap(one, '#stepsMore');
+    assert.ok(await one.$eval('#zoneView', (e) => e.getClientRects().length > 0), 'Détail : zone lue visible');
+    assert.ok(await one.$$eval('#stepsList .st-det', (l) => l.length >= 4), 'Détail : mesures des étapes');
     assert.match(s.lines.join(' '), /Photo du 01\/11 0[68]:00 \(date du fichier\)/);
     // même point du suivi, à la même date ; au même endroit de l'écran en fin de lecture
     assert.deepEqual(s.points, [`${point} @ 11-01T${name === 'a' ? '08' : '06'}:00`]);
@@ -360,6 +390,7 @@ await scene(
     await shot(one, 'seule-sans-coordonnees');
     nothingToSend(v, 'photo seule sans coordonnées');
     assert.match(v.result, /Coordonnées non trouvées/);
+    assert.ok(!v.fold && v.sum === 'Coordonnées non trouvées', 'sans coordonnées : étapes visibles');
     assert.deepEqual(v.points, [`${PA} @ 11-01T08:00`], 'le suivi ne reçoit rien');
     await readOne(one, 'a');
     await one.setInputFiles('#gal', IMG.bad);
@@ -409,6 +440,13 @@ await scene(
       }
       let v = await view(page);
       assert.match(v.pills.join(' '), /À vérifier/, mode);
+      // lecture douteuse : étapes dépliées, la reprise proposée là où est le doute
+      assert.ok(!v.fold && v.sum === 'Photo lue · à vérifier', `${mode} : étapes visibles (${v.sum})`);
+      assert.equal(
+        await page.$eval('#stepsList .chip.go', (b) => b.textContent),
+        'Vérifier le point',
+        `${mode} : reprise proposée`
+      );
       assert.ok(!v.copy && !v.pilot && !v.share && v.hash === '', `${mode} : douteux, rien de transmissible`);
       assert.deepEqual(v.points, [], `${mode} : rien au suivi`);
       // l'appli passe en arrière-plan, puis une espace est tapée dans le texte
@@ -482,7 +520,7 @@ await scene(
     await tap(page, '#batchList li:nth-child(2) [data-chk]');
     await pause(page, 900);
     nothingToSend(await view(page), 'photo couchée ouverte');
-    // Pivoter, Tout, Lire
+    // Pivoter d'un quart, Toute la photo, Lire les coordonnées
     await tap(page, '#rot');
     await tap(page, '#cropAll');
     await tap(page, '#ocrGo');
@@ -515,7 +553,9 @@ await scene('relance du lot : ni doublon ni point revenu ; photo déplacée : sa
   // date du point 1 changée dans le suivi, photo 1 descendue, point de la photo b retiré à la main
   await page.fill('#trackList input[data-tt="0"]', '2026-11-01T07:30');
   await page.dispatchEvent('#trackList input[data-tt="0"]', 'change');
-  await tap(page, '#batchList button[data-dn="0"]');
+  // photo 1 descendue au clavier, par sa poignée
+  await page.focus('#batchList .bh[data-h="0"]');
+  await page.keyboard.press('ArrowDown');
   let v = await view(page);
   assert.match(v.rows[1], /date déplacée/);
   assert.deepEqual(v.points, [`${PB} @ 11-01T09:00`, `${PA} @ 11-01T09:30`], 'la date déplacée est celle du suivi');
@@ -560,6 +600,9 @@ await scene(
     assert.equal(v.rows.length, 4);
     assert.match(v.rows[3], /^st-ok on.*02\/11 17:45 photo/);
     await shot(page, 'lot-photo-seule-inscrite');
+    // « Ajouter des photos » : un bouton qui ouvre le sélecteur de photos
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#batchAdd')]);
+    assert.ok(chooser.isMultiple(), 'Ajouter : plusieurs photos à la fois');
     // pendant la lecture d'un lot : tout est grisé sauf « Arrêter », une photo prise entre dans la file
     const run = await op();
     await addLot(run, ['a', 'garmin', 'none']);

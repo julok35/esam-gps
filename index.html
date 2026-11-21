@@ -52,60 +52,59 @@
       </div>
     <p class="hint flush" id="photoMsg" role="alert" hidden></p>
     <p class="hint flush">Photo ou capture d'écran : l'appli redresse, améliore, trouve les coordonnées, les lit et note sa confiance. Chaque étape se reprend à la main.</p>
-    <ol class="steps" id="steps" hidden></ol>
+    <div class="steps" id="steps" hidden>
+      <div class="st-head" id="stepsHead"><svg class="st-ic" id="stepsIc" viewBox="0 0 24 24" aria-hidden="true"></svg><b class="st-sum" id="stepsSum" role="status"></b><button class="st-more" type="button" id="stepsMore" aria-expanded="false" aria-controls="stepsList">Détail</button></div>
+      <ol class="st-list" id="stepsList" aria-label="Étapes de la lecture"></ol>
+    </div>
     <button class="btn sec wide" type="button" id="stepsStop" hidden>Arrêter et cadrer à la main</button>
 
-    <div class="crop" id="cropBox" hidden>
-      <span class="lbl frame-lbl">Pincez pour zoomer, ajustez le cadre par ses coins. Photo de travers : redressez-la jusqu'à ce que le texte suive le cadre</span>
+    <div class="crop" id="cropBox" data-tab="frame" hidden>
+      <div class="crop-tabs" role="group" aria-label="Réglage de la photo"><button type="button" data-tab="frame" aria-pressed="true">Cadrer</button><button type="button" data-tab="tilt" aria-pressed="false">Redresser</button><button type="button" data-tab="persp" aria-pressed="false">Perspective</button></div>
+      <p class="crop-hint" data-grp="frame">Posez le cadre jaune sur les coordonnées : tirez ses coins, pincez pour zoomer.</p>
+      <p class="crop-hint" data-grp="tilt">Tournez la photo jusqu’à ce que le texte suive les lignes.</p>
+      <p class="crop-hint" data-grp="persp">Posez les quatre ronds sur les coins de l’écran photographié.</p>
       <div class="crop-stage" id="stage">
-        <canvas id="cv"></canvas>
+        <canvas id="cv" role="img" aria-label="Photo à lire, cadre de lecture en jaune"></canvas>
         <div class="sel" id="sel"><span class="h tl" data-h="tl"></span><span class="h tr" data-h="tr"></span><span class="h bl" data-h="bl"></span><span class="h br" data-h="br"></span></div>
         <div class="guides" aria-hidden="true"></div>
         <svg class="quad" id="quadSvg" aria-hidden="true" hidden><polygon id="quadPoly" points=""></polygon></svg>
         <span class="qh" data-q="0" hidden></span><span class="qh" data-q="1" hidden></span><span class="qh" data-q="2" hidden></span><span class="qh" data-q="3" hidden></span>
         <div class="zoombar"><button type="button" id="zIn" aria-label="Zoomer">+</button><button type="button" id="zOut" aria-label="Dézoomer">−</button></div>
       </div>
-      <div class="tilt">
-        <button type="button" id="tL" aria-label="Tourner d'un demi-degré à gauche">↺</button>
-        <input type="range" id="tilt" min="-45" max="45" step="0.5" value="0" aria-label="Redresser la photo">
-        <button type="button" id="tR" aria-label="Tourner d'un demi-degré à droite">↻</button>
-        <output id="tVal" for="tilt">0°</output>
-        <button class="btn sec" type="button" id="tAuto">Auto</button>
-        <button class="btn sec" type="button" id="tPersp">Perspective</button>
+      <div class="crop-grp" data-grp="frame">
+        <button class="btn sec" type="button" id="cropAll">Toute la photo</button>
+        <button class="btn sec" type="button" id="rot">Pivoter d’un quart</button>
       </div>
-      <div class="persp-row" id="perspRow">
-        <span class="lbl">Posez les quatre coins sur les bords de l'écran photographié, puis Valider</span>
-        <div class="row4">
-          <button class="btn" type="button" id="pApply">Valider</button>
-          <button class="btn sec" type="button" id="pAuto">Auto</button>
-          <button class="btn sec" type="button" id="pOrig">Origine</button>
-          <button class="btn sec" type="button" id="pBack">Retour</button>
-        </div>
+      <div class="crop-grp tilt" data-grp="tilt">
+        <div class="tilt-bar"><input type="range" id="tilt" min="-45" max="45" step="0.5" value="0" aria-label="Inclinaison de la photo"><output id="tVal" for="tilt">0°</output></div>
+        <button class="btn sec" type="button" id="tL" aria-label="Tourner d’un demi-degré à gauche">−0,5°</button>
+        <button class="btn sec" type="button" id="tR" aria-label="Tourner d’un demi-degré à droite">+0,5°</button>
+        <button class="btn sec" type="button" id="tAuto">Aligner sur le texte</button>
       </div>
-      <div class="row4">
-        <button class="btn" type="button" id="ocrGo">Lire</button>
-        <button class="btn sec" type="button" id="rot">Pivoter</button>
-        <button class="btn sec" type="button" id="cropAll">Tout</button>
+      <div class="crop-grp persp-row" id="perspRow" data-grp="persp">
+        <button class="btn sec" type="button" id="pAuto">Trouver les bords</button>
+        <button class="btn sec" type="button" id="pOrig">Photo d’origine</button>
+      </div>
+      <div class="crop-act">
+        <button class="btn" type="button" id="ocrGo">Lire les coordonnées</button>
+        <button class="btn" type="button" id="pApply">Remettre de face et lire</button>
         <button class="btn sec" type="button" id="cropClose">Fermer</button>
       </div>
       <div class="zoneview" id="zoneView" hidden>
-        <span class="lbl">Zone lue, contraste renforcé : comparez avec le résultat</span>
-        <canvas class="zone" id="zoneCv"></canvas>
-        <div class="row2">
-          <button class="btn sec" type="button" id="reCrop">Recadrer</button>
-          <button class="btn sec" type="button" id="zoneClose">Fermer</button>
-        </div>
+        <p class="crop-hint">Partie de la photo qui a été lue : comparez-la avec le point.</p>
+        <canvas class="zone" id="zoneCv" role="img" aria-label="Partie de la photo lue, contraste renforcé"></canvas>
+        <button class="btn sec wide" type="button" id="reCrop">Recadrer</button>
       </div>
       <div class="prog" id="prog" hidden><div id="progBar"></div><span id="progTxt"></span></div>
     </div>
     <div class="enh" id="enhBox" hidden>
-      <span class="lbl">Image telle que le moteur la lit : réglez le contraste et la netteté, puis Relire</span>
-      <canvas class="zone" id="enhCv"></canvas>
+      <p class="crop-hint">Réglez jusqu’à voir les chiffres bien nets, puis relisez.</p>
+      <canvas class="zone" id="enhCv" role="img" aria-label="Aperçu de la partie lue avec ce réglage"></canvas>
       <div class="enh-row"><label for="enhC">Contraste</label><input type="range" id="enhC" min="0.6" max="2" step="0.1" value="1"><output id="enhCV" for="enhC">×1</output></div>
       <div class="enh-row"><label for="enhS">Netteté</label><input type="range" id="enhS" min="0" max="2" step="0.1" value="0"><output id="enhSV" for="enhS">×0</output></div>
       <div class="row3">
         <button class="btn" type="button" id="enhGo">Relire</button>
-        <button class="btn sec" type="button" id="enhAuto">Auto</button>
+        <button class="btn sec" type="button" id="enhAuto">Réglage automatique</button>
         <button class="btn sec" type="button" id="enhClose">Fermer</button>
       </div>
     </div>
@@ -119,11 +118,11 @@
   <details class="block tile" id="batchCard" open hidden>
     <summary><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="13" height="13" rx="2"/><path d="M8 4h11a2 2 0 0 1 2 2v11"/><circle cx="8" cy="12" r="1.6"/><path d="M3 17l4-4 3 3 2-2 4 4"/></svg><span class="tt">Lot de photos</span><small class="ts" id="batchSum"></small></summary>
     <div class="tile-b">
-      <p class="hint flush">Dans l'ordre de prise de vue (date de la photo, sinon du fichier). Glissez une photo par sa poignée ⋮⋮, ou ▲ ▼, pour changer l'ordre : sa date est alors replacée entre ses voisines. Chaque photo est lue séparément ; les points sûrs rejoignent le suivi datés de la photo, les autres sont à vérifier.</p>
+      <p class="hint flush">Rangées par heure de prise de vue. Touchez « Lire tout », puis « Vérifier » sur les photos qui le demandent.</p>
       <ol class="blist" id="batchList"></ol>
       <div class="row3">
         <button class="btn" type="button" id="batchGo">Lire tout</button>
-        <label class="btn sec" for="gal">Ajouter</label>
+        <button class="btn sec" type="button" id="batchAdd">Ajouter des photos</button>
         <button class="btn sec" type="button" id="batchClear">Vider</button>
       </div>
       <p class="hint flush" id="batchMsg" role="status" hidden></p>

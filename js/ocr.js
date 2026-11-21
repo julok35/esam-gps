@@ -136,6 +136,7 @@ function showPhoto(c) {
   gen++;
   showAngle();
   clearZone();
+  tab = 'frame';
   setMode('frame');
   sel = { x: 0.15, y: 0.35, w: 0.7, h: 0.35 };
   $('cropBox').hidden = false;
@@ -358,11 +359,11 @@ function autoLevel() {
   if (!base) return;
   const r = leanIn(getWork(), sel, TILT);
   if (r.gain < AUTO_GAIN) {
-    flash($('tAuto'), 'Pas net');
+    flash($('tAuto'), 'Texte pas assez net');
     return;
   }
   if (Math.abs(r.deg) < 0.3) {
-    flash($('tAuto'), 'Déjà droit');
+    flash($('tAuto'), 'Déjà droite');
     return;
   }
   setAngle(angle - r.deg);
@@ -378,12 +379,27 @@ function two() {
 
 // ---------- Perspective ----------
 // Mode de la scène : 'frame' (cadre de lecture, réglette d'inclinaison) ou 'persp' (quatre coins sur les bords de l'écran)
-let mode = 'frame';
+// Réglage affiché sous la photo, un groupe de commandes à la fois : 'frame' (cadrer), 'tilt' (redresser) ou 'persp'
+let mode = 'frame',
+  tab = 'frame';
 export function setMode(m) {
   mode = m;
-  $('cropBox').classList.toggle('persp', m === 'persp');
+  if (m === 'persp') tab = 'persp';
+  else if (tab === 'persp') tab = 'frame';
+  const box = $('cropBox');
+  box.classList.toggle('persp', m === 'persp');
+  box.dataset.tab = tab;
+  box.querySelectorAll('.crop-tabs [data-tab]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
+  });
   if (m === 'persp' && !quad) defaultQuad();
   drawQuad();
+}
+// Réglage choisi : cadrer, redresser (la photo garde son cadre) ou perspective (coins posés sur la photo non tournée)
+function setTab(t) {
+  if (t === 'persp' && angle) setAngle(0);
+  tab = t;
+  setMode(t === 'persp' ? 'persp' : 'frame');
 }
 export function getMode() {
   return mode;
@@ -672,6 +688,14 @@ function initCrop() {
     guides();
   });
   $('tAuto').addEventListener('click', autoLevel);
+  $('cropBox')
+    .querySelector('.crop-tabs')
+    .addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tab]');
+      if (!b || !base) return;
+      setTab(b.dataset.tab);
+      applyView();
+    });
   $('cropAll').addEventListener('click', () => {
     sel = { x: 0, y: 0, w: 1, h: 1 };
     view = { z: 1, tx: 0, ty: 0 };
@@ -683,9 +707,6 @@ function initCrop() {
   $('reCrop').addEventListener('click', () => {
     openStage('frame');
   });
-  $('zoneClose').addEventListener('click', () => {
-    $('cropBox').hidden = true;
-  });
   // photo prise ou photos choisies : remises à qui les lit (une seule : lue tout de suite ; plusieurs : un lot)
   ['cam', 'gal'].forEach((id) => {
     $(id).addEventListener('change', (e) => {
@@ -695,14 +716,14 @@ function initCrop() {
     });
   });
 }
-// Scène visible, dans le mode demandé, cadrage à la place de la zone lue
+// Scène visible, sur le réglage demandé ('frame', 'tilt' ou 'persp'), cadrage à la place de la zone lue
 export function openStage(m) {
   if (!base) return;
   $('cropBox').hidden = false;
   $('cropBox').classList.remove('read');
   $('zoneView').hidden = true;
-  if (m === 'persp' && angle) setAngle(0); // les coins se posent sur la photo non tournée
-  setMode(m || 'frame');
+  $('enhBox').hidden = true; // un réglage à la fois : un seul « Fermer » à l'écran
+  setTab(m || 'frame'); // les coins de perspective se posent sur la photo non tournée
   applyView();
   $('cropBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -886,20 +907,13 @@ export function getWorker(i) {
   );
   return pr;
 }
-const LBL = {
-  'loading tesseract core': 'Chargement du moteur',
-  'initializing tesseract': 'Initialisation',
-  'loading language traineddata': 'Chargement de la langue',
-  'initializing api': 'Initialisation',
-  'recognizing text': 'Lecture du texte'
-};
-// Suivi d'avancement : onProg(texte, fraction 0 à 1)
+// Avancement du moteur, en mots du terrain : son chargement au premier usage est une « préparation de la lecture »
+const LBL = { 'recognizing text': 'Lecture du texte' };
+export const PREP = 'Préparation de la lecture (premier usage)';
+// Suivi d'avancement : onProg(texte, fraction 0 à 1) ; texte commençant par PREP pendant le chargement du moteur
 export function setProgress(onProg, label) {
   progCb = function (m) {
-    onProg(
-      `${(LBL[m.status] || 'Préparation') + (m.status === 'recognizing text' && label ? ` · ${label}` : '')}...`,
-      m.progress
-    );
+    onProg(`${(LBL[m.status] || PREP) + (m.status === 'recognizing text' && label ? ` · ${label}` : '')}…`, m.progress);
   };
 }
 

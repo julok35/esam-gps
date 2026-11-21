@@ -9,6 +9,10 @@ import { putPoint, findPoint } from './track.js';
 import { focusPoints } from './map.js';
 
 const THUMB = 96; // vignette de la liste (pixels)
+// Icônes de la ligne (tracé SVG, même trait que les icônes des tuiles) : poignée pour glisser, retrait
+const GRIP =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/></svg>';
+const CROSS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>';
 // origine de la date, en un mot dans la liste
 const TAG = { exif: 'photo', file: 'fichier', now: 'lecture', moved: 'date déplacée' };
 let photos = [], // fiches du lot, dans l'ordre des dates
@@ -58,6 +62,7 @@ function paint() {
     `${photos.length} photo${photos.length > 1 ? 's' : ''}${ok ? ` · ${ok} lue${ok > 1 ? 's' : ''}` : ''}`;
   $('batchList').innerHTML = photos
     .map((p, i) => {
+      // état dans les mots des étapes d'une photo seule : « fiable », « à vérifier », ou le texte de l'étape
       const st = p.st,
         c = pointOf(p),
         read = st !== 'wait' && st !== 'run',
@@ -65,8 +70,8 @@ function paint() {
           (st === 'ok' || st === 'check') && c
             ? `${f6(c.lat)}, ${f6(c.lon)} · ${p.msg}`
             : st === 'wait'
-              ? 'en attente'
-              : p.msg || 'lecture…';
+              ? 'à lire'
+              : p.msg || 'lecture de la photo…';
       // photo lue : un toucher l'ouvre telle que lue, son point dans « Point de la victime » (copie, Pilot 2, AirOps)
       const on = shown() === p,
         pick = read
@@ -75,20 +80,20 @@ function paint() {
             }`
           : '',
         chk = st === 'check' || st === 'none' || st === 'fail' || st === 'bad';
+      // trois commandes au plus : la poignée (glisser, ou flèches haut et bas au clavier), Vérifier, Retirer
       return (
         `<li class="bp st-${st}${on ? ' on' : ''}" data-i="${i}">` +
-        `<span class="bh" data-h="${i}" aria-label="Glisser pour déplacer la photo ${i + 1}">⋮⋮</span>${
+        `<button class="bh" type="button" data-h="${i}" aria-label="Déplacer la photo ${
+          i + 1
+        } : glisser, ou flèches haut et bas"${photos.length > 1 && !busy ? '' : ' disabled'}>${GRIP}</button>${
           p.thumb ? `<img class="bt" alt="" src="${p.thumb}">` : '<span class="bt"></span>'
         }<div class="bb"${pick}><div class="bn"><b>${i + 1}</b> ${esc(fmtWhen(p.t))} <small>${TAG[p.src]}${
           on ? ' · affiché' : ''
         }</small></div>` +
         `<div class="bm">${esc(line)}</div></div>` +
-        `<div class="ba${chk ? ' v' : ''}">${
-          chk ? `<button class="chip" type="button" data-chk="${i}"${off}>Vérifier</button>` : ''
-        }<button class="bx" type="button" data-up="${i}" aria-label="Monter"${i && !busy ? '' : ' disabled'}>▲</button>` +
-        `<button class="bx" type="button" data-dn="${i}" aria-label="Descendre"${
-          i < photos.length - 1 && !busy ? '' : ' disabled'
-        }>▼</button><button class="bx" type="button" data-del="${i}" aria-label="Retirer"${off}>✕</button></div></li>`
+        `<button class="bx" type="button" data-del="${i}" aria-label="Retirer la photo ${i + 1} du lot"${off}>${CROSS}</button>${
+          chk ? `<button class="chip go" type="button" data-chk="${i}"${off}>Vérifier la photo ${i + 1}</button>` : ''
+        }</li>`
       );
     })
     .join('');
@@ -142,7 +147,7 @@ function runAll() {
   say(head);
   // moteur chargé au premier usage : son avancement s'affiche, comme sur les étapes d'une photo seule
   ocr.setProgress((t, f) => {
-    if (busyWith() === 'lot' && !stopped && /moteur|langue|Initialisation/.test(t))
+    if (busyWith() === 'lot' && !stopped && t.startsWith(ocr.PREP))
       say(`${head} ${t}${f ? ` ${Math.round(f * 100)} %` : ''}`);
   });
   const sent = [],
@@ -193,12 +198,8 @@ function done(sent) {
               added < sent.length ? ` (${sent.length - added} déjà au suivi)` : ''
             }`
           : 'Aucun point sûr dans cette lecture') +
-      (todo
-        ? ` · ${plural(todo, 'photo', 'photos')} à vérifier (un toucher ouvre la photo, pour la reprendre à la main)`
-        : '') +
-      (last
-        ? ` · Point de la victime : photo ${photos.indexOf(last) + 1}, la plus récente (touchez une autre photo pour l’afficher)`
-        : '')
+      (todo ? ` · ${plural(todo, 'photo', 'photos')} à vérifier : touchez « Vérifier »` : '') +
+      (last ? ` · Point de la victime : photo ${photos.indexOf(last) + 1}, la plus récente` : '')
     }.`
   );
   paint();
@@ -277,18 +278,31 @@ export function initBatch() {
       return;
     }
     if (!b || busyWith() === 'lot') return;
-    if (b.dataset.up !== undefined) moveTo(+b.dataset.up, +b.dataset.up - 1);
-    else if (b.dataset.dn !== undefined) moveTo(+b.dataset.dn, +b.dataset.dn + 1);
-    else if (b.dataset.del !== undefined) {
+    if (b.dataset.del !== undefined) {
       photos.splice(+b.dataset.del, 1);
       paint();
     } else if (b.dataset.chk !== undefined) open(+b.dataset.chk);
   });
   $('batchList').addEventListener('keydown', (e) => {
+    // poignée : flèches haut et bas déplacent la photo, la poignée garde le focus
+    const h = e.target.closest('.bh');
+    if (h && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      const from = +h.dataset.h,
+        to = from + (e.key === 'ArrowUp' ? -1 : 1);
+      if (busyWith() || to < 0 || to >= photos.length) return;
+      moveTo(from, to);
+      $('batchList').querySelector(`.bh[data-h="${to}"]`).focus();
+      return;
+    }
     const sh = e.target.closest('[data-show]');
     if (!sh || (e.key !== 'Enter' && e.key !== ' ')) return;
     e.preventDefault();
     open(+sh.dataset.show);
+  });
+  // « Ajouter des photos » ouvre le même sélecteur que « Choisir des photos »
+  $('batchAdd').addEventListener('click', () => {
+    $('gal').click();
   });
   $('batchGo').addEventListener('click', () => {
     if (busyWith() === 'lot') stop();
