@@ -3,10 +3,11 @@ import { $, esc, f6 } from './util.js';
 import { parse, toDMM, toDMS, toUTM, distM } from './parser.js';
 import { readZone } from './ocr.js';
 
-const STEP = 30; // hauteur d'un chiffre sur la molette (px), voir .wh dans app.css
+const STEP = 40; // hauteur d'un chiffre sur la molette (px), voir .wh dans app.css
 const DIGITS = '0123456789';
 const HEMI = { N: 'NS', S: 'NS', E: 'EO', O: 'EO' };
 let rows = [],
+  sel = null, // molette choisie : − et + agissent sur elle
   from = null,
   onApply = function () {};
 
@@ -58,9 +59,10 @@ function text() {
 
 function wheelHtml(c, ri, ci) {
   if (!c.opts) return `<span class="wst${c.ch === ' ' ? ' sp' : ''}">${esc(c.ch)}</span>`;
+  const digit = c.opts === DIGITS;
   return (
-    `<span class="wh" role="spinbutton" tabindex="0" aria-label="${
-      c.opts === DIGITS ? 'Chiffre' : 'Hémisphère'
+    `<span class="wh${digit ? '' : ' hemi'}" role="spinbutton" tabindex="0" aria-label="${
+      digit ? 'Chiffre' : 'Hémisphère'
     }" data-r="${ri}" data-c="${ci}">` + `<span class="wh-strip"><i></i><b></b><i></i></span></span>`
   );
 }
@@ -75,7 +77,22 @@ function paint(el) {
   el.classList.toggle('chg', c.ch !== c.orig);
   el.setAttribute('aria-valuetext', c.ch);
 }
+// Choisir une molette : bien visible (bande jaune), et c'est sur elle qu'agissent − et +
+function pick(el) {
+  if (!el || el === sel) return;
+  if (sel) {
+    sel.classList.remove('on');
+    sel.removeAttribute('aria-current');
+  }
+  sel = el;
+  el.classList.add('on');
+  el.setAttribute('aria-current', 'true');
+}
+function wheels() {
+  return Array.from($('fixRows').querySelectorAll('.wh'));
+}
 function turn(el, by) {
+  if (!el) return;
   const c = rows[+el.dataset.r].cells[+el.dataset.c],
     n = c.opts.length;
   c.i = (((c.i + by) % n) + n) % n;
@@ -114,6 +131,9 @@ function build() {
     )
     .join('');
   $('fixRows').querySelectorAll('.wh').forEach(paint);
+  sel = null;
+  // au départ : le premier chiffre de la première ligne
+  pick($('fixRows').querySelector('.wh:not(.hemi)'));
   preview();
 }
 
@@ -143,15 +163,18 @@ export function closeFix() {
   $('fixCard').hidden = true;
 }
 
-// Molette : glisser vers le haut fait monter le chiffre suivant (+1), vers le bas le précédent ;
-// toucher le haut ou le bas de la molette : un cran ; molette de souris et flèches du clavier aussi.
+// Molette : la toucher la choisit ; glisser vers le haut fait monter le chiffre suivant (+1), vers le bas le
+// précédent ; toucher le haut ou le bas d'une molette déjà choisie : un cran ; − et + sous les molettes, molette
+// de souris et flèches du clavier aussi. Un toucher entre deux molettes choisit la plus proche.
 function initWheels() {
   const box = $('fixRows');
   let g = null;
   box.addEventListener('pointerdown', (e) => {
     const el = e.target.closest('.wh');
     if (!el || g) return;
-    g = { el, id: e.pointerId, y0: e.clientY, done: 0, moved: false };
+    g = { el, id: e.pointerId, y0: e.clientY, done: 0, moved: false, was: el === sel };
+    pick(el);
+    el.focus({ preventScroll: true });
     try {
       el.setPointerCapture(e.pointerId);
     } catch (err) {}
@@ -172,7 +195,7 @@ function initWheels() {
   const end = function (e) {
     if (!g || e.pointerId !== g.id) return;
     const el = g.el;
-    if (!g.moved && e.type === 'pointerup') {
+    if (!g.moved && g.was && e.type === 'pointerup') {
       const r = el.getBoundingClientRect(),
         y = (e.clientY - r.top) / r.height;
       if (y < 0.36) turn(el, -1);
@@ -184,12 +207,31 @@ function initWheels() {
   };
   box.addEventListener('pointerup', end);
   box.addEventListener('pointercancel', end);
+  box.addEventListener('click', (e) => {
+    const row = e.target.closest('.whs');
+    if (!row || e.target.closest('.wh')) return;
+    let best = null,
+      bd = Infinity;
+    for (const w of row.querySelectorAll('.wh')) {
+      const r = w.getBoundingClientRect(),
+        d = Math.abs(e.clientX - (r.left + r.right) / 2);
+      if (d < bd) {
+        bd = d;
+        best = w;
+      }
+    }
+    pick(best);
+  });
+  box.addEventListener('focusin', (e) => {
+    if (e.target.classList.contains('wh')) pick(e.target);
+  });
   box.addEventListener(
     'wheel',
     (e) => {
       const el = e.target.closest('.wh');
       if (!el) return;
       e.preventDefault();
+      pick(el);
       turn(el, e.deltaY > 0 ? 1 : -1);
     },
     { passive: false }
@@ -218,6 +260,15 @@ function initWheels() {
 export function initFix(apply) {
   onApply = apply;
   initWheels();
+  $('fixMinus').addEventListener('click', () => turn(sel, -1));
+  $('fixPlus').addEventListener('click', () => turn(sel, 1));
+  const move = function (by) {
+    const all = wheels(),
+      i = all.indexOf(sel);
+    pick(all[Math.max(0, Math.min(all.length - 1, i + by))]);
+  };
+  $('fixPrev').addEventListener('click', () => move(-1));
+  $('fixNext').addEventListener('click', () => move(1));
   $('fixOk').addEventListener('click', () => {
     const t = text();
     closeFix();

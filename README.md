@@ -7,7 +7,7 @@ Convertisseur de coordonnées GPS de l'Équipe de Secours Animalier en Montagne 
 - Photo de l'écran (Garmin, téléphone) ou capture d'écran : tout s'enchaîne seul, étape par étape, chacune affichée avec son résultat et reprenable à la main : redressement (perspective d'après les bords de l'écran, inclinaison du texte), contraste et netteté, zone des coordonnées trouvée par une première lecture de toute la photo, lecture du texte sur le téléphone (Tesseract.js, plusieurs lectures et vote), note de confiance
 - Lot de photos : plusieurs photos choisies d'un coup, triées par date de prise de vue (EXIF, sinon date du fichier), réordonnables au doigt (la date suit), lues en parallèle par plusieurs moteurs ; les points sûrs rejoignent le suivi datés de la photo, les autres s'ouvrent une par une pour être repris à la main. Une fois le lot lu, la carte se centre sur les points lus (plusieurs), ou sur le point lu et votre position (un seul) ; le bouton « Les deux » montre toujours votre position et l'ensemble des points (point affiché, lot lu, suivi)
 - Un point douteux (lectures discordantes, moteur hésitant, avertissement) n'est jamais transmis : partage, drone, autres formats et suivi restent fermés tant qu'il n'est pas corrigé ou confirmé après comparaison avec la photo
-- Correction de la lecture chiffre par chiffre, avec des molettes comme un cadenas à code ; zoom au pincement, cadre et quatre coins de perspective au doigt
+- Correction de la lecture chiffre par chiffre, avec des molettes comme un cadenas à code : toucher une molette la choisit (bande jaune), deux grands boutons − et + la font tourner, ‹ › passent à la voisine ; glisser et clavier aussi. La lettre d'hémisphère (N, S, E, O) a sa propre molette, arrondie, bleu glacier et dans une autre police, pour ne pas confondre un « O » avec un 0 ; zoom au pincement, cadre et quatre coins de perspective au doigt
 - Suivi de plusieurs points : signalements successifs d'un même animal (nommé), distance parcourue, cap, durée et vitesse entre les points, tracé numéroté sur la carte, message de suivi à partager ; le suivi se poursuit plus tard ou sur un autre téléphone par un lien (`#s=...`, qui l'installe à l'ouverture) ou un fichier GPX (export et import, lisible aussi par les applis de carte). Le nom de l'animal se saisit en tête de page (en rouge tant qu'il est vide) ; à l'ouverture, un suivi déjà enregistré est rappelé avec ce nom, à continuer ou à effacer pour repartir de zéro
 - Détection automatique du format : DD, DMM, DMS, NMEA, UTM, liens Google Maps
 - Sortie en degrés décimaux pour la RC Plus du M30T, saisie DJI Pilot 2
@@ -52,7 +52,7 @@ Site statique sans build, servi tel quel (GitHub Pages).
 | `test/` | Tests Node (`node --test`), dont une vraie photo d'écran Garmin en niveaux de gris |
 | `e2e/` | Scénario de bout en bout dans un navigateur (Playwright, hors dépôt) : photo seule et lot de photos, étape par étape |
 | `eslint.config.js`, `.prettierrc.json`, `.editorconfig` | Règles de qualité et de mise en forme |
-| `vendor/` | Leaflet 1.9.4, qrcode-generator 1.4.4, tesseract.js 7.0.0 (bibliothèque, worker, moteur WebAssembly et langue), polices (licence OFL) |
+| `vendor/` | Leaflet 1.9.4, qrcode-generator 1.4.4, tesseract.js 7.0.0 (bibliothèque, worker, moteur WebAssembly et langue), polices (licence OFL ; Montserrat et Roboto Condensed sont variables, de 100 à 900, déclarées comme telles dans `fonts.css`) |
 
 Le moteur WebAssembly de Tesseract (`vendor/tesseract/core-7`, tesseract.js-core 7.0.0) et la langue (`vendor/tesseract/lang`, @tesseract.js-data/eng 1.0.0, modèle `4.0.0_best_int`) sont hébergés avec l'appli : aucun code ni donnée ne vient d'un autre site. Ces 7 Mo ne sont téléchargés qu'au premier usage ou par le bouton « Préparer la lecture de photo sans réseau », puis gardés par le service worker d'une version de l'appli à l'autre. Pour changer de version de Tesseract : remplacer les fichiers, renommer le dossier du moteur (`core-7`) dans `js/ocr.js` et `sw.js`, puis vérifier les lectures sur de vraies photos.
 
@@ -111,6 +111,8 @@ npm run check        # tout ce que vérifie la CI : lint, mise en forme, tests
 
 La CI refuse un push qui ne passe pas le lint ou la mise en forme. Le site lui-même n'a aucune dépendance ni étape de build.
 
+Styles (`app.css`) : lisibles au soleil et avec des gants. Les valeurs viennent des jetons de `:root` : tailles de texte `--fs-*` (rien sous 13 px, consignes et boutons à 15 px), cible tactile `--hit` (48 px pour toute commande ; une zone de prise invisible plus large que le dessin est admise quand la place manque), texte d'alerte `--alerte` (le rouge vif `--rouge` reste pour les fonds et les bordures), contour de commande `--ctl` (3:1 au moins sur toutes les surfaces), état désactivé `--dis-*`, anneau de focus `--ring`, rayons `--r-*`, épaisseurs `--b-*`. Une règle par ligne.
+
 Conventions, vérifiées par ESLint : `const` / `let` (jamais `var`), fonctions fléchées pour les rappels, `===`, pas d'import en double. Tout texte venu de l'extérieur (lecture, fichier GPX, lien, réponse d'un service) passe par `esc()` avant d'entrer dans du HTML ; la page n'accepte ni script ni style en ligne (Content-Security-Policy de `index.html`). Dependabot propose chaque mois les mises à jour des outils et des actions de la CI.
 
 ## Tests
@@ -127,7 +129,7 @@ Les tests n'ont besoin d'aucune dépendance. Ils tournent aussi à chaque push e
 npm run e2e                    # option : -- --shots dossier, pour garder des captures au format téléphone
 ```
 
-`e2e/parcours.js` ouvre l'appli dans Chromium et vérifie que la même photo, lue seule puis dans un lot, donne la même chose (point, étapes, zone lue, date, suivi), et que les règles de sécurité tiennent dans les deux parcours : aucun point affiché pendant une lecture ni après une photo sans coordonnées, lecture douteuse jamais transmise, correction faite sur place au suivi, relance sans doublon. Playwright n'est pas une dépendance du dépôt (`npm i -g playwright`) : le scénario n'est pas lancé par la CI, il est à rejouer à la main après toute modification de `js/shot.js`, `js/auto.js`, `js/batch.js`, `js/app.js` ou `js/track.js`.
+`e2e/parcours.js` ouvre l'appli dans Chromium et vérifie que la même photo, lue seule puis dans un lot, donne la même chose (point, étapes, zone lue, date, suivi), et que les règles de sécurité tiennent dans les deux parcours : aucun point affiché pendant une lecture ni après une photo sans coordonnées, lecture douteuse jamais transmise, correction faite sur place au suivi, relance sans doublon ; il vérifie aussi les molettes (choix, − et +, ‹ ›) et la lisibilité terrain (commandes de 48 px au moins, aucun texte sous 13 px, pas de défilement de côté, en 390 et 360 de large). Playwright n'est pas une dépendance du dépôt (`npm i -g playwright`) : le scénario n'est pas lancé par la CI, il est à rejouer à la main après toute modification de `js/shot.js`, `js/auto.js`, `js/batch.js`, `js/app.js`, `js/track.js`, `js/fix.js` ou `app.css`.
 
 ## Mise en ligne
 
