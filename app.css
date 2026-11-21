@@ -177,7 +177,6 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .eqr + .eqr { margin-top: 0; }
 .eqk { font: 600 var(--fs-sm) var(--f-label); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--muted); }
 .eqv { font-weight: 500; overflow-wrap: anywhere; }
-.eqv.done { display: flex; align-items: center; color: var(--ok); font-weight: 700; }
 .eq + .grid2 { margin-top: 4px; }
 /* « Ouvrir le point dans » : de vrais boutons (comme .btn.sec), la flèche dit qu'une autre appli s'ouvre */
 .links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
@@ -232,6 +231,8 @@ body { overflow-x: clip; } /* la tuile pleine largeur (100vw) ne doit pas faire 
 /* zone lue : en grand, nette, sans lissage flou */
 canvas.zone { display: block; width: 100%; height: auto; max-height: 34vh; object-fit: contain; border: var(--b-ctl) solid var(--noir); border-radius: var(--r-m); background: #fff; }
 .zoneview { display: grid; gap: 8px; }
+/* point douteux : la zone lue est déjà dans le bloc d'alerte, à côté de la lecture ; ici il ne reste que « Recadrer » */
+main:has(#holdZone) #zoneView > .crop-hint, main:has(#holdZone) #zoneCv { display: none; }
 .crop.read > :not(.zoneview):not(.prog) { display: none; }
 .fix-row { display: grid; gap: 4px; }
 .fix-k { font: 600 var(--fs-sm) var(--f-label); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--muted); }
