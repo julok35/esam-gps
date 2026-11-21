@@ -166,8 +166,9 @@ const IMG = {};
 }
 
 // ---------- Outils ----------
-// Appli ouverte sur un téléphone neuf (stockage vide), sans réseau extérieur. track : suivi déjà sur le téléphone
-async function open(geo, track) {
+// Appli ouverte sur un téléphone neuf (stockage vide), sans réseau extérieur. track : suivi déjà sur le téléphone ;
+// tiles : état des tuiles gardé par une version précédente
+async function open(geo, track, tiles) {
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
@@ -179,6 +180,10 @@ async function open(geo, track) {
       localStorage.setItem('esam-gps-track', JSON.stringify(t.points));
       localStorage.setItem('esam-gps-track-name', t.name);
     }, track);
+  if (tiles)
+    await ctx.addInitScript((t) => {
+      localStorage.setItem('esam-gps-tiles', JSON.stringify(t));
+    }, tiles);
   const page = await ctx.newPage();
   page.on('dialog', (d) => d.accept());
   page.on('pageerror', (e) => failures.push(`erreur dans la page : ${e.message}`));
@@ -249,7 +254,9 @@ const view = (page) =>
       big = document.querySelector('#result .big1'),
       zone = $('zoneCv');
     let sig = 0;
-    if (shownEl('zoneView')) for (const ch of zone.toDataURL()) sig = (sig * 31 + ch.charCodeAt(0)) | 0;
+    // zone lue : gardée avec la lecture ; après une lecture fiable, elle se montre avec le détail des étapes
+    const zoneOn = !$('cropBox').hidden && !$('zoneView').hidden;
+    if (zoneOn) for (const ch of zone.toDataURL()) sig = (sig * 31 + ch.charCodeAt(0)) | 0;
     return {
       point: big ? big.firstChild.textContent : '',
       copy: !!document.querySelector('#result button.big1[data-copy]'),
@@ -257,8 +264,12 @@ const view = (page) =>
       lines: [...document.querySelectorAll('#result .seg1')].map(txt),
       result: txt($('result')),
       track: txt($('trk')),
-      steps: $('steps').hidden ? [] : [...document.querySelectorAll('#steps li .st-t')].map(txt),
-      zone: shownEl('zoneView') ? `${zone.width}x${zone.height}:${sig}` : '',
+      steps: $('steps').hidden ? [] : [...document.querySelectorAll('#stepsList li .st-t')].map(txt),
+      // résumé des étapes, replié (une ligne) ou non ; pourcentages lus au premier niveau des étapes
+      sum: $('steps').hidden ? '' : txt($('stepsSum')),
+      fold: !$('steps').hidden && $('stepsList').hidden && !shownEl('zoneView'),
+      pcts: [...document.querySelectorAll('#stepsList .st-msg')].map(txt).join(' ').split('%').length - 1,
+      zone: zoneOn ? `${zone.width}x${zone.height}:${sig}` : '',
       pilot: shownEl('pilotCard'),
       share: shownEl('shareCard'),
       hash: location.hash,
@@ -271,7 +282,24 @@ const view = (page) =>
       ),
       hist: [...document.querySelectorAll('#hist li span')].map(txt),
       photoMsg: $('photoMsg').hidden ? '' : txt($('photoMsg')),
-      top: Math.round($('resCard').getBoundingClientRect().top)
+      top: Math.round($('resCard').getBoundingClientRect().top),
+      // même mesure, la page remise en haut : ce qu'on voit sans défiler
+      top0: Math.round($('resCard').getBoundingClientRect().top + window.scrollY)
+    };
+  });
+// Bloc de retenue d'un point douteux : vignette de la zone lue, lecture au format de la source, boutons
+const held = (page) =>
+  page.evaluate(() => {
+    const h = document.querySelector('#result .hold'),
+      z = document.getElementById('holdZone');
+    return {
+      text: h ? h.textContent : '',
+      zone: z ? z.width * z.height : 0,
+      lines: h ? [...h.querySelectorAll('.sl')].map((l) => l.lastChild.textContent) : [],
+      fix: document.querySelectorAll('#result [data-fix]').length,
+      go: [...document.querySelectorAll('#result .go-row .btn')].map((b) => b.disabled),
+      recrop: !!document.querySelector('#result [data-recrop]'),
+      state: document.getElementById('resCard').dataset.state
     };
   });
 // Rien de transmissible à l'écran : ni copie, ni drone, ni partage, ni lien
@@ -286,8 +314,8 @@ async function shot(page, name) {
 }
 async function scene(title, fn) {
   const pages = [],
-    op = async (geo, track) => {
-      const p = await open(geo, track);
+    op = async (geo, track, tiles) => {
+      const p = await open(geo, track, tiles);
       pages.push(p);
       return p;
     };
@@ -322,9 +350,31 @@ for (const [name, point] of [
     const l = await view(lot);
     await shot(lot, `lot-${name}`);
     assert.equal(s.point, point);
-    for (const k of ['point', 'copy', 'pills', 'lines', 'steps', 'zone', 'pilot', 'share', 'hash', 'track'])
+    for (const k of [
+      'point',
+      'copy',
+      'pills',
+      'lines',
+      'steps',
+      'sum',
+      'fold',
+      'zone',
+      'pilot',
+      'share',
+      'hash',
+      'track'
+    ])
       assert.deepEqual(l[k], s[k], `« ${k} » diffère entre la photo seule et le lot`);
-    assert.ok(s.zone, 'zone lue affichée');
+    assert.ok(s.zone, 'zone lue gardée');
+    // lecture fiable : les étapes et la zone lue se replient en une ligne, une seule note de confiance
+    assert.equal(s.sum, 'Photo lue · fiable');
+    assert.ok(s.fold, 'lecture fiable : étapes repliées');
+    assert.equal(s.pcts, 1, 'une seule note en pourcentage au premier niveau des étapes');
+    assert.ok(s.top0 < 844 - 160, `« Point de l’animal » à l’écran sans défilement (${s.top0})`);
+    // « Détail » déplie les étapes, leurs mesures et la zone lue
+    await tap(one, '#stepsMore');
+    assert.ok(await one.$eval('#zoneView', (e) => e.getClientRects().length > 0), 'Détail : zone lue visible');
+    assert.ok(await one.$$eval('#stepsList .st-det', (l) => l.length >= 4), 'Détail : mesures des étapes');
     assert.match(s.lines.join(' '), /Photo du 01\/11 0[68]:00 \(date du fichier\)/);
     // même point du suivi, à la même date ; au même endroit de l'écran en fin de lecture
     assert.deepEqual(s.points, [`${point} @ 11-01T${name === 'a' ? '08' : '06'}:00`]);
@@ -360,6 +410,7 @@ await scene(
     await shot(one, 'seule-sans-coordonnees');
     nothingToSend(v, 'photo seule sans coordonnées');
     assert.match(v.result, /Coordonnées non trouvées/);
+    assert.ok(!v.fold && v.sum === 'Coordonnées non trouvées', 'sans coordonnées : étapes visibles');
     assert.deepEqual(v.points, [`${PA} @ 11-01T08:00`], 'le suivi ne reçoit rien');
     await readOne(one, 'a');
     await one.setInputFiles('#gal', IMG.bad);
@@ -409,8 +460,23 @@ await scene(
       }
       let v = await view(page);
       assert.match(v.pills.join(' '), /À vérifier/, mode);
+      // lecture douteuse : étapes dépliées, la reprise proposée là où est le doute
+      assert.ok(!v.fold && v.sum === 'Photo lue · à vérifier', `${mode} : étapes visibles (${v.sum})`);
+      assert.equal(
+        await page.$eval('#stepsList .chip.go', (b) => b.textContent),
+        'Vérifier le point',
+        `${mode} : reprise proposée`
+      );
       assert.ok(!v.copy && !v.pilot && !v.share && v.hash === '', `${mode} : douteux, rien de transmissible`);
       assert.deepEqual(v.points, [], `${mode} : rien au suivi`);
+      // la preuve à côté de la confirmation : zone lue de la photo, lecture dans le format de l'écran, un seul « Corriger »
+      const hold = await held(page);
+      assert.ok(hold.zone > 0, `${mode} : zone lue de la photo dans le bloc de retenue`);
+      assert.deepEqual(hold.lines, ["N 45°06.199'", "O 001°54.834'"], `${mode} : lecture au format de l'écran`);
+      assert.match(hold.text, /la photo/);
+      assert.equal(hold.fix, 1, `${mode} : un seul bouton Corriger`);
+      assert.deepEqual(hold.go, [true, true], `${mode} : AirOps et Itinéraire grisés`);
+      assert.equal(hold.state, 'check');
       // l'appli passe en arrière-plan, puis une espace est tapée dans le texte
       await page.evaluate(() => {
         Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
@@ -435,7 +501,84 @@ await scene(
       assert.ok(v.copy && /Vérifié à la main/.test(v.pills.join(' ')), `${mode} : confirmé, transmissible`);
       assert.deepEqual(v.points, ['45.103317, -1.913900 @ 11-01T09:30'], `${mode} : confirmé, versé au suivi`);
       if (mode === 'lot') assert.match(v.rows[0], /^st-ok.*confirmée à la main/);
+      assert.match(
+        v.result,
+        /Confirmé à la main\. Signalé à la lecture : Longitude Ouest/,
+        `${mode} : alerte rappelée`
+      );
+      // retour possible : la vérification annulée, le point redevient douteux et sort du suivi
+      await tap(page, '#result button[data-unverify]');
+      await pause(page);
+      v = await view(page);
+      assert.ok(!v.copy && !v.pilot && !v.share && /À vérifier/.test(v.pills.join(' ')), `${mode} : annulé, retenu`);
+      assert.deepEqual(v.points, [], `${mode} : annulé, retiré du suivi`);
+      if (mode === 'lot') assert.match(v.rows[0], /^st-check.*vérification annulée/);
+      assert.ok((await held(page)).zone > 0, `${mode} : annulé, la zone lue revient`);
     }
+  }
+);
+
+await scene(
+  'texte saisi : pas d’erreur pendant la frappe, rien sans point, un texte douteux se compare à sa source',
+  async (op) => {
+    const page = await op(),
+      result = () => page.$eval('#result', (e) => e.textContent);
+    // frappe en cours : pas d'erreur ; une fois la saisie posée, l'erreur, sans conseil de recadrage
+    await page.focus('#src');
+    await page.keyboard.type('45.18');
+    assert.match(await result(), /Saisie en cours/);
+    assert.ok(!/Aucune coordonnée/.test(await result()), 'pas d’erreur pendant la frappe');
+    await pause(page, 1600);
+    assert.match(await result(), /Aucune coordonnée trouvée/);
+    assert.ok(!/recadr/i.test(await result()), 'pas de recadrage pour un texte tapé');
+    // aucun point : ni AirOps ni Itinéraire
+    await page.fill('#src', 'bonjour');
+    await page.dispatchEvent('#src', 'change');
+    await pause(page);
+    assert.equal(await page.$$eval('#result .go', (l) => l.length), 0, 'sans point : pas de AirOps ni Itinéraire');
+    // texte douteux : comparé à « votre source », sans photo ni recadrage
+    await page.fill('#src', "N 45°06.199' O 001°54.834'");
+    await page.dispatchEvent('#src', 'change');
+    await pause(page);
+    let v = await view(page);
+    const h = await held(page);
+    nothingToSend({ ...v, point: '' }, 'texte douteux');
+    assert.match(h.text, /votre source/);
+    assert.ok(!/photo/i.test(h.text) && h.zone === 0 && !h.recrop, 'texte : ni photo ni recadrage');
+    assert.deepEqual(h.lines, ["N 45°06.199'", "O 001°54.834'"]);
+    await tap(page, '#result button[data-verify]');
+    await pause(page);
+    assert.ok((await view(page)).copy, 'confirmé : transmissible');
+    await tap(page, '#result button[data-unverify]');
+    await pause(page);
+    v = await view(page);
+    assert.ok(!v.copy && /À vérifier/.test(v.pills.join(' ')), 'vérification annulée : de nouveau retenu');
+    // copie : la valeur et sa légende restent affichées, la hauteur ne bouge pas
+    await page.fill('#src', '45.103317, 5.913900');
+    await page.dispatchEvent('#src', 'change');
+    await pause(page);
+    const before = await page.$eval('#result .big1', (b) => b.offsetHeight);
+    await tap(page, '#result button.big1');
+    await pause(page, 200);
+    const during = await page.$eval('#result .big1', (b) => ({
+      text: b.textContent,
+      h: b.offsetHeight,
+      flash: b.dataset.flash || ''
+    }));
+    assert.match(during.text, /45\.103317, 5\.913900.*Toucher pour copier/);
+    assert.ok(during.flash, 'retour « Copié » affiché');
+    assert.equal(during.h, before, 'hauteur inchangée');
+    // tuile Pilot 2 : chaque valeur porte un nom complet ; copiée, elle reste lisible
+    const names = await page.$$eval('#pilot .pv', (l) => l.map((b) => b.getAttribute('aria-label')));
+    assert.deepEqual(names.slice(0, 4), [
+      'Longitude, degrés : 5',
+      'Longitude, minutes : 54.8340',
+      'Latitude, degrés : 45',
+      'Latitude, minutes : 6.1990'
+    ]);
+    await tap(page, '#pilot .pv');
+    assert.match(await page.$eval('#pilot .pv', (b) => b.textContent), /^5/, 'valeur Pilot lisible pendant « Copié »');
+    await shot(page, 'texte-copie');
   }
 );
 
@@ -482,7 +625,7 @@ await scene(
     await tap(page, '#batchList li:nth-child(2) [data-chk]');
     await pause(page, 900);
     nothingToSend(await view(page), 'photo couchée ouverte');
-    // Pivoter, Tout, Lire
+    // Pivoter d'un quart, Toute la photo, Lire les coordonnées
     await tap(page, '#rot');
     await tap(page, '#cropAll');
     await tap(page, '#ocrGo');
@@ -512,10 +655,16 @@ await scene(
 await scene('relance du lot : ni doublon ni point revenu ; photo déplacée : sa date suit au suivi', async (op) => {
   const page = await op();
   await readLot(page, ['a', 'b', 'none']);
+  // le suivi reçoit les points sans s'ouvrir (son résumé les compte) : on l'ouvre pour le reprendre à la main
+  assert.ok(!(await page.$eval('#trackCard', (e) => e.open)), 'suivi replié par défaut');
+  assert.match(await page.$eval('#trackSum', (e) => e.textContent), /2 pts/);
+  await tap(page, '#trackCard > summary');
   // date du point 1 changée dans le suivi, photo 1 descendue, point de la photo b retiré à la main
   await page.fill('#trackList input[data-tt="0"]', '2026-11-01T07:30');
   await page.dispatchEvent('#trackList input[data-tt="0"]', 'change');
-  await tap(page, '#batchList button[data-dn="0"]');
+  // photo 1 descendue au clavier, par sa poignée
+  await page.focus('#batchList .bh[data-h="0"]');
+  await page.keyboard.press('ArrowDown');
   let v = await view(page);
   assert.match(v.rows[1], /date déplacée/);
   assert.deepEqual(v.points, [`${PB} @ 11-01T09:00`, `${PA} @ 11-01T09:30`], 'la date déplacée est celle du suivi');
@@ -560,6 +709,9 @@ await scene(
     assert.equal(v.rows.length, 4);
     assert.match(v.rows[3], /^st-ok on.*02\/11 17:45 photo/);
     await shot(page, 'lot-photo-seule-inscrite');
+    // « Ajouter des photos » : un bouton qui ouvre le sélecteur de photos
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#batchAdd')]);
+    assert.ok(chooser.isMultiple(), 'Ajouter : plusieurs photos à la fois');
     // pendant la lecture d'un lot : tout est grisé sauf « Arrêter », une photo prise entre dans la file
     const run = await op();
     await addLot(run, ['a', 'garmin', 'none']);
@@ -582,7 +734,7 @@ await scene(
       v.rows.some((r) => /^st-ok.*45\.141667/.test(r)),
       'la photo prise pendant le lot a été lue'
     );
-    assert.equal(v.point, PB, 'point de la victime : le plus récent des points sûrs');
+    assert.equal(v.point, PB, 'point de l’animal : le plus récent des points sûrs');
     // arrêt demandé dès le début : rien n'est lu de travers, les photos restent à lire
     const stop = await op();
     await addLot(stop, ['a', 'b', 'c']);
@@ -613,20 +765,21 @@ await scene(
     const go = await op(null, old);
     await readOne(go, 'a');
     let v = await view(go);
-    assert.ok(v.copy && v.pilot, 'le point reste copiable');
-    assert.match(v.track, /choisir d’abord/);
+    assert.ok(v.copy && v.pilot && v.share, 'le point reste copiable et transmissible');
+    assert.match(v.track, /le continuer ou repartir de zéro/, 'la question est posée sous le point');
     assert.deepEqual(v.points, [OLD], 'photo seule : rien au suivi avant la réponse');
     await readLot(go, ['b', 'c']);
     v = await view(go);
     await shot(go, 'suivi-en-attente');
     assert.deepEqual(v.points, [OLD], 'lot : rien au suivi avant la réponse');
     assert.match(v.msg, /2 points sûrs en attente/);
-    // « Continuer ce suivi » : les trois points lus y entrent, à leur date
-    await tap(go, '#resumeGo');
+    // « Continuer ce suivi », répondu sous le point : les trois points lus y entrent, à leur date
+    await tap(go, '#trk button[data-resume="go"]');
     await pause(go);
     v = await view(go);
     assert.deepEqual(v.points, [OLD, `${PC} @ 11-01T07:00`, `${PA} @ 11-01T08:00`, `${PB} @ 11-01T09:00`]);
     assert.match(v.track, /Point \d du suivi · Pirate/);
+    assert.ok(await go.$eval('#dogCard', (e) => e.hidden), 'question répondue : elle disparaît du haut de la page');
     // « Repartir de zéro » : l'ancien suivi est effacé, le point lu entre dans le nouveau
     const fresh = await op(null, old);
     await readOne(fresh, 'a');
@@ -652,8 +805,141 @@ await scene('carte : après un lot, tous ses points sont à l’écran, avec ou 
       });
     });
     assert.deepEqual(pins, [true, true, true], geo ? 'avec position' : 'sans position');
-    assert.ok((await view(page)).top < 300, 'fin du lot : l’écran est au point de la victime');
+    assert.ok((await view(page)).top < 300, 'fin du lot : l’écran est au point de l’animal');
     if (!geo) await shot(page, 'lot-lu');
+  }
+});
+
+await scene(
+  'page : transmettre juste après le point, rien de rouge à l’ouverture, titres et zones annoncées',
+  async (op) => {
+    // téléphone qui avait gardé « Transmettre » replié, le suivi ouvert et la carte repliée (ancienne version)
+    const page = await op(null, null, { shareCard: false, trackCard: true, mapCard: false });
+    const first = await page.evaluate(() => {
+      const $ = (id) => document.getElementById(id),
+        red = [...document.querySelectorAll('main *')].filter((e) => {
+          if (!e.getClientRects().length) return false;
+          const c = getComputedStyle(e);
+          return [c.color, c.borderTopColor, c.backgroundColor].includes('rgb(230, 51, 42)');
+        });
+      return {
+        red: red.map((e) => e.id || e.className),
+        dog: $('dogCard').hidden,
+        h2: document.querySelectorAll('main h2').length,
+        live: ['geoMsg', 'prepMsg', 'trackMsg', 'shareDone'].map((id) => $(id).getAttribute('role')),
+        zoom: document.querySelector('.leaflet-control-zoom-in').title,
+        layers: document.querySelector('.leaflet-control-layers-toggle').getAttribute('aria-label'),
+        tiles: JSON.parse(localStorage.getItem('esam-gps-tiles')),
+        clear: getComputedStyle($('clear')).visibility
+      };
+    });
+    assert.deepEqual(first.red, [], 'écran vide : aucun rouge');
+    assert.ok(first.dog, 'aucun suivi enregistré : pas de question en tête de page');
+    assert.ok(first.h2 >= 10, `une structure de titres (${first.h2} h2)`);
+    assert.deepEqual(first.live, ['status', 'status', 'status', 'status']);
+    assert.equal(first.zoom, 'Zoomer');
+    assert.equal(first.layers, 'Choisir le fond de carte');
+    assert.deepEqual(first.tiles, { _v: 2, mapCard: false }, 'anciens défauts oubliés, choix gardé pour la carte');
+    assert.equal(first.clear, 'hidden', 'champ vide : pas de bouton Effacer');
+    // point douteux : rien à transmettre ; point sûr : « Transmettre » ouvert, à moins d'un écran du point
+    await page.fill('#src', '5.73412, 45.18756');
+    await pause(page);
+    nothingToSend({ ...(await view(page)), point: '' }, 'point douteux');
+    await page.fill('#src', '45.18756, 5.73412');
+    await pause(page);
+    const sure = await page.evaluate(() => {
+      const $ = (id) => document.getElementById(id),
+        res = $('resCard').getBoundingClientRect(),
+        sh = $('shareBtn').getBoundingClientRect(),
+        band = document.querySelector('.band').getBoundingClientRect();
+      return {
+        open: $('shareCard').open,
+        reach: sh.bottom - res.top,
+        room: innerHeight - band.height,
+        after: $('resCard').nextElementSibling.nextElementSibling.id,
+        pin: document.querySelector('.leaflet-marker-icon').getAttribute('aria-label')
+      };
+    });
+    assert.ok(sure.open, '« Transmettre le point » ouvert');
+    assert.equal(sure.after, 'shareCard', 'la transmission suit le point');
+    assert.ok(sure.reach <= sure.room, `partage à un écran du point (${sure.reach} px pour ${sure.room})`);
+    assert.match(sure.pin, /Point de l’animal/);
+    // transmis : la fin du parcours est dite
+    await tap(page, '#copyMsg');
+    await page.waitForFunction(() => !document.getElementById('shareDone').hidden);
+    assert.match(await page.$eval('#shareDone', (e) => e.textContent), /Message copié/);
+    await shot(page, 'point-transmis');
+    // autre point : le « transmis » du précédent disparaît
+    await page.fill('#src', '45.20000, 5.70000');
+    await pause(page);
+    assert.ok(await page.$eval('#shareDone', (e) => e.hidden), 'nouveau point : pas encore transmis');
+  }
+);
+
+await scene(
+  'molettes : toucher choisit, − et + font tourner la molette choisie, ◀ ▶ changent de molette',
+  async (op) => {
+    const page = await op();
+    await page.fill('#src', "N 45°06.199' O 001°54.834'");
+    await page.dispatchEvent('#src', 'change');
+    await pause(page);
+    await tap(page, '#result button[data-fix]');
+    await pause(page, 600);
+    const wheels = () =>
+      page.$$eval('#fixRows .wh', (l) =>
+        l.map((w) => `${w.classList.contains('on') ? '*' : ''}${w.getAttribute('aria-valuetext')}`).join('')
+      );
+    // au départ : le premier chiffre de la latitude est choisi ; les lettres N et O sont des molettes à part
+    assert.equal(await wheels(), 'N*4506199O00154834');
+    assert.equal(await page.$$eval('#fixRows .wh.hemi', (l) => l.length), 2);
+    await tap(page, '#fixPlus');
+    assert.match(await wheels(), /^N\*55/);
+    await tap(page, '#fixMinus');
+    await tap(page, '#fixPrev');
+    assert.equal(await wheels(), '*N4506199O00154834');
+    await tap(page, '#fixNext');
+    await tap(page, '#fixNext');
+    assert.match(await wheels(), /^N4\*5/);
+    // toucher une autre molette la choisit sans la faire tourner ; touchée à nouveau en haut : un cran
+    const last = page.locator('#fixRows .fix-row').first().locator('.wh').last(),
+      box = await last.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height - 8);
+    assert.equal(await wheels(), 'N450619*9O00154834');
+    await page.mouse.click(box.x + box.width / 2, box.y + 8);
+    assert.equal(await wheels(), 'N450619*8O00154834');
+    assert.match(await page.textContent('#fixOut'), /45\.103300, -1\.913900/);
+    // la valeur affichée reste douteuse tant que la correction n'est pas validée
+    await tap(page, '#fixCancel');
+    assert.ok(!(await view(page)).copy, 'correction annulée : toujours rien de transmissible');
+  }
+);
+
+await scene('terrain : commandes de 48 px au moins, aucun texte sous 13 px, en 390 et 360 de large', async (op) => {
+  const page = await op();
+  await page.fill('#src', '45.18756, 5.73412');
+  await page.dispatchEvent('#src', 'change');
+  await page.evaluate(() => document.querySelectorAll('details.tile:not([hidden])').forEach((d) => (d.open = true)));
+  for (const width of [390, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    await pause(page);
+    const bad = await page.evaluate(() => {
+      const shown = (e) => !e.closest('[hidden]') && e.getClientRects().length && e.getBoundingClientRect().width > 2;
+      const small = [
+        ...document.querySelectorAll('main button, main a[href], main summary, main input:not(.sr-only), main textarea')
+      ]
+        .filter((e) => shown(e) && !e.closest('.leaflet-control-attribution') && e.type !== 'file')
+        .filter((e) => {
+          const r = e.getBoundingClientRect();
+          return Math.min(r.width, r.height) < 47.5;
+        })
+        .map((e) => `${e.id || e.className || e.tagName} ${e.textContent.trim().slice(0, 20)}`);
+      const tiny = [...document.querySelectorAll('body *')]
+        .filter((e) => shown(e) && [...e.childNodes].some((n) => n.nodeType === 3 && n.nodeValue.trim()))
+        .filter((e) => !e.closest('svg') && parseFloat(getComputedStyle(e).fontSize) < 12.9)
+        .map((e) => `${e.className || e.tagName} ${getComputedStyle(e).fontSize}`);
+      return { small, tiny, wide: document.documentElement.scrollWidth > innerWidth };
+    });
+    assert.deepEqual(bad, { small: [], tiny: [], wide: false }, `en ${width} de large`);
   }
 });
 

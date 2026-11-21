@@ -44,16 +44,25 @@ export function initMap() {
     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     Object.assign({ attribution: 'OpenStreetMap' }, o)
   );
-  map = L.map('map', { layers: [ign], zoomControl: true }).setView([45.2, 6.2], 8);
-  L.control
+  // commandes de la carte en français (Leaflet les nomme en anglais)
+  map = L.map('map', { layers: [ign], zoomControl: false }).setView([45.2, 6.2], 8);
+  L.control.zoom({ zoomInTitle: 'Zoomer', zoomOutTitle: 'Dézoomer' }).addTo(map);
+  const layers = L.control
     .layers({ 'Plan IGN': ign, 'Topo (courbes)': topo, 'Photo aérienne': ortho, OSM: osm }, null, {
       position: 'topright'
     })
     .addTo(map);
+  const lt = layers.getContainer().querySelector('.leaflet-control-layers-toggle');
+  if (lt) {
+    lt.title = 'Fond de carte';
+    lt.setAttribute('aria-label', 'Choisir le fond de carte');
+  }
   L.control.scale({ imperial: false }).addTo(map);
   tMark = L.marker([0, 0], {
-    icon: L.divIcon({ className: '', html: '<div class="pin-t"></div>', iconSize: [28, 28], iconAnchor: [3, 31] })
+    icon: L.divIcon({ className: '', html: '<div class="pin-t"></div>', iconSize: [28, 28], iconAnchor: [3, 31] }),
+    title: 'Point de l’animal'
   });
+  named(tMark, 'Point de l’animal : afficher ses coordonnées');
   meMark = L.marker([0, 0], {
     icon: L.divIcon({ className: '', html: '<div class="pin-me"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
     interactive: false
@@ -77,6 +86,15 @@ export function initMap() {
   $('goMe').addEventListener('click', () => {
     if (state.me) map.setView([state.me.lat, state.me.lon], 16);
   });
+}
+
+// Repère touchable (role=button, tabindex=0 posés par Leaflet) : son nom pour les lecteurs d'écran
+function named(m, label) {
+  m.on('add', () => {
+    const el = m.getElement();
+    if (el) el.setAttribute('aria-label', label);
+  });
+  return m;
 }
 
 export function updateMap(recentre) {
@@ -171,14 +189,18 @@ function drawPins() {
           }${i > g.ids[0] ? `<br><small>à ${fmtDist(distM(trackPts[i - 1], p))} du point ${i}</small>` : ''}`;
         })
         .join('<hr>');
-    const m = L.marker([p0.lat, p0.lon], {
-      icon: L.divIcon({
-        className: '',
-        html: `<div class="pin-n${g.ids.length > 1 ? ' multi' : ''}">${lab}</div>`,
-        iconSize: [w, 24],
-        iconAnchor: [w / 2, 12]
-      })
-    })
+    const m = named(
+      L.marker([p0.lat, p0.lon], {
+        icon: L.divIcon({
+          className: '',
+          html: `<div class="pin-n${g.ids.length > 1 ? ' multi' : ''}">${lab}</div>`,
+          iconSize: [w, 24],
+          iconAnchor: [w / 2, 12]
+        }),
+        title: `${g.ids.length > 1 ? 'Points' : 'Point'} ${lab} du suivi`
+      }),
+      `${g.ids.length > 1 ? 'Points' : 'Point'} ${lab} du suivi : afficher le détail`
+    )
       .bindPopup(pop)
       .addTo(pinLayer);
     m.ids = g.ids;

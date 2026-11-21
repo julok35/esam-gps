@@ -1,6 +1,6 @@
 /* Petits outils partagés : DOM, échappement, formats, copie. */
 // Version affichée dans le bandeau ; doit suivre le cache V de sw.js (vérifié par les tests)
-export const VERSION = '1.38';
+export const VERSION = '1.39';
 
 export const $ = function (id) {
   return document.getElementById(id);
@@ -54,28 +54,32 @@ export function fmtWhen(t) {
   })}`;
 }
 
-// Message bref à la place du contenu d'un bouton (« Copié »), 1,2 s. Un second message pendant le premier le
-// remplace : le contenu d'origine, gardé une seule fois, revient après le dernier.
+// Message bref sur un bouton (« Copié »), 1,6 s : une pastille posée sur son bord (attribut data-flash, voir
+// [data-flash]::after dans app.css), jamais à la place de son contenu. La valeur copiée reste lisible pendant qu'on la
+// recopie, et le bouton garde sa taille. bad : échec (pastille rouge). Un second message pendant le premier le
+// remplace. Le message est aussi dit aux lecteurs d'écran.
 const flashing = new WeakMap();
-export function flash(btn, txt) {
-  let f = flashing.get(btn);
-  if (f) clearTimeout(f.timer);
-  else {
-    f = { nodes: Array.from(btn.childNodes) };
-    flashing.set(btn, f);
-  }
-  btn.classList.add('done');
-  btn.textContent = txt || 'Copié';
-  f.timer = setTimeout(() => {
-    flashing.delete(btn);
-    btn.classList.remove('done');
-    btn.replaceChildren(...f.nodes);
-  }, 1200);
+export function flash(btn, txt, bad) {
+  clearTimeout(flashing.get(btn));
+  const t = txt || 'Copié';
+  btn.dataset.flash = t;
+  btn.classList.toggle('done', !bad);
+  btn.classList.toggle('flash-bad', !!bad);
+  const live = $('announce');
+  if (live) live.textContent = t;
+  flashing.set(
+    btn,
+    setTimeout(() => {
+      flashing.delete(btn);
+      delete btn.dataset.flash;
+      btn.classList.remove('done', 'flash-bad');
+    }, 1600)
+  );
 }
 // Copie puis message sur btn : « Copié », ou « Copie impossible » si le navigateur la refuse
 export function copy(text, btn) {
   return clip(text).then((done) => {
-    flash(btn, done ? 'Copié' : 'Copie impossible');
+    flash(btn, done ? 'Copié' : 'Copie impossible', !done);
     return done;
   });
 }
@@ -115,25 +119,42 @@ export function clip(text) {
   });
 }
 
-// Tuiles repliables : chacune garde son état (ouverte / repliée) sur ce téléphone
-const TILES = 'esam-gps-tiles';
+// Tuiles repliables : chacune garde son état (ouverte / repliée) sur ce téléphone, sous TILES : { id : ouverte, _v }.
+// _v : version de l'ordre de la page. Quand l'état par défaut d'une tuile change (TILES_RESET), l'état gardé par un
+// téléphone sous une version précédente est oublié pour cette tuile seulement : le nouveau défaut s'applique.
+// v2 : « Transmettre le point » ouvert par défaut, « Suivi des points » replié (il s'ouvrait à chaque point).
+const TILES = 'esam-gps-tiles',
+  TILES_V = 2,
+  TILES_RESET = ['shareCard', 'trackCard'];
+export function tilesFor(st) {
+  if (st && typeof st === 'object' && st._v === TILES_V) return st;
+  const out = { _v: TILES_V };
+  Object.keys(st && typeof st === 'object' ? st : {}).forEach((k) => {
+    if (k !== '_v' && !TILES_RESET.includes(k) && typeof st[k] === 'boolean') out[k] = st[k];
+  });
+  return out;
+}
 function tileState() {
   try {
-    return JSON.parse(localStorage.getItem(TILES) || '{}');
+    return tilesFor(JSON.parse(localStorage.getItem(TILES) || '{}'));
   } catch (e) {
-    return {};
+    return tilesFor({});
   }
+}
+function saveTiles(s) {
+  try {
+    localStorage.setItem(TILES, JSON.stringify(s));
+  } catch (e) {}
 }
 export function initTiles() {
   const st = tileState();
+  saveTiles(st);
   document.querySelectorAll('details.tile').forEach((d) => {
     if (d.id in st) d.open = st[d.id];
     d.addEventListener('toggle', () => {
       const s = tileState();
       s[d.id] = d.open;
-      try {
-        localStorage.setItem(TILES, JSON.stringify(s));
-      } catch (e) {}
+      saveTiles(s);
     });
   });
 }

@@ -4,7 +4,7 @@ import { checkPoint, ddText, airopsUrl, routeUrl, geoUrl } from './go.js';
 import { parse, toDMM, toDMS, toUTM } from './parser.js';
 import { initMap, updateMap, startGeo } from './map.js';
 import { initShare, drawQR, shareText } from './share.js';
-import { loadHist, drawHist, scheduleHist, flushHist, cancelHist } from './history.js';
+import { loadHist, drawHist, scheduleHist, flushHist, cancelHist, dropHist } from './history.js';
 import { initAuto, forget } from './auto.js';
 import { initFix, openFix, closeFix } from './fix.js';
 import { initPlace, showPlace, placeText } from './place.js';
@@ -19,11 +19,12 @@ import {
   trackName,
   decodeTrack,
   importTrack,
-  askResume
+  askResume,
+  dropPoint
 } from './track.js';
 import { initBatch } from './batch.js';
-import { clearZone } from './ocr.js';
-import { shotPoint, fixShot, unfixShot, sendShot, flushHeld, shown, setShown, watch, SRC } from './shot.js';
+import { clearZone, readZone } from './ocr.js';
+import { shotPoint, fixShot, unfixShot, sendShot, flushHeld, shown, setShown, watch, touch, SRC } from './shot.js';
 
 const src = $('src'),
   out = $('result');
@@ -32,7 +33,10 @@ let chosen = 0,
   lastParse = null,
   keepMap = false, // affichage du point sans recentrer la carte (fin d'un lot : elle montre tous ses points)
   sayTimer = null,
-  goTimer = null;
+  goTimer = null,
+  typing = false, // texte en cours de frappe : pas d'état d'erreur avant une courte pause (TYPE_MS)
+  typeTimer = null;
+const TYPE_MS = 1200;
 
 // Annonce courte pour les lecteurs d'écran, une fois la saisie posée
 function say(t) {
@@ -59,6 +63,96 @@ function pilotDM(v) {
   }
   return { d: s + d, m: m.toFixed(4) };
 }
+// Tuile DJI Pilot 2 : dans l'ordre de l'écran « Modifier les repères », longitude puis latitude (degrés, minutes),
+// puis altitude ASL (remplie par place.js). Chaque valeur porte un nom complet pour les lecteurs d'écran.
+function drawPilot(c) {
+  const cell = function (k, unit, v, u, cls) {
+    return `<button class="pv" type="button" data-copy="${v}" aria-label="${k}, ${unit} : ${v}"><b>${v}</b><i class="${cls}" aria-hidden="true">${u}</i></button>`;
+  };
+  const line = function (n, id, k, P) {
+    return `<div class="prow" role="group" aria-labelledby="${id}"><div class="pl" id="${id}">${n} · ${k}</div><div class="pr">${cell(
+      k,
+      'degrés',
+      P.d,
+      '°',
+      'deg'
+    )}${cell(k, 'minutes', P.m, "'", 'min')}</div></div>`;
+  };
+  $('pilot').innerHTML =
+    `<p class="pctx flush" id="pilotCtx"></p>${line(1, 'plLon', 'Longitude', pilotDM(c.lon))}${line(
+      2,
+      'plLat',
+      'Latitude',
+      pilotDM(c.lat)
+    )}` +
+    `<div class="prow" role="group" aria-labelledby="plAlt"><div class="pl" id="plAlt">3 · Altitude <span class="asl">ASL</span></div><div class="pr" id="pilotAlt"></div>` +
+    `<p class="hint flush">Choisir <b>ASL</b>, pas ALT : repère posé au sol (ALT part du point de décollage).</p></div>`;
+  pilotCtx();
+}
+// Rappel en tête de la tuile Pilot 2 : l'animal et l'heure du point, pour ne pas saisir le repère d'un autre
+function pilotCtx() {
+  const el = $('pilotCtx');
+  if (!el || !state.current) return;
+  const n = trackName(),
+    sh = shown();
+  el.innerHTML = `<b>${n ? esc(n) : 'Animal non nommé'}</b> · ${
+    sh ? `photo du ${esc(fmtWhen(sh.t))}` : `point saisi le ${esc(fmtWhen(Date.now()))}`
+  }`;
+}
+
+// État de la tuile « Point de la victime », lisible sur la tuile elle-même (bordure, en-tête) :
+// vide, sûr (lecture fiable), douteux (rien n'est transmis), vérifié (corrigé ou confirmé à la main)
+function cardState(s) {
+  $('resCard').dataset.state = s;
+  $('resCard').classList.toggle('empty', s === 'empty');
+}
+// Lecture dans le format de la source (celui de l'écran GPS ou du texte reçu), ligne à ligne, pour la comparer
+// chiffre par chiffre : [libellé, valeur]
+function srcLines(c) {
+  const f = c.fmt || '';
+  if (/UTM/.test(f)) {
+    const u = toUTM(c.lat, c.lon).split(' ');
+    return [
+      ['Zone', u[0]],
+      ['Est', u[1]],
+      ['Nord', u[2]]
+    ];
+  }
+  if (/DMS/.test(f))
+    return [
+      ['Latitude', toDMS(c.lat, true)],
+      ['Longitude', toDMS(c.lon, false)]
+    ];
+  if (/DMM|NMEA/.test(f))
+    return [
+      ['Latitude', toDMM(c.lat, true)],
+      ['Longitude', toDMM(c.lon, false)]
+    ];
+  // degrés décimaux : sans zéros ajoutés (45.1033 et non 45.103300), comme dans la source
+  return [
+    ['Latitude', String(+c.lat.toFixed(6))],
+    ['Longitude', String(+c.lon.toFixed(6))]
+  ];
+}
+// Ce qui ferme AirOps et Itinéraire même une fois le point vérifié (null : rien ne s'y oppose)
+function goStop(chk) {
+  if (chk.ok) return null;
+  return chk.swap
+    ? 'Latitude et longitude semblent inversées : AirOps et Itinéraire restent fermés tant qu’elles ne sont pas remises dans l’ordre.'
+    : 'Point hors de France métropolitaine : AirOps et Itinéraire restent fermés, même une fois le point confirmé.';
+}
+
+// Ce que la lecture r (point c) a d'inhabituel : avertissements du texte, autres lectures, confiance d'une photo.
+// Le point hors de France ou inversé est dit une seule fois, avec ce qu'il ferme (goStop).
+function warnings(r, c) {
+  const stop = goStop(checkPoint(c.lat, c.lon)),
+    l = c.notes.filter((n) => !(stop && /hors de France/.test(n.t))).map((n) => n.t);
+  if (stop) l.push(stop);
+  if (r.alts.length) l.push(`Plusieurs lectures possibles : comparez avec ${r.ocr ? 'la photo' : 'votre source'}.`);
+  if (r.ocr && r.trust && r.trust.why.length && r.trust.level !== 'ok')
+    l.push(`Confiance ${r.trust.pct} % : ${r.trust.why.join(', ')}.`);
+  return l;
+}
 
 function render() {
   const r = lastParse;
@@ -66,7 +160,9 @@ function render() {
   if (!r || !r.ok) {
     state.current = null;
     cancelHist();
-    $('resCard').classList.add('empty');
+    // texte en cours de frappe : pas d'erreur tant que la saisie n'est pas posée (voir typed)
+    const wait = !!r && !r.empty && typing;
+    cardState('empty');
     out.innerHTML =
       r && r.empty
         ? r.why
@@ -74,17 +170,18 @@ function render() {
               r.why
             )}</p>`
           : '<div class="status"><span class="pill none">En attente de coordonnées</span></div>'
-        : `<div class="status"><span class="pill check">Aucune coordonnée trouvée</span></div><p class="flush">Corrigez le texte ou recadrez sur les coordonnées.</p>${goBlock(
-            null,
-            'Pas de coordonnées valides : AirOps et Itinéraire désactivés.'
-          )}`;
+        : wait
+          ? '<div class="status"><span class="pill none">Saisie en cours</span></div>'
+          : '<div class="status"><span class="pill check">Aucune coordonnée trouvée</span></div>' +
+            '<p class="flush">Le texte doit contenir une latitude puis une longitude, par exemple <b>45.1033, 5.9139</b> ou <b>N\u00a045°06.199’ E\u00a0005°54.834’</b>.</p>';
     $('resSum').textContent =
-      r && r.empty ? (r.why ? (r.wait ? 'lecture en cours' : 'aucun point') : '') : 'aucune coordonnée';
+      r && r.empty ? (r.why ? (r.wait ? 'lecture en cours' : 'aucun point') : '') : wait ? '' : 'aucune coordonnée';
     $('eqCard').hidden = true;
     $('shareCard').hidden = true;
     $('pilotCard').hidden = true;
-    if (!(r && r.empty)) say('Aucune coordonnée trouvée');
-    else if (r.why) say(r.why);
+    if (!(r && r.empty)) {
+      if (!wait) say('Aucune coordonnée trouvée');
+    } else if (r.why) say(r.why);
     setHash('');
     updateMap();
     return;
@@ -95,53 +192,96 @@ function render() {
   // confiance : calculée par auto.js après une photo, sinon d'après les avertissements du texte saisi
   if (!r.trust || chosen !== 0) r.trust = confidence({ manual: true, notes: c.notes.length, alts: r.alts.length });
   const ok = trusted(r),
-    warn = c.notes.length || r.alts.length;
+    warn = c.notes.length || r.alts.length,
+    chk = checkPoint(c.lat, c.lon),
+    stop = goStop(chk),
+    st = r.verified ? 'verified' : ok ? 'ok' : 'check';
   const la = f6(c.lat),
-    lo = f6(c.lon);
+    lo = f6(c.lon),
+    sh = shown(),
+    // la source à laquelle comparer : la photo (sa zone lue), ou le texte reçu
+    photo = !!r.ocr,
+    zone = photo ? readZone() : null;
+  const notes = warnings(r, c);
+  const alts = r.alts.length
+    ? `<div class="alts">${all
+        .map((a, i) =>
+          a === c
+            ? ''
+            : `<button type="button" data-alt="${i}">${f6(a.lat)}, ${f6(a.lon)} <small>(${esc(a.seg)})</small></button>`
+        )
+        .join('')}</div>`
+    : '';
+  // une ligne d'état ; « Corriger » une seule fois dans la tuile (dans le bloc de retenue quand le point est douteux)
+  const meta = [];
+  if (st === 'ok' && r.ocr && r.trust) meta.push(`Confiance ${r.trust.pct} %`);
+  if (st === 'ok' && r.agree && chosen === 0) meta.push(`${r.agree.n}/${r.agree.total} lectures`);
   let h = `<div class="status"><span class="pill ${
-    r.verified ? 'ok">Vérifié à la main' : ok ? 'ok">Lecture fiable' : 'check">À vérifier'
+    st === 'verified' ? 'ok">Vérifié à la main' : st === 'ok' ? 'ok">Lecture fiable' : 'check">À vérifier'
   }</span><span class="pill fmt">${esc(c.fmt)}</span>${
-    r.trust && (r.ocr || !ok) ? `<span class="pill conf ${ok ? 'c-ok' : 'c-no'}">Confiance ${r.trust.pct} %</span>` : ''
-  }${
-    r.agree && chosen === 0 ? `<span class="pill fmt">${r.agree.n}/${r.agree.total} lectures</span>` : ''
-  }<button class="chip fixbtn" type="button" data-fix="1">Corriger</button></div>`;
-  // coordonnées : un toucher les copie (seulement une fois le point sûr)
-  h += ok
-    ? `<button class="big1" type="button" data-copy="${la}, ${lo}">${la}, ${
-        lo
-      }<small>Toucher pour copier</small></button>`
-    : `<div class="big1 held">${la}, ${lo}<small>Douteux : à vérifier sur la photo</small></div>`;
-  h += `<div class="seg1">Lu : ${esc(c.seg)}</div>`;
-  // point d'une photo : la date qu'il prendra au suivi, et d'où elle vient
-  const sh = shown();
-  if (sh) h += `<div class="seg1">Photo du ${esc(fmtWhen(sh.t))} (${SRC[sh.src]})</div>`;
-  h += '<div class="place" id="place"></div>';
-  if (ok) h += goBlock(c);
-  const notes = c.notes.slice();
-  if (r.alts.length) notes.push({ t: 'Plusieurs lectures possibles : comparez avec la photo.' });
-  if (!ok && r.trust && r.trust.why.length && r.ocr)
-    notes.push({ t: `Confiance ${r.trust.pct} % : ${r.trust.why.join(', ')}.` });
-  if (notes.length) h += `<ul class="notes">${notes.map((n) => `<li>${esc(n.t)}</li>`).join('')}</ul>`;
-  if (r.alts.length) {
-    h += '<div class="alts">';
-    all.forEach((a, i) => {
-      if (a !== c)
-        h += `<button type="button" data-alt="${i}">${f6(a.lat)}, ${f6(a.lon)} <small>(${esc(a.seg)})</small></button>`;
-    });
-    h += '</div>';
-  }
-  if (!ok)
+    meta.length ? `<span class="pill meta">${meta.join(' · ')}</span>` : ''
+  }${ok ? '<button class="chip fixbtn" type="button" data-fix="1">Corriger</button>' : ''}</div>`;
+  if (ok) {
+    // coordonnées : un toucher les copie
     h +=
-      `<div class="hold"><p class="flush"><b>Coordonnées douteuses : rien n\u2019est transmis.</b> Comparez chiffre par chiffre avec la photo. Corrigez-les avec les molettes, ou confirmez-les si elles sont justes.</p>` +
-      `<div class="row2"><button class="btn" type="button" data-fix="1">Corriger</button><button class="btn sec" type="button" data-verify="1">Justes : confirmer</button></div></div>${goBlock(
-        null,
-        'Coordonnées à vérifier : AirOps et Itinéraire s\u2019activent une fois le point corrigé ou confirmé.'
-      )}`;
-  else h += '<div class="trk" id="trk"></div>';
-  $('resCard').classList.remove('empty');
+      `<button class="big1" type="button" data-copy="${la}, ${lo}" aria-label="Copier ${la}, ${lo}">${la}, ${lo}` +
+      `<small aria-hidden="true">Toucher pour copier</small></button><div class="seg1">Lu : ${esc(c.seg)}</div>`;
+    if (sh) h += `<div class="seg1">Photo du ${esc(fmtWhen(sh.t))} (${SRC[sh.src]})</div>`;
+    if (r.verified) {
+      // vérifié à la main : l'alerte d'origine reste rappelée, sans alarme, et la vérification peut être annulée.
+      // Photo corrigée aux molettes : l'alerte est celle de sa lecture d'origine.
+      const o = sh && sh.fix && r.byHand === 'fix' && sh.r && sh.r.res && sh.r.res.p,
+        was = o && o.ok ? warnings(o, o.best) : notes;
+      h += `<div class="vfy"><p class="flush"><b>${r.byHand === 'fix' ? 'Corrigé' : 'Confirmé'} à la main.</b>${
+        was.length ? ` Signalé à la lecture : ${was.map(esc).join(' ')}` : ''
+      }</p>${alts}${
+        undoable(r) ? '<button class="vfy-undo" type="button" data-unverify="1">Annuler la vérification</button>' : ''
+      }</div>`;
+    }
+    h += `<div class="place" id="place"></div>${goBlock(c, chk)}<div class="trk" id="trk"></div>`;
+  } else {
+    // douteux : un seul message, dans l'ordre ce qui cloche, ce qui est bloqué, la preuve à comparer, quoi faire
+    h +=
+      `<section class="hold" aria-labelledby="holdT"><h3 class="hold-t" id="holdT" tabindex="-1">${photo ? 'Lecture douteuse' : 'Coordonnées douteuses'} : vérifiez avant tout envoi</h3>${
+        notes.length ? `<ul class="notes">${notes.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''
+      }<p class="flush hold-b" id="holdB">Rien n’est transmis (copie, ${
+        stop ? '' : 'AirOps, itinéraire, '
+      }drone, partage, suivi) tant que le point n’est pas corrigé ou confirmé.</p>` +
+      `<div class="cmp-src">${
+        zone
+          ? '<span class="lbl flush">Sur la photo (zone lue)</span><canvas class="hold-zone" id="holdZone" role="img" aria-label="Zone lue sur la photo"></canvas>'
+          : ''
+      }<span class="lbl flush">${photo ? 'Lu par l’appli' : 'Compris par l’appli'}</span><div class="big1 held">${srcLines(
+        c
+      )
+        .map((x) => `<span class="sl"><i>${x[0]}</i>${esc(x[1])}</span>`)
+        .join('')}<small>Soit ${la}, ${lo} en degrés décimaux</small></div></div>` +
+      `<p class="flush">Comparez chiffre par chiffre avec ${
+        photo ? 'la photo' : 'votre source (SMS, message, écran)'
+      }. Corrigez avec les molettes, ou confirmez si tout est identique.</p>${alts}` +
+      // latitude et longitude inversées : remettre dans l'ordre est l'action principale
+      `${
+        chk.swap
+          ? `<button class="btn wide" type="button" data-swap="1">Inverser : ${ddText(c.lon, c.lat)}</button>`
+          : ''
+      }<div class="row2"><button class="btn${
+        chk.swap ? ' sec' : ''
+      }" type="button" data-fix="1">Corriger</button><button class="btn sec" type="button" data-verify="1">Identique : confirmer</button></div></section>`;
+    if (sh) h += `<div class="seg1">Photo du ${esc(fmtWhen(sh.t))} (${SRC[sh.src]})</div>`;
+    h += `<div class="place" id="place"></div>${goBlock(c, chk, 'holdB')}`;
+  }
+  cardState(st);
   out.innerHTML = h;
+  const zc = $('holdZone');
+  if (zc) {
+    zc.width = zone.width;
+    zc.height = zone.height;
+    zc.getContext('2d').drawImage(zone, 0, 0);
+  }
   if (ok) trackButton();
-  $('resSum').textContent = `${(ok ? '' : 'à vérifier · ') + f6(c.lat).slice(0, -1)}, ${f6(c.lon).slice(0, -1)}`;
+  $('resSum').textContent = `${st === 'verified' ? 'vérifié · ' : st === 'check' ? 'à vérifier · ' : ''}${f6(
+    c.lat
+  ).slice(0, -1)}, ${f6(c.lon).slice(0, -1)}`;
   if (!ok) {
     // rien n'est proposé au partage, au drone ni aux autres cartes tant que le point n'est pas sûr
     $('pilotCard').hidden = true;
@@ -155,21 +295,7 @@ function render() {
     return;
   }
 
-  // DJI Pilot 2 : longitude d'abord, puis latitude
-  const PL = pilotDM(c.lon),
-    PA = pilotDM(c.lat);
-  const cell = function (v, u) {
-    return `<button class="pv" type="button" data-copy="${v}"><b>${v}</b><i>${u}</i></button>`;
-  };
-  const line = function (n, P) {
-    return `<div class="prow"><div class="pl">${n}</div><div class="pr">${cell(P.d, '°')}${cell(P.m, "'")}</div></div>`;
-  };
-  // 3e ligne : altitude du terrain au point, remplie par place.js dès qu'elle est connue
-  $('pilot').innerHTML =
-    `${
-      line('1 · Longitude', PL) + line('2 · Latitude', PA)
-    }<div class="prow"><div class="pl">3 · Altitude <span class="asl">ASL</span></div><div class="pr" id="pilotAlt"></div>` +
-    `<p class="hint flush">Choisir <b>ASL</b>, pas ALT : repère posé au sol (ALT part du point de décollage).</p></div>`;
+  drawPilot(c);
   $('pilotCard').hidden = false;
 
   // ouvrir le point dans d'autres cartes
@@ -201,9 +327,10 @@ function render() {
   say(`${(warn ? 'Vérifié : ' : 'Lecture fiable : ') + la}, ${lo}`);
   setHash(`${la},${lo}`);
 }
-// AirOps et Itinéraire, sous le point. c : point sûr (contrôlé ici), ou null avec why : boutons désactivés
-function goBlock(c, why) {
-  const chk = c ? checkPoint(c.lat, c.lon) : { ok: false, msg: why };
+// AirOps et Itinéraire, sous le point (rien sans point). c : point affiché, chk : son contrôle (go.checkPoint).
+// held : id du texte qui dit pourquoi le point est retenu (douteux) ; les boutons sont alors grisés sans autre phrase,
+// la raison n'est dite qu'une fois. Point sûr mais hors de France ou inversé : grisés, avec la raison.
+function goBlock(c, chk, held) {
   const help =
     '<ol class="go-help" id="goHelp" hidden>' +
     '<li>Touchez <b>AirOps</b> : les coordonnées sont copiées et la carte s\u2019ouvre centrée sur le point.</li>' +
@@ -214,24 +341,27 @@ function goBlock(c, why) {
     '</ol>';
   const qm =
     '<button class="go-q" type="button" data-gohelp="1" aria-expanded="false" aria-controls="goHelp" aria-label="Aide AirOps et Itinéraire">?</button>';
-  if (!chk.ok)
+  if (held || !chk.ok) {
+    const off = `type="button" disabled${held ? ` aria-describedby="${held}"` : ''}`;
     return (
       `<div class="go off"><div class="go-row">` +
-      `<button class="btn big" type="button" disabled>AirOps</button>${
-        qm
-      }<button class="btn big" type="button" disabled>Itinéraire</button></div>` +
-      `<p class="go-why flush">${esc(chk.msg)}</p>${
-        chk.swap
-          ? `<button class="btn sec wide" type="button" data-swap="1">Inverser : ${ddText(c.lon, c.lat)}</button>`
-          : ''
+      `<button class="btn big" ${off}>AirOps</button>${qm}<button class="btn big sec" ${off}>Itinéraire</button></div>${
+        held
+          ? ''
+          : `<p class="go-why flush">${esc(chk.msg)}</p>${
+              chk.swap
+                ? `<button class="btn sec wide" type="button" data-swap="1">Inverser : ${ddText(c.lon, c.lat)}</button>`
+                : ''
+            }`
       }${help}</div>`
     );
+  }
   return (
     `<div class="go"><div class="go-row">` +
     `<a class="btn big" target="_blank" rel="noopener" data-airops="${ddText(c.lat, c.lon)}" href="${airopsUrl(
       c.lat,
       c.lon
-    )}">AirOps</a>${qm}<a class="btn big" target="_blank" rel="noopener" data-go="1" href="${esc(
+    )}">AirOps</a>${qm}<a class="btn big sec" target="_blank" rel="noopener" data-go="1" href="${esc(
       routeUrl(c.lat, c.lon)
     )}">Itinéraire</a></div>` +
     `<a class="go-alt" data-go="1" href="${geoUrl(c.lat, c.lon)}">Autre appli GPS</a>` +
@@ -287,11 +417,13 @@ function trackButton() {
   const c = state.current,
     el = $('trk');
   if (!c || !el) return;
-  // question du démarrage sans réponse : rien n'entre au suivi, le point attend
+  // question du démarrage sans réponse : rien n'entre au suivi, le point attend ; la question est posée ici aussi
   if (resumePending()) {
+    const rn = trackName();
     el.innerHTML =
-      '<button class="btn sec wide" type="button" data-resume="1">Suivi : choisir d\u2019abord</button>' +
-      '<p class="flush">Un suivi est déjà sur ce téléphone. Choisissez en haut de le continuer ou de repartir de zéro : le point y entrera ensuite.</p>';
+      `<p class="flush">Suivi${rn ? ` « ${esc(rn)} »` : ''} déjà sur ce téléphone : le continuer ou repartir de zéro ? Le point y entrera ensuite.</p>` +
+      '<div class="row2"><button class="btn" type="button" data-resume="go">Continuer ce suivi</button>' +
+      '<button class="btn sec" type="button" data-resume="new">Repartir de zéro</button></div>';
     return;
   }
   const sh = shown(),
@@ -301,9 +433,13 @@ function trackButton() {
   el.innerHTML =
     (i
       ? `<div class="btn ok wide" role="status">Point ${i} du suivi${n ? ` · ${esc(n)}` : ''}</div>`
-      : `<button class="btn wide" type="button" data-track="1">Ajouter au suivi${
+      : `<button class="btn sec wide" type="button" data-track="1">Ajouter au suivi${
           n ? ` · ${esc(n)}` : ' des points'
-        }</button>`) + (ti && !i ? `<p class="flush">${esc(ti)}</p>` : '');
+        }</button>`) +
+    (ti && !i ? `<p class="flush">${esc(ti)}</p>` : '') +
+    (n || i
+      ? ''
+      : '<p class="flush">Nom de l\u2019animal : à saisir dans « Suivi des points », avant de le partager.</p>');
 }
 // Annonce de ce que le suivi a fait du point (voir track.placePoint)
 function sayTrack(res) {
@@ -340,7 +476,10 @@ function update(verified) {
   chosen = 0;
   // texte retouché après une lecture de photo douteuse : il reste à vérifier
   lastParse = carryDoubt(lastParse, parse(src.value));
-  if (verified && lastParse.ok) lastParse.verified = true;
+  if (verified && lastParse.ok) {
+    lastParse.verified = true;
+    lastParse.byHand = 'fix';
+  }
   render();
 }
 /**
@@ -375,10 +514,21 @@ function clearPoint(why, shot, wait) {
   setShown(shot || null);
   render();
 }
-// Texte saisi ou repris (frappe, historique, inversion) : le point n'est plus celui d'une photo
-function typed() {
+// Texte saisi ou repris (frappe, historique, inversion) : le point n'est plus celui d'une photo.
+// keyed : frappe au clavier ; « Aucune coordonnée trouvée » n'apparaît qu'après une courte pause (ou le champ quitté)
+function typed(keyed) {
+  clearTimeout(typeTimer);
+  typing = !!keyed;
+  if (typing) typeTimer = setTimeout(settle, TYPE_MS);
   setShown(null);
   update();
+}
+// Saisie posée : un texte sans coordonnées s'affiche alors comme tel
+function settle() {
+  clearTimeout(typeTimer);
+  if (!typing) return;
+  typing = false;
+  if (lastParse && !lastParse.ok && !lastParse.empty) render();
 }
 // Le point affiché entre dans l'historique dès qu'on s'en sert : jamais un point douteux, qui en ressortirait
 // comme un texte saisi, sans son doute
@@ -448,9 +598,15 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ---------- Événements ----------
-src.addEventListener('input', typed);
-// champ quitté : le point affiché entre dans l'historique
-src.addEventListener('change', useCurrent);
+// frappe : courte pause avant un état d'erreur ; texte collé ou déposé : résultat tout de suite
+src.addEventListener('input', (e) => {
+  typed(!/^insertFrom(Paste|Drop)/.test(e.inputType || ''));
+});
+// champ quitté : la saisie est posée, le point affiché entre dans l'historique
+src.addEventListener('change', () => {
+  settle();
+  useCurrent();
+});
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) useCurrent();
 });
@@ -496,19 +652,18 @@ document.addEventListener('click', (e) => {
     typed();
     return;
   }
-  // ligne d'autres formats : seule la valeur affiche « Copié », la ligne garde sa hauteur
+  // valeur copiée : « Copié » s'affiche sur le bord du bouton, la valeur reste lisible (voir util.flash)
   if (t.dataset.copy) {
-    const v = t.querySelector('.eqv');
-    if (v) v.style.minHeight = `${v.offsetHeight}px`;
-    copy(t.dataset.copy, v || t);
+    copy(t.dataset.copy, t);
     useCurrent();
   } else if (t.dataset.fix) openFix(state.current);
   else if (t.dataset.verify) {
-    // l'utilisateur a comparé avec la photo : le point devient transmissible, et celui d'une photo va au suivi
+    // l'utilisateur a comparé avec sa source : le point devient transmissible, et celui d'une photo va au suivi.
+    // Une copie de la lecture est marquée vérifiée : la lecture d'origine reste douteuse, pour pouvoir y revenir.
     const sh = shown();
     let res = null;
     if (lastParse && lastParse.ok) {
-      lastParse.verified = true;
+      lastParse = { ...lastParse, verified: true, byHand: 'confirm' };
       if (sh) {
         fixShot(sh, src.value, lastParse, chosen, 'confirmée à la main');
         res = sendShot(sh);
@@ -517,10 +672,12 @@ document.addEventListener('click', (e) => {
     render();
     useCurrent();
     sayTrack(res);
-  } else if (t.dataset.resume) {
-    // la question du suivi en cours est en haut de l'écran
-    $('dogCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    $('resumeGo').focus({ preventScroll: true });
+    const b = out.querySelector('.big1[data-copy]');
+    if (b) b.focus({ preventScroll: true });
+  } else if (t.dataset.unverify) unverify();
+  else if (t.dataset.resume) {
+    // réponse donnée sous le point : la même que par les boutons du haut
+    $(t.dataset.resume === 'new' ? 'resumeNew' : 'resumeGo').click();
   } else if (t.dataset.track) {
     // point d'une photo : par sa fiche (corrigé sur place s'il y est déjà) ; texte saisi : daté de maintenant
     const sh = shown(),
@@ -547,6 +704,40 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// Vérification annulée (« Annuler la vérification ») : la lecture d'origine, douteuse, revient, et le point sort du
+// suivi s'il y était entré : rien de douteux n'y reste
+function unverify() {
+  const sh = shown(),
+    c = state.current;
+  if (!c || !lastParse || !lastParse.verified) return;
+  const n = findPoint({ lat: c.lat, lon: c.lon, t: sh ? sh.t : Date.now() }, sh && sh.key);
+  if (n) dropPoint(n);
+  dropHist(c);
+  if (sh && sh.fix) {
+    unfixShot(sh);
+    sh.msg = 'vérification annulée : à vérifier';
+    touch(sh);
+    showShot(sh);
+  } else {
+    lastParse.verified = false;
+    delete lastParse.byHand;
+    render();
+  }
+  say(n ? `Vérification annulée : point ${n} retiré du suivi` : 'Vérification annulée : point à vérifier');
+  const h = $('holdT');
+  if (h) h.focus({ preventScroll: true });
+}
+// Vérification annulable : seulement quand la lecture d'origine est douteuse (une lecture fiable corrigée à la main
+// se corrige à nouveau)
+function undoable(r) {
+  const sh = shown();
+  if (sh && sh.fix) {
+    const o = sh.r && sh.r.res && sh.r.res.p;
+    return !!o && o.ok && !trusted({ ...o, verified: false });
+  }
+  return !trusted({ ...r, verified: false });
+}
+
 // ---------- Démarrage ----------
 initTiles();
 initMap();
@@ -558,6 +749,7 @@ initFix((t) => {
   const sh = shown(),
     p = parse(t);
   if (sh && p.ok) {
+    p.byHand = 'fix';
     fixShot(sh, t, p, 0, 'corrigée à la main');
     const res = sendShot(sh);
     showShot(sh);
@@ -569,10 +761,13 @@ initFix((t) => {
 });
 // fiche modifiée (point versé au suivi, autre photo affichée) : l'état sous le point suit
 watch(trackButton);
+// nom de l'animal changé : la tuile Pilot 2 le rappelle
+if ($('trackName')) $('trackName').addEventListener('input', pilotCtx);
 // suivi modifié par sa tuile, ou question du démarrage répondue : les points lus en attendant y entrent
 initTrack(() => {
   const n = flushHeld();
   trackButton();
+  pilotCtx();
   if (n) say(`${n} point${n > 1 ? 's' : ''} versé${n > 1 ? 's' : ''} au suivi`);
 });
 initPlace();

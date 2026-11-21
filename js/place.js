@@ -272,46 +272,62 @@ function comTxt(c) {
 }
 
 // ---------- Affichage dans le résultat ----------
+// Ce qui est connu du lieu, et rien de plus : sans réseau ou sans réponse, une seule ligne discrète
 function paint(c) {
   const box = $('place');
   if (!box || !state.current || key(state.current) !== key(c)) return;
   const com = known('com', c),
     alt = known('alt', c),
-    near = known('osm', c);
-  if (!navigator.onLine && com === undefined && alt === undefined && near === undefined) {
-    box.innerHTML = '<span class="hint flush">Commune, lieux proches et altitude : réseau nécessaire.</span>';
-    paintPilot(undefined, false);
+    near = known('osm', c),
+    wait = pending('com', c) || pending('alt', c) || pending('osm', c);
+  if (com === undefined && alt === undefined && near === undefined) {
+    box.innerHTML = `<p class="wait flush">${
+      wait
+        ? 'Lieu du point : recherche…'
+        : navigator.onLine
+          ? 'Commune, altitude et lieux proches : indisponibles pour l\u2019instant.'
+          : 'Commune, altitude et lieux proches : réseau nécessaire.'
+    }</p>`;
+    paintPilot(undefined, wait);
     return;
   }
-  let h = `<div class="pl1">${
-    com
-      ? `<b>${esc(com.nom)}</b>${com.dep || com.pays ? ` <small>(${esc(com.dep || com.pays)})</small>` : ''}`
-      : `<span class="wait">${pending('com', c) ? 'Commune…' : 'Commune inconnue'}</span>`
-  }<span class="alt">Alt. ${alt !== undefined ? `<b>${fmtAlt(alt)}</b>` : pending('alt', c) ? '…' : '-'}</span></div>`;
+  const bits = [];
+  if (com)
+    bits.push(`<b>${esc(com.nom)}</b>${com.dep || com.pays ? ` <small>(${esc(com.dep || com.pays)})</small>` : ''}`);
+  else if (pending('com', c)) bits.push('<span class="wait">Commune…</span>');
+  if (alt !== undefined) bits.push(`<span class="alt">Alt. <b>${fmtAlt(alt)}</b></span>`);
+  else if (pending('alt', c)) bits.push('<span class="alt wait">Alt. …</span>');
+  let h = bits.length ? `<div class="pl1">${bits.join('')}</div>` : '';
   if (near && near.length)
     h += `<ul class="near">${near
       .map((n) => `<li><b>${esc(n.name)}</b> <small>${n.kind} · ${where(n)}</small></li>`)
       .join('')}</ul>`;
   else if (pending('osm', c)) h += '<div class="wait">Lieux proches…</div>';
   else if (near) h += '<div class="wait">Aucun lieu nommé à moins de 2 km</div>';
-  else if (navigator.onLine)
-    h += '<div class="wait">Lieux proches : service OpenStreetMap indisponible pour l\'instant</div>';
   box.innerHTML = h;
   paintPilot(alt, pending('alt', c));
 }
 
-// Saisie DJI Pilot 2 : altitude ASL du terrain au point, en mètres entiers (champ ASL de « Modifier les repères »)
+// Saisie DJI Pilot 2 : altitude ASL du terrain au point, en mètres entiers (champ ASL de « Modifier les repères »).
+// Inconnue : ce qu'il faut faire à la place, sur toute la largeur de la ligne
 function paintPilot(alt, wait) {
   const el = $('pilotAlt');
   if (!el) return;
   if (alt === undefined) {
-    el.innerHTML = `<span class="pv off">${wait ? '…' : navigator.onLine ? 'inconnue' : 'réseau nécessaire'}</span>`;
+    delete el.dataset.v;
+    el.innerHTML = `<p class="pv off flush">${
+      wait
+        ? 'Altitude du terrain : recherche…'
+        : `Altitude du terrain inconnue (${
+            navigator.onLine ? 'service injoignable' : 'pas de réseau'
+          }). Reprenez l\u2019altitude affichée par le GPS d\u2019où vient le point, ou lisez-la sur la carte topo.`
+    }</p>`;
     return;
   }
   const v = String(Math.round(alt));
-  if (el.dataset.v === v) return; // garde la coche « copié »
+  if (el.dataset.v === v) return; // garde la pastille « Copié »
   el.dataset.v = v;
-  el.innerHTML = `<button class="pv" type="button" data-copy="${v}"><b>${v}</b><i>m</i></button>`;
+  el.innerHTML = `<button class="pv" type="button" data-copy="${v}" aria-label="Altitude ASL, mètres : ${v}"><b>${v}</b><i class="m" aria-hidden="true">m</i></button>`;
 }
 
 export function showPlace() {

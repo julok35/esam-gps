@@ -6,14 +6,18 @@
  * info : { tess : confiance moyenne du moteur sur les chiffres (0 à 100, ou null), agree : { n, total } lectures
  * concordantes (null sans photo), firm : les deux axes confirmés par le vote, rival : une valeur concurrente aussi
  * lue, notes : nombre d'avertissements du parser, alts : nombre d'autres lectures proposées, manual : texte saisi }.
- * Retour : { pct, level : 'ok' (fiable) ou 'check' (douteux), why : explications courtes }.
+ * Retour : { pct, level : 'ok' (fiable) ou 'check' (douteux), why : raisons en mots simples, sans pourcentage (la
+ * note pct est la seule à l'écran) : d'un point douteux, ce qui fait douter, le plus grave d'abord ; d'un point fiable,
+ * l'accord des lectures }.
  */
 export function confidence(info) {
   const why = [];
   let pct;
+  const notes = () =>
+    info.notes > 1 ? `${info.notes} avertissements sur le texte lu` : 'un avertissement sur le texte lu';
   if (info.manual || !info.agree) {
     pct = 100 - 20 * info.notes - 15 * info.alts;
-    if (info.notes) why.push(info.notes + (info.notes > 1 ? ' avertissements' : ' avertissement'));
+    if (info.notes) why.push(notes());
     if (info.alts) why.push('plusieurs lectures possibles');
   } else {
     // La concordance de lectures faites avec des préparations différentes de l'image est le signal principal :
@@ -21,34 +25,30 @@ export function confidence(info) {
     // La confiance du moteur sur les chiffres, souvent basse même quand il lit juste, ne fait que nuancer (−10 à +5).
     const a = info.agree;
     let f = 1;
-    if (info.firm) {
-      pct = 88 + Math.min(7, 2 * Math.max(0, a.n - 3));
-      why.push(`${a.n} lectures sur ${a.total} concordantes`);
-    } else {
-      pct = a.total ? (75 * a.n) / a.total : 0;
-      why.push(
-        a.total
-          ? `seulement ${a.n} lecture${a.n > 1 ? 's' : ''} sur ${a.total} concordante${a.n > 1 ? 's' : ''}`
-          : 'aucune lecture concordante'
-      );
-    }
-    if (typeof info.tess === 'number') {
-      pct += Math.max(-10, Math.min(5, (info.tess - 60) / 4));
-      if (info.tess < 60) why.push(`moteur hésitant sur les chiffres (${Math.round(info.tess)} %)`);
-    }
+    if (info.firm) pct = 88 + Math.min(7, 2 * Math.max(0, a.n - 3));
+    else pct = a.total ? (75 * a.n) / a.total : 0;
+    if (typeof info.tess === 'number') pct += Math.max(-10, Math.min(5, (info.tess - 60) / 4));
     if (info.rival) {
       f *= 0.6;
       why.push('une autre valeur a aussi été lue');
     }
+    if (!info.firm)
+      why.push(
+        a.total ? `seulement ${a.n} lecture${a.n > 1 ? 's' : ''} sur ${a.total} d’accord` : 'aucune lecture d’accord'
+      );
     if (info.notes) {
       f *= Math.pow(0.85, Math.min(2, info.notes));
-      why.push(info.notes + (info.notes > 1 ? ' avertissements' : ' avertissement'));
+      why.push(notes());
     }
     if (info.alts && !info.rival) {
       f *= 0.8;
       why.push('plusieurs lectures possibles');
     }
     pct = Math.round(pct * f);
+    // chiffres peu nets : une raison de plus quand le point est douteux ; un point fiable n'en a pas besoin
+    if (why.length && typeof info.tess === 'number' && info.tess < 60) why.push('chiffres peu nets sur la photo');
+    // point fiable : sa raison est l'accord des lectures ; point douteux : seulement ce qui fait douter
+    if (info.firm && !why.length) why.push(`${a.n} lectures sur ${a.total} d’accord`);
   }
   pct = Math.max(0, Math.min(100, pct));
   const ok = !info.notes && !info.alts && (info.manual || !info.agree || (info.firm && !info.rival)) && pct >= 70;

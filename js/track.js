@@ -259,9 +259,11 @@ function setName(n) {
     localStorage.setItem(NAME, (n || '').slice(0, 40));
   } catch (e) {}
 }
-// Champ du nom en rouge tant qu'il est vide
+// Champ du nom vide : le rappel s'affiche dessous (champ neutre, le rouge est réservé au doute sur des coordonnées)
 function nameMark() {
-  $('trackName').classList.toggle('empty', !$('trackName').value.trim());
+  const empty = !$('trackName').value.trim();
+  $('trackName').classList.toggle('empty', empty);
+  $('gpxName').hidden = !empty;
 }
 // Texte du choix au démarrage : quel suivi est en cours, combien de points, depuis quand
 export function resumeText(name, pts) {
@@ -271,10 +273,15 @@ export function resumeText(name, pts) {
     last ? `, dernier le ${fmtWhen(last.t)}` : ''
   }. Le continuer ou repartir de zéro ?`;
 }
+// Question du démarrage affichée (en tête de page) ou retirée
+function showResume(on) {
+  $('resume').hidden = !on;
+  $('dogCard').hidden = !on;
+}
 // Ouverture de l'appli avec un suivi déjà enregistré : choisir de le continuer ou de repartir de zéro
 export function askResume() {
   const pts = loadTrack();
-  $('resume').hidden = !pts.length;
+  showResume(!!pts.length);
   if (pts.length) $('resumeTxt').textContent = resumeText(trackName(), pts);
 }
 function appUrl() {
@@ -308,7 +315,7 @@ export function importTrack(tr) {
     setName(tr.name);
     msg = `Suivi « ${tr.name} » repris : ${tr.points.length} point${tr.points.length > 1 ? 's' : ''}`;
   } else return `Suivi « ${curName} » gardé, rien n\u2019a été importé.`;
-  $('resume').hidden = true;
+  showResume(false);
   drawTrack();
   openTrack(true);
   return msg;
@@ -339,7 +346,8 @@ export function resumePending() {
   return !$('resume').hidden;
 }
 // Le point p ({ lat, lon, t, label, key }, voir placePoint) entre dans le suivi, ou y corrige le point de la même
-// photo. scroll : l'écran va à la tuile du suivi (ajout demandé par le bouton). date : la date suit aussi.
+// photo. scroll : la tuile du suivi s'ouvre et l'écran y va (ajout demandé par le bouton) ; sinon elle reste
+// comme elle est (repliée par défaut, son résumé suit). date : la date suit aussi.
 // Retour : { n : numéro du point dans le suivi, how : voir placePoint }, ou { n : 0, how : 'held' } tant que la
 // question du démarrage attend sa réponse
 export function putPoint(p, scroll, date) {
@@ -347,8 +355,16 @@ export function putPoint(p, scroll, date) {
   const r = placePoint(loadTrack(), p, date);
   save(r.pts);
   drawTrack();
-  openTrack(scroll);
+  if (scroll) openTrack(true);
   return { n: r.pts.indexOf(r.p) + 1, how: r.how };
+}
+// Point n (à partir de 1, voir findPoint) retiré du suivi, comme par son bouton ✕ : vérification d'un point annulée
+export function dropPoint(n) {
+  const pts = loadTrack();
+  if (!(n >= 1 && n <= pts.length)) return;
+  pts.splice(n - 1, 1);
+  save(pts);
+  drawTrack();
 }
 // Numéro (à partir de 1) du point du suivi qui porte la photo key, sinon du même signalement que c (isDup), sinon 0
 export function findPoint(c, key) {
@@ -475,6 +491,7 @@ export function drawTrack() {
   setTrack(pts);
   if (document.activeElement !== $('trackName')) $('trackName').value = trackName();
   nameMark();
+  $('trackOne').hidden = pts.length !== 1;
   if (!pts.length) {
     $('trackSum').textContent = '';
     $('trackList').innerHTML = '';
@@ -483,7 +500,7 @@ export function drawTrack() {
     return;
   }
   $('trackSum').textContent =
-    `${(trackName() ? `${trackName()} · ` : '') + pts.length} pt${pts.length > 1 ? `s · ${fmtDist(s.total)}` : ''}`;
+    `${trackName() || 'sans nom'} · ${pts.length} pt${pts.length > 1 ? `s · ${fmtDist(s.total)}` : ''}`;
   $('trackList').innerHTML = pts
     .map((p, i) => {
       const leg = i ? L[i - 1] : null;
@@ -534,7 +551,7 @@ export function drawTrack() {
               )} / ${fmtDelta(-cl.down)} entre points</small></div>`
             : ''
         }`
-      : '<p class="hint flush">Un point. Ajoutez le prochain signalement pour mesurer la distance parcourue.</p>';
+      : '';
   drawProfile();
 }
 // Montée / descente d'une étape : flèche, dénivelé, pente moyenne
@@ -544,6 +561,12 @@ function zTag(dz, d) {
   return ` <span class="zt ${cls}">${cls === 'flat' ? '→' : cls === 'up' ? '↗' : '↘'} ${fmtDelta(dz)}${
     sl !== null && cls !== 'flat' ? ` · pente ${Math.round(Math.abs(sl))} %` : ''
   }</span>`;
+}
+// Ce que la tuile vient de faire (partage, copie, import), sous les boutons de partage, avec l'heure
+function trackSay(t) {
+  $('trackMsg').hidden = false;
+  $('trackMsg').textContent =
+    `${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} · ${t}.`;
 }
 let onName = function () {};
 // onChange : appelé quand le nom ou les points changent par la tuile (le bouton d'ajout du point affiché se met à jour)
@@ -580,17 +603,26 @@ export function initTrack(onChange) {
     onName();
   });
   $('trackShare').addEventListener('click', () => {
-    shareText(trackText(loadTrack(), trackName(), relief.alts), $('trackShare'));
+    shareText(trackText(loadTrack(), trackName(), relief.alts), $('trackShare'), {
+      title: 'Suivi ESAM',
+      done: (how) => trackSay(how === 'shared' ? 'Suivi partagé' : 'Suivi copié : collez-le dans la conversation')
+    });
   });
   $('trackCopy').addEventListener('click', () => {
-    copy(trackText(loadTrack(), trackName(), relief.alts), $('trackCopy'));
+    copy(trackText(loadTrack(), trackName(), relief.alts), $('trackCopy')).then((ok) => {
+      if (ok) trackSay('Suivi copié : collez-le dans la conversation');
+    });
   });
   // reprendre ailleurs : lien (ouvert sur un autre téléphone, le suivi s'y installe), fichier GPX, import
   $('trackLink').addEventListener('click', () => {
     const u = `${appUrl()}#${encodeTrack(trackName(), loadTrack())}`;
     shareText(
       `Suivi ESAM${trackName() ? ` · ${trackName()}` : ''} : ouvrir ce lien dans GPS ESAM pour le poursuivre\n${u}`,
-      $('trackLink')
+      $('trackLink'),
+      {
+        title: 'Suivi ESAM',
+        done: (how) => trackSay(how === 'shared' ? 'Lien du suivi partagé' : 'Lien du suivi copié')
+      }
     );
   });
   $('trackLinkCopy').addEventListener('click', () => {
@@ -643,28 +675,26 @@ export function initTrack(onChange) {
       return;
     save([]);
     setName('');
-    $('resume').hidden = true;
+    showResume(false);
     drawTrack();
     onName();
   });
+  // réponse à la question du démarrage : le suivi reste replié (son résumé dit où il en est), la carte le montre
   $('resumeGo').addEventListener('click', () => {
-    $('resume').hidden = true;
+    showResume(false);
     onName(); // les points lus en attendant la réponse entrent dans le suivi continué
-    openTile('trackCard');
     openTile('map');
     fitTrack();
-    if (!trackName()) $('trackName').focus();
   });
   $('resumeNew').addEventListener('click', () => {
     const n = trackName();
     if (!confirm(`Effacer le suivi${n ? ` « ${n} »` : ''} et ses ${loadTrack().length} points pour repartir de zéro ?`))
       return;
-    $('resume').hidden = true;
+    showResume(false);
     save([]);
     setName('');
     drawTrack();
     onName();
-    $('trackName').focus();
   });
   $('trackCard').addEventListener('toggle', () => {
     if ($('trackCard').open) drawTrack();
